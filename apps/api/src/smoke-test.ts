@@ -51,6 +51,7 @@ async function smoke() {
   let createdId    = ''  // customer id
   let channelId    = ''  // WA Web channel id
   let convId       = ''  // test conversation id
+  const kbIds: string[] = []  // knowledge item ids for cleanup
 
   // ── 1. Health ──────────────────────────────────────────────────────────
   console.log('1. Health check')
@@ -300,20 +301,152 @@ async function smoke() {
   const reCloseRes = await post(`/conversations/${convId}/close`, {}, accessToken)
   check('re-close already closed → 200 (idempotent)', reCloseRes.status === 200)
 
-  // ── 27. Conversation auth checks ──────────────────────────────────────
-  console.log('\n27. Conversation auth checks')
+  // ════════════════════════════════════════════════════════════════════════
+  // Knowledge Base CRUD (Phase 3D)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── 27. Create knowledge items ────────────────────────────────────────
+  console.log('\n27. Create knowledge items')
+
+  // GLOBAL_FAQ zh
+  const kbGfRes  = await post('/knowledge', { type: 'GLOBAL_FAQ', question: '你们的服务是什么？', answer: 'Omni 是 WhatsApp AI 客服 CRM 系统。', language: 'zh' }, accessToken)
+  const kbGf     = await kbGfRes.json() as Record<string, unknown>
+  check('POST GLOBAL_FAQ zh → 201', kbGfRes.status === 201)
+  check('GLOBAL_FAQ has id',        typeof kbGf.id === 'string')
+  check('GLOBAL_FAQ type correct',  kbGf.type === 'GLOBAL_FAQ')
+  check('GLOBAL_FAQ language zh',   kbGf.language === 'zh')
+  check('GLOBAL_FAQ isActive true', kbGf.isActive === true)
+  if (kbGf.id) kbIds.push(kbGf.id as string)
+
+  // PRODUCT_FAQ en
+  const kbPfRes  = await post('/knowledge', { type: 'PRODUCT_FAQ', question: 'What are your prices?', answer: 'We offer flexible pricing. Contact us for a quote.', language: 'en' }, accessToken)
+  const kbPf     = await kbPfRes.json() as Record<string, unknown>
+  check('POST PRODUCT_FAQ en → 201', kbPfRes.status === 201)
+  check('PRODUCT_FAQ language en',   kbPf.language === 'en')
+  if (kbPf.id) kbIds.push(kbPf.id as string)
+
+  // KNOWLEDGE_CHUNK ms (no question required)
+  const kbKcRes  = await post('/knowledge', { type: 'KNOWLEDGE_CHUNK', answer: 'Omni menyokong bahasa Melayu, Cina, dan Inggeris.', language: 'ms' }, accessToken)
+  const kbKc     = await kbKcRes.json() as Record<string, unknown>
+  check('POST KNOWLEDGE_CHUNK ms → 201', kbKcRes.status === 201)
+  check('KNOWLEDGE_CHUNK no question OK', kbKc.question === null)
+  if (kbKc.id) kbIds.push(kbKc.id as string)
+
+  // ── 28. Create validation ─────────────────────────────────────────────
+  console.log('\n28. Create validation')
+  check('missing type → 400',              (await post('/knowledge', { answer: 'test' }, accessToken)).status === 400)
+  check('invalid type → 400',             (await post('/knowledge', { type: 'INVALID', answer: 'test' }, accessToken)).status === 400)
+  check('missing answer → 400',           (await post('/knowledge', { type: 'GLOBAL_FAQ', question: 'Q?' }, accessToken)).status === 400)
+  check('invalid language → 400',         (await post('/knowledge', { type: 'GLOBAL_FAQ', question: 'Q?', answer: 'A', language: 'ja' }, accessToken)).status === 400)
+  check('FAQ missing question → 400',     (await post('/knowledge', { type: 'GLOBAL_FAQ', answer: 'A' }, accessToken)).status === 400)
+  check('PRODUCT_FAQ missing Q → 400',    (await post('/knowledge', { type: 'PRODUCT_FAQ', answer: 'A' }, accessToken)).status === 400)
+
+  // ── 29. List knowledge ────────────────────────────────────────────────
+  console.log('\n29. List knowledge')
+  const kbListRes  = await get('/knowledge?page=1&pageSize=20', accessToken)
+  const kbListBody = await kbListRes.json() as Record<string, unknown>
+  check('GET /knowledge → 200', kbListRes.status === 200)
+  check('list has data array',  Array.isArray(kbListBody.data))
+  const kbPag = kbListBody.pagination as Record<string, unknown>
+  check('pagination.total >= 3', Number(kbPag.total) >= 3)
+
+  // ── 30. Filter by type ────────────────────────────────────────────────
+  console.log('\n30. Filter by type')
+  const kbTypeRes  = await get('/knowledge?type=GLOBAL_FAQ', accessToken)
+  const kbTypeBody = await kbTypeRes.json() as Record<string, unknown>
+  check('filter type=GLOBAL_FAQ → 200', kbTypeRes.status === 200)
+  const kbTypeData = kbTypeBody.data as Record<string, unknown>[]
+  check('all results are GLOBAL_FAQ', kbTypeData.every((k) => k.type === 'GLOBAL_FAQ'))
+  check('invalid type filter → 400',   (await get('/knowledge?type=NOPE', accessToken)).status === 400)
+
+  // ── 31. Filter by language ────────────────────────────────────────────
+  console.log('\n31. Filter by language')
+  const kbLangRes  = await get('/knowledge?language=en', accessToken)
+  const kbLangBody = await kbLangRes.json() as Record<string, unknown>
+  check('filter language=en → 200', kbLangRes.status === 200)
+  const kbLangData = kbLangBody.data as Record<string, unknown>[]
+  check('all results lang en',       kbLangData.every((k) => k.language === 'en'))
+  check('ms filter → 200', (await get('/knowledge?language=ms', accessToken)).status === 200)
+  check('invalid lang filter → 400', (await get('/knowledge?language=jp', accessToken)).status === 400)
+
+  // ── 32. Get knowledge detail ──────────────────────────────────────────
+  console.log('\n32. Get knowledge detail')
+  const kbGfId    = kbGf.id as string
+  const kbDetailRes  = await get(`/knowledge/${kbGfId}`, accessToken)
+  const kbDetail     = await kbDetailRes.json() as Record<string, unknown>
+  check('GET /knowledge/:id → 200', kbDetailRes.status === 200)
+  check('detail id matches',        kbDetail.id === kbGfId)
+  check('detail has answer',        typeof kbDetail.answer === 'string')
+  check('GET /knowledge/nonexistent → 404', (await get('/knowledge/nonexistent', accessToken)).status === 404)
+
+  // ── 33. Patch knowledge ───────────────────────────────────────────────
+  console.log('\n33. Patch knowledge')
+  const kbPatchRes  = await patch(`/knowledge/${kbGfId}`, { answer: 'Updated answer for smoke test.', language: 'zh' }, accessToken)
+  const kbPatched   = await kbPatchRes.json() as Record<string, unknown>
+  check('PATCH /knowledge/:id → 200', kbPatchRes.status === 200)
+  check('answer updated', kbPatched.answer === 'Updated answer for smoke test.')
+  check('invalid type PATCH → 400', (await patch(`/knowledge/${kbGfId}`, { type: 'NOPE' }, accessToken)).status === 400)
+  check('empty answer PATCH → 400', (await patch(`/knowledge/${kbGfId}`, { answer: '' }, accessToken)).status === 400)
+
+  // ── 34. Search knowledge ──────────────────────────────────────────────
+  console.log('\n34. Search knowledge')
+  const searchRes  = await post('/knowledge/search', { q: '你们', language: 'zh' }, accessToken)
+  const searchBody = await searchRes.json() as Record<string, unknown>
+  check('POST /knowledge/search → 200', searchRes.status === 200)
+  check('search has data array',        Array.isArray(searchBody.data))
+  const searchData = searchBody.data as Record<string, unknown>[]
+  check('search finds zh item',         searchData.length >= 1)
+  check('search missing q → 400',       (await post('/knowledge/search', {}, accessToken)).status === 400)
+  check('search empty q → 400',         (await post('/knowledge/search', { q: '' }, accessToken)).status === 400)
+  check('search invalid type → 400',    (await post('/knowledge/search', { q: 'test', type: 'BAD' }, accessToken)).status === 400)
+
+  // Search by answer text
+  const searchEnRes  = await post('/knowledge/search', { q: 'flexible pricing', language: 'en' }, accessToken)
+  const searchEnBody = await searchEnRes.json() as Record<string, unknown>
+  check('search by answer content → 200', searchEnRes.status === 200)
+  check('answer match found', ((searchEnBody.data as Record<string, unknown>[])?.length ?? 0) >= 1)
+
+  // ── 35. Soft delete and isActive filter ───────────────────────────────
+  console.log('\n35. Soft delete and isActive filter')
+  const kbKcId    = kbKc.id as string
+  const delRes    = await del(`/knowledge/${kbKcId}`, accessToken)
+  const delBody   = await delRes.json() as Record<string, unknown>
+  check('DELETE /knowledge/:id → 200', delRes.status === 200)
+  check('isActive = false after delete', delBody.isActive === false)
+
+  // Confirm still findable by ID (soft-deleted, not hard-deleted)
+  const afterDelDetail = await (await get(`/knowledge/${kbKcId}`, accessToken)).json() as Record<string, unknown>
+  check('soft-deleted item still findable by ID', afterDelDetail.id === kbKcId)
+  check('soft-deleted isActive is false', afterDelDetail.isActive === false)
+
+  // Confirm excluded from isActive=true filter
+  const activeListBody = await (await get('/knowledge?isActive=true&language=ms', accessToken)).json() as Record<string, unknown>
+  const activeData = activeListBody.data as Record<string, unknown>[]
+  check('soft-deleted excluded from isActive=true filter', !activeData.some((k) => k.id === kbKcId))
+
+  // Re-delete idempotent
+  check('re-delete already soft-deleted → 200', (await del(`/knowledge/${kbKcId}`, accessToken)).status === 200)
+
+  // ── 36. Knowledge auth check ──────────────────────────────────────────
+  console.log('\n36. Knowledge auth check')
+  check('/knowledge without token → 401', (await get('/knowledge')).status === 401)
+  check('/knowledge/search without token → 401', (await post('/knowledge/search', { q: 'test' })).status === 401)
+
+  // ── 37. Conversation auth checks ──────────────────────────────────────
+  console.log('\n37. Conversation auth checks')
   check('/conversations without token → 401', (await get('/conversations')).status === 401)
   check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
   check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
 
-  // ── 28. Logout ────────────────────────────────────────────────────────
-  console.log('\n28. Logout')
+  // ── 38. Logout ────────────────────────────────────────────────────────
+  console.log('\n38. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up smoke test records...')
   if (convId)    await prismaCleanupConversation(convId)
   if (createdId) await prismaDeleteCustomer(createdId)
+  if (kbIds.length > 0) await prismaDeleteKnowledge(kbIds)
   console.log('  🗑️  smoke test records cleaned')
 
   // ── Result ────────────────────────────────────────────────────────────
@@ -369,6 +502,16 @@ async function prismaDeleteCustomer(customerId: string): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  customer ${customerId} deleted`)
   } catch (e) { console.warn('  ⚠️  customer cleanup warning:', e) }
+}
+
+async function prismaDeleteKnowledge(ids: string[]): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    await p.knowledgeItem.deleteMany({ where: { id: { in: ids } } })
+    await p.$disconnect()
+    console.log(`  🗑️  ${ids.length} knowledge items deleted`)
+  } catch (e) { console.warn('  ⚠️  knowledge cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })
