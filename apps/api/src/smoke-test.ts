@@ -51,7 +51,9 @@ async function smoke() {
   let createdId    = ''  // customer id
   let channelId    = ''  // WA Web channel id
   let convId       = ''  // test conversation id
-  const kbIds: string[] = []  // knowledge item ids for cleanup
+  const kbIds: string[] = []    // knowledge item ids for cleanup
+  const furIds: string[] = []   // follow-up rule ids for cleanup
+  const hfrIds: string[] = []   // handoff rule ids for cleanup
 
   // ── 1. Health ──────────────────────────────────────────────────────────
   console.log('1. Health check')
@@ -432,21 +434,124 @@ async function smoke() {
   check('/knowledge without token → 401', (await get('/knowledge')).status === 401)
   check('/knowledge/search without token → 401', (await post('/knowledge/search', { q: 'test' })).status === 401)
 
-  // ── 37. Conversation auth checks ──────────────────────────────────────
-  console.log('\n37. Conversation auth checks')
+  // ════════════════════════════════════════════════════════════════════════
+  // Automation Rules (Phase 3E)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── 37. List seeded follow-up rules ───────────────────────────────────
+  console.log('\n37. List seeded follow-up rules')
+  const furListRes  = await get('/automation/follow-up-rules', accessToken)
+  const furListBody = await furListRes.json() as Record<string, unknown>
+  check('GET /automation/follow-up-rules → 200', furListRes.status === 200)
+  check('follow-up list has data array', Array.isArray(furListBody.data))
+  const furData = furListBody.data as Record<string, unknown>[]
+  check('seeded follow-up rules exist (>= 5)', furData.length >= 5)
+  check('validTriggers in response', Array.isArray(furListBody.validTriggers))
+  check('follow-up rule has trigger',          typeof furData[0]?.trigger === 'string')
+  check('follow-up rule has delayHours',       typeof furData[0]?.delayHours === 'number')
+  check('follow-up rule has messageTemplate',  typeof furData[0]?.messageTemplate === 'string')
+
+  // ── 38. Create follow-up rule ─────────────────────────────────────────
+  console.log('\n38. Create follow-up rule')
+  const furCreateRes  = await post('/automation/follow-up-rules', {
+    trigger:         'PRICE_ASKED_NO_REPLY',
+    delayHours:      6,
+    messageTemplate: 'Hi! Following up on your price inquiry 😊',
+    isActive:        true,
+  }, accessToken)
+  const furCreated = await furCreateRes.json() as Record<string, unknown>
+  check('POST follow-up-rules → 201',      furCreateRes.status === 201)
+  check('created trigger correct',          furCreated.trigger === 'PRICE_ASKED_NO_REPLY')
+  check('created delayHours correct',       furCreated.delayHours === 6)
+  check('created messageTemplate correct',  typeof furCreated.messageTemplate === 'string')
+  check('created isActive true',            furCreated.isActive === true)
+  if (furCreated.id) furIds.push(furCreated.id as string)
+
+  // ── 39. Follow-up rule validation ─────────────────────────────────────
+  console.log('\n39. Follow-up rule validation')
+  check('invalid trigger → 400',     (await post('/automation/follow-up-rules', { trigger: 'INVALID_TRIGGER', delayHours: 1, messageTemplate: 'Hi' }, accessToken)).status === 400)
+  check('missing trigger → 400',     (await post('/automation/follow-up-rules', { delayHours: 1, messageTemplate: 'Hi' }, accessToken)).status === 400)
+  check('negative delayHours → 400', (await post('/automation/follow-up-rules', { trigger: 'CONSIDERING', delayHours: -1, messageTemplate: 'Hi' }, accessToken)).status === 400)
+  check('delayHours > 720 → 400',    (await post('/automation/follow-up-rules', { trigger: 'CONSIDERING', delayHours: 999, messageTemplate: 'Hi' }, accessToken)).status === 400)
+  check('missing messageTemplate → 400', (await post('/automation/follow-up-rules', { trigger: 'CONSIDERING', delayHours: 1 }, accessToken)).status === 400)
+  check('empty messageTemplate → 400',   (await post('/automation/follow-up-rules', { trigger: 'CONSIDERING', delayHours: 1, messageTemplate: '' }, accessToken)).status === 400)
+
+  // ── 40. Patch follow-up rule ──────────────────────────────────────────
+  console.log('\n40. Patch follow-up rule')
+  const furId = furCreated.id as string
+  const furPatchRes = await patch(`/automation/follow-up-rules/${furId}`, { delayHours: 12, isActive: false }, accessToken)
+  const furPatched  = await furPatchRes.json() as Record<string, unknown>
+  check('PATCH follow-up-rules → 200',   furPatchRes.status === 200)
+  check('delayHours updated to 12',       furPatched.delayHours === 12)
+  check('isActive updated to false',      furPatched.isActive === false)
+  check('invalid trigger PATCH → 400',   (await patch(`/automation/follow-up-rules/${furId}`, { trigger: 'BAD' }, accessToken)).status === 400)
+  check('404 nonexistent rule',          (await patch('/automation/follow-up-rules/nonexistent', { isActive: true }, accessToken)).status === 404)
+
+  // ── 41. Filter active follow-up rules ────────────────────────────────
+  console.log('\n41. Filter active follow-up rules')
+  const furActiveRes  = await get('/automation/follow-up-rules?isActive=true', accessToken)
+  const furActiveBody = await furActiveRes.json() as Record<string, unknown>
+  check('filter isActive=true → 200', furActiveRes.status === 200)
+  const furActiveData = furActiveBody.data as Record<string, unknown>[]
+  check('all results isActive=true', furActiveData.every((r) => r.isActive === true))
+  check('patched inactive rule excluded', !furActiveData.some((r) => r.id === furId))
+
+  // ── 42. List seeded handoff rules ─────────────────────────────────────
+  console.log('\n42. List seeded handoff rules')
+  const hfrListRes  = await get('/automation/handoff-rules', accessToken)
+  const hfrListBody = await hfrListRes.json() as Record<string, unknown>
+  check('GET /automation/handoff-rules → 200', hfrListRes.status === 200)
+  check('handoff list has data array', Array.isArray(hfrListBody.data))
+  const hfrData = hfrListBody.data as Record<string, unknown>[]
+  check('seeded handoff rules exist (>= 6)', hfrData.length >= 6)
+  check('validConditions in response', Array.isArray(hfrListBody.validConditions))
+  check('handoff rule has condition', typeof hfrData[0]?.condition === 'string')
+
+  // ── 43. Create handoff rule ───────────────────────────────────────────
+  console.log('\n43. Create handoff rule')
+  const hfrCreateRes  = await post('/automation/handoff-rules', { condition: 'INSULT_OR_ABUSE', isActive: true }, accessToken)
+  const hfrCreated    = await hfrCreateRes.json() as Record<string, unknown>
+  check('POST handoff-rules → 201',     hfrCreateRes.status === 201)
+  check('created condition correct',     hfrCreated.condition === 'INSULT_OR_ABUSE')
+  check('created isActive true',         hfrCreated.isActive === true)
+  if (hfrCreated.id) hfrIds.push(hfrCreated.id as string)
+
+  // ── 44. Handoff rule validation ───────────────────────────────────────
+  console.log('\n44. Handoff rule validation')
+  check('invalid condition → 400', (await post('/automation/handoff-rules', { condition: 'INVALID_COND' }, accessToken)).status === 400)
+  check('missing condition → 400', (await post('/automation/handoff-rules', {}, accessToken)).status === 400)
+
+  // ── 45. Patch handoff rule ────────────────────────────────────────────
+  console.log('\n45. Patch handoff rule')
+  const hfrId        = hfrCreated.id as string
+  const hfrPatchRes  = await patch(`/automation/handoff-rules/${hfrId}`, { isActive: false }, accessToken)
+  const hfrPatched   = await hfrPatchRes.json() as Record<string, unknown>
+  check('PATCH handoff-rules → 200',   hfrPatchRes.status === 200)
+  check('isActive updated to false',    hfrPatched.isActive === false)
+  check('invalid condition PATCH → 400', (await patch(`/automation/handoff-rules/${hfrId}`, { condition: 'BAD' }, accessToken)).status === 400)
+  check('404 nonexistent handoff rule',  (await patch('/automation/handoff-rules/nonexistent', { isActive: true }, accessToken)).status === 404)
+
+  // ── 46. Automation auth checks ────────────────────────────────────────
+  console.log('\n46. Automation auth checks')
+  check('/automation/follow-up-rules without token → 401', (await get('/automation/follow-up-rules')).status === 401)
+  check('/automation/handoff-rules without token → 401',   (await get('/automation/handoff-rules')).status === 401)
+
+  // ── 47. Conversation auth checks ──────────────────────────────────────
+  console.log('\n47. Conversation auth checks')
   check('/conversations without token → 401', (await get('/conversations')).status === 401)
   check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
   check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
 
-  // ── 38. Logout ────────────────────────────────────────────────────────
-  console.log('\n38. Logout')
+  // ── 48. Logout ────────────────────────────────────────────────────────
+  console.log('\n48. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up smoke test records...')
   if (convId)    await prismaCleanupConversation(convId)
   if (createdId) await prismaDeleteCustomer(createdId)
-  if (kbIds.length > 0) await prismaDeleteKnowledge(kbIds)
+  if (kbIds.length  > 0) await prismaDeleteKnowledge(kbIds)
+  if (furIds.length > 0 || hfrIds.length > 0) await prismaDeleteAutomation(furIds, hfrIds)
   console.log('  🗑️  smoke test records cleaned')
 
   // ── Result ────────────────────────────────────────────────────────────
@@ -512,6 +617,17 @@ async function prismaDeleteKnowledge(ids: string[]): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  ${ids.length} knowledge items deleted`)
   } catch (e) { console.warn('  ⚠️  knowledge cleanup warning:', e) }
+}
+
+async function prismaDeleteAutomation(furIds: string[], hfrIds: string[]): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    if (furIds.length > 0) await p.followUpRule.deleteMany({ where: { id: { in: furIds } } })
+    if (hfrIds.length > 0) await p.handoffRule.deleteMany({ where: { id: { in: hfrIds } } })
+    await p.$disconnect()
+    console.log(`  🗑️  ${furIds.length} follow-up + ${hfrIds.length} handoff rules deleted`)
+  } catch (e) { console.warn('  ⚠️  automation cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })
