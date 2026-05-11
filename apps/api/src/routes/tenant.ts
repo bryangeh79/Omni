@@ -1,16 +1,25 @@
-// Tenant routes — skeleton
+// Tenant routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function tenantRoutes(app: FastifyInstance) {
-  // GET  /tenants/me         current tenant settings
-  app.get('/me', async () => ({ todo: 'Phase 1' }))
+  app.get('/me', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // PATCH /tenants/me        update name, defaultLanguage, plan
-  app.patch('/me', async () => ({ todo: 'Phase 1' }))
+  app.patch('/me', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // GET  /tenants/me/users   list users
-  app.get('/me/users', async () => ({ todo: 'Phase 1' }))
+  app.get('/me/users', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /tenants/me/users   invite user
-  app.post('/me/users', async () => ({ todo: 'Phase 1' }))
+  app.post('/me/users', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

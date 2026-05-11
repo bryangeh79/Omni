@@ -1,19 +1,30 @@
-// Automation (follow-up + handoff rules) routes — skeleton
+// Automation routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function automationRoutes(app: FastifyInstance) {
-  // GET  /automation/follow-up-rules
-  app.get('/follow-up-rules', async () => ({ todo: 'Phase 3' }))
+  app.get('/follow-up-rules',  { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /automation/follow-up-rules
-  app.post('/follow-up-rules', async () => ({ todo: 'Phase 3' }))
+  app.post('/follow-up-rules', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // PATCH /automation/follow-up-rules/:id
-  app.patch('/follow-up-rules/:id', async () => ({ todo: 'Phase 3' }))
+  app.patch('/follow-up-rules/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // GET  /automation/handoff-rules
-  app.get('/handoff-rules', async () => ({ todo: 'Phase 3' }))
+  app.get('/handoff-rules',    { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /automation/handoff-rules
-  app.post('/handoff-rules', async () => ({ todo: 'Phase 3' }))
+  app.post('/handoff-rules',   { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

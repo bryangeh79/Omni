@@ -1,19 +1,30 @@
-// Knowledge Base routes — skeleton
+// Knowledge Base routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function knowledgeRoutes(app: FastifyInstance) {
-  // GET  /knowledge               list items (type, language, search)
-  app.get('/',    async () => ({ todo: 'Phase 3' }))
+  app.get('/',    { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /knowledge               create item
-  app.post('/',   async () => ({ todo: 'Phase 3' }))
+  app.post('/',   { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // PATCH /knowledge/:id          update
-  app.patch('/:id', async () => ({ todo: 'Phase 3' }))
+  app.patch('/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // DELETE /knowledge/:id         delete
-  app.delete('/:id', async () => ({ todo: 'Phase 3' }))
+  app.delete('/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /knowledge/search        semantic / keyword search (Phase 3+)
-  app.post('/search', async () => ({ todo: 'Phase 3' }))
+  app.post('/search', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

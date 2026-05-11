@@ -1,15 +1,25 @@
-// Omni API Server — entry point skeleton
-// Full implementation in Phase 1.
+import 'dotenv/config'
+import './auth/types' // activate FastifyJWT type augmentation
 
-import Fastify from 'fastify'
+import Fastify      from 'fastify'
+import fastifyJwt   from '@fastify/jwt'
+
 import { registerRoutes } from './routes'
 
 export async function buildApp() {
   const app = Fastify({ logger: true })
 
-  // Health check (no auth required)
+  // ── JWT plugin ─────────────────────────────────────────────────────────────
+  const jwtSecret = process.env.JWT_SECRET ?? process.env.APP_SECRET
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET or APP_SECRET must be set in environment')
+  }
+  await app.register(fastifyJwt, { secret: jwtSecret })
+
+  // ── Public routes (no auth required) ──────────────────────────────────────
   app.get('/health', async () => ({ status: 'ok', service: 'omni-api' }))
 
+  // ── All application routes ─────────────────────────────────────────────────
   await registerRoutes(app)
 
   return app

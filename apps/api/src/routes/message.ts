@@ -1,13 +1,18 @@
-// Message routes — skeleton
+// Message routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function messageRoutes(app: FastifyInstance) {
-  // GET  /messages?conversationId=    list messages in a conversation
-  app.get('/', async () => ({ todo: 'Phase 2' }))
+  app.get('/', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /messages/send               human agent sends message
-  app.post('/send', async () => ({ todo: 'Phase 2' }))
+  app.post('/send', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /messages/webhook/:channelId  inbound webhook from channel adapters
-  app.post('/webhook/:channelId', async () => ({ todo: 'Phase 2' }))
+  // Inbound webhook from channel adapters — no auth (called internally by adapter, not frontend)
+  app.post('/webhook/:channelId', async () => ({ todo: 'Phase 2 — internal webhook' }))
 }

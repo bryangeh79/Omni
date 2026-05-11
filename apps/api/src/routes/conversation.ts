@@ -1,19 +1,30 @@
-// Conversation routes — skeleton
+// Conversation routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function conversationRoutes(app: FastifyInstance) {
-  // GET  /conversations               list (status, assignee, channel…)
-  app.get('/',    async () => ({ todo: 'Phase 2' }))
+  app.get('/',    { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // GET  /conversations/:id           detail + messages
-  app.get('/:id', async () => ({ todo: 'Phase 2' }))
+  app.get('/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /conversations/:id/takeover  human takes over from AI
-  app.post('/:id/takeover', async () => ({ todo: 'Phase 2' }))
+  app.post('/:id/takeover', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /conversations/:id/release   release back to AI
-  app.post('/:id/release', async () => ({ todo: 'Phase 2' }))
+  app.post('/:id/release',  { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /conversations/:id/close
-  app.post('/:id/close', async () => ({ todo: 'Phase 2' }))
+  app.post('/:id/close',    { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

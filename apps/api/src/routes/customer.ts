@@ -1,22 +1,41 @@
-// Customer / CRM routes — skeleton
+// Customer / CRM routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function customerRoutes(app: FastifyInstance) {
-  // GET  /customers          list with filters (stage, score, tag, language…)
-  app.get('/',    async () => ({ todo: 'Phase 3' }))
+  // GET  /customers
+  app.get('/', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // GET  /customers/:id      full customer card
-  app.get('/:id', async () => ({ todo: 'Phase 3' }))
+  // GET  /customers/:id
+  app.get('/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /customers          create
-  app.post('/',   async () => ({ todo: 'Phase 3' }))
+  // POST /customers
+  app.post('/', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // PATCH /customers/:id     update (stage, score, owner, notes…)
-  app.patch('/:id', async () => ({ todo: 'Phase 3' }))
+  // PATCH /customers/:id
+  app.patch('/:id', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
   // POST /customers/:id/tags
-  app.post('/:id/tags', async () => ({ todo: 'Phase 3' }))
+  app.post('/:id/tags', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
   // DELETE /customers/:id/tags/:tag
-  app.delete('/:id/tags/:tag', async () => ({ todo: 'Phase 3' }))
+  app.delete('/:id/tags/:tag', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

@@ -1,12 +1,15 @@
-// Boss Dashboard routes — skeleton
+// Boss Dashboard routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function dashboardRoutes(app: FastifyInstance) {
-  // GET /dashboard/today
-  // Returns: new customers, high intent, needs human, pending follow-up,
-  //          overdue replies, price asked not closed, booked, won, AI saved time, action recommendations
-  app.get('/today', async () => ({ todo: 'Phase 4' }))
+  app.get('/today', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 4 implementation', tenantId }
+  })
 
-  // GET /dashboard/stats?from=&to=   date range summary
-  app.get('/stats', async () => ({ todo: 'Phase 4' }))
+  app.get('/stats', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 4 implementation', tenantId }
+  })
 }

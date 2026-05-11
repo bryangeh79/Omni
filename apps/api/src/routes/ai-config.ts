@@ -1,13 +1,20 @@
-// AI Config routes — skeleton
+// AI Config routes
 import type { FastifyInstance } from 'fastify'
+import { requireAuth, getAuthUser } from '../auth'
 
 export async function aiConfigRoutes(app: FastifyInstance) {
-  // GET  /ai-config       get tenant AI config
-  app.get('/',  async () => ({ todo: 'Phase 3' }))
+  app.get('/', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // PUT  /ai-config       upsert persona, goals, systemPrompt, model
-  app.put('/',  async () => ({ todo: 'Phase 3' }))
+  app.put('/', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 
-  // POST /ai-config/test  send a test message through the AI agent
-  app.post('/test', async () => ({ todo: 'Phase 3' }))
+  app.post('/test', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return { todo: 'Phase 3 implementation', tenantId }
+  })
 }

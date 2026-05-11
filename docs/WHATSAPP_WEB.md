@@ -48,24 +48,46 @@ OMNI_ALLOW_WA_SESSION=true
 
 Add to your `.env` file. **Do not enable on a machine where real session scanning is not approved.**
 
-### 4. Connect a channel
+### 4. Login and obtain access token
+
+All WhatsApp Web routes require authentication (Phase 3A+).
 
 ```http
-POST http://localhost:43111/channels/whatsapp-web/connect
+POST http://localhost:43111/auth/login
 Content-Type: application/json
 
 {
-  "tenantId": "demo-tenant-001",
+  "email": "admin@omni-demo.test",
+  "password": "OmniDemo2024!"
+}
+```
+
+Use the returned `accessToken` as `Authorization: Bearer <token>` in all subsequent calls.
+
+### 5. Connect a channel
+
+**Requires: Authorization: Bearer <accessToken>**
+`tenantId` is derived from the token — do NOT pass it in the body.
+
+```http
+POST http://localhost:43111/channels/whatsapp-web/connect
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
   "displayName": "My WhatsApp"
 }
 ```
 
 Response includes `channelId` and `status`.
 
-### 5. Poll for QR code
+### 6. Poll for QR code
+
+**Requires: Authorization: Bearer <accessToken>**
 
 ```http
 GET http://localhost:43111/channels/whatsapp-web/{channelId}/qr
+Authorization: Bearer <accessToken>
 ```
 
 - Returns `{ qr: "<opaque-string>" }` when QR is ready

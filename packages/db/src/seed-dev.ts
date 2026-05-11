@@ -40,12 +40,16 @@ async function seed() {
     create: {
       tenantId:     DEMO_TENANT_ID,
       email:        DEMO_USER_EMAIL,
-      passwordHash: '$DEMO_PLACEHOLDER_NOT_FOR_PRODUCTION',
+      passwordHash: '$2a$10$tkwcfiNpwlb2sK9EqalFeOcR/gzTh./0o6bMDgo2J9Kj3qtiMtB.y',
       name:         'Demo Admin',
       role:         UserRole.OWNER,
       isActive:     true,
     },
-    update: { name: 'Demo Admin', role: UserRole.OWNER },
+    update: {
+      name:         'Demo Admin',
+      role:         UserRole.OWNER,
+      passwordHash: '$2a$10$tkwcfiNpwlb2sK9EqalFeOcR/gzTh./0o6bMDgo2J9Kj3qtiMtB.y',
+    },
   })
   console.log(`[seed] User: ${user.email} (${user.role})`)
 
