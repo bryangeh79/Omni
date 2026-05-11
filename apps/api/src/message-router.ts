@@ -1,10 +1,10 @@
-// Message Router — normalize inbound envelope → DB write → worker stub.
+// Message Router — normalize inbound envelope → DB write → BullMQ enqueue.
 // Enforces tenant isolation via scopeToTenant().
 
 import { prisma, scopeToTenant, Direction, SenderType } from '@omni/db'
 import type { InboundEnvelope } from '@omni/channel-adapters'
 
-import { workerStub_processInbound } from './worker-stub'
+import { enqueueInboundMessage } from './queue'
 
 export interface RouterResult {
   customerId:        string
@@ -69,14 +69,16 @@ export async function routeInboundMessage(
     data:  { lastMessageAt: new Date() },
   })
 
-  // ── 5. Hand off to worker stub (Phase 2B) ─────────────────────────────────
-  await workerStub_processInbound({
-    messageId:      message.id,
-    conversationId: conversation.id,
+  // ── 5. Enqueue for async worker processing (BullMQ) ───────────────────────
+  // Non-fatal if Redis is unavailable — DB write already succeeded.
+  await enqueueInboundMessage({
     tenantId,
+    channelId:      envelope.channelId,
+    conversationId: conversation.id,
     customerId:     customer.id,
-    body:           envelope.body,
-  }).catch((err) => console.error('[message-router] worker stub error:', err))
+    messageId:      message.id,
+    createdAt:      new Date().toISOString(),
+  })
 
   return {
     customerId:        customer.id,

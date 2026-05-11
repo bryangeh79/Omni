@@ -36,3 +36,7 @@ export interface PaginatedResult<T> {
   page:    number
   perPage: number
 }
+
+// ── Queue types ───────────────────────────────────────────────────────────────
+export { QUEUE_NAMES, JOB_NAMES } from './queue-types'
+export type { QueueName, InboundMessageJobData, FollowUpEvaluationJobData } from './queue-types'

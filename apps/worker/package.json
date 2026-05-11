@@ -3,16 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev":   "tsx watch src/index.ts",
+    "once":  "tsx src/once.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "lint": "eslint src",
+    "lint":  "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@omni/db": "workspace:*",
     "@omni/shared": "workspace:*",
-    "dotenv": "^16.4.0"
+    "bullmq": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "ioredis": "^5.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

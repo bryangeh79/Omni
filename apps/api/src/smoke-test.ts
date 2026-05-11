@@ -536,8 +536,60 @@ async function smoke() {
   check('/automation/follow-up-rules without token → 401', (await get('/automation/follow-up-rules')).status === 401)
   check('/automation/handoff-rules without token → 401',   (await get('/automation/handoff-rules')).status === 401)
 
-  // ── 47. Conversation auth checks ──────────────────────────────────────
-  console.log('\n47. Conversation auth checks')
+  // ════════════════════════════════════════════════════════════════════════
+  // Worker Queue (Phase 4B) — BullMQ + Redis
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n47. Worker queue (BullMQ + Redis)')
+  const redisOk = await checkRedis()
+  check('Redis available on 43114', redisOk)
+
+  if (redisOk && convId) {
+    // Create a fresh test conversation + message via Prisma for queue test
+    const queueTestSetup = await prismaSetupConversation(channelId, createdId)
+    const qConvId = queueTestSetup.convId
+
+    // Enqueue a PROCESS_INBOUND_MESSAGE job directly via BullMQ
+    const enqueued = await enqueueBullmqJob({
+      tenantId:       'demo-tenant-001',
+      channelId,
+      conversationId: qConvId,
+      customerId:     createdId,
+      messageId:      'smoke-msg-placeholder',
+      createdAt:      new Date().toISOString(),
+    })
+    check('Job enqueued successfully', enqueued)
+
+    if (enqueued) {
+      // Verify queue has 1 pending job
+      const queueDepth = await getBullmqQueueDepth()
+      check('Queue depth >= 1 after enqueue', queueDepth >= 1)
+
+      // Run worker:once to drain the queue
+      const workerOk = await runWorkerOnce()
+      check('worker:once exited cleanly', workerOk)
+
+      // Verify AI stub reply was written to DB
+      await new Promise((r) => setTimeout(r, 500)) // brief settle
+      const aiReply = await prismaGetAiStubReply(qConvId)
+      check('AI stub reply written to DB',           aiReply !== null)
+      check('AI reply senderType is AI',             aiReply?.senderType === 'AI')
+      check('AI reply direction is OUTBOUND',        aiReply?.direction === 'OUTBOUND')
+      check('AI reply content contains [AI_STUB]',   String(aiReply?.content ?? '').includes('[AI_STUB]'))
+
+      // Verify queue is now empty
+      const finalDepth = await getBullmqQueueDepth()
+      check('Queue drained to 0 after worker:once', finalDepth === 0)
+
+      // Cleanup queue test conversation
+      await prismaCleanupConversation(qConvId)
+    }
+  } else {
+    console.log('  ⚠️  Queue tests skipped (Redis unavailable or no convId)')
+  }
+
+  // ── 48. Conversation auth checks ──────────────────────────────────────
+  console.log('\n48. Conversation auth checks')
   check('/conversations without token → 401', (await get('/conversations')).status === 401)
   check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
   check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
@@ -617,6 +669,93 @@ async function prismaDeleteKnowledge(ids: string[]): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  ${ids.length} knowledge items deleted`)
   } catch (e) { console.warn('  ⚠️  knowledge cleanup warning:', e) }
+}
+
+// ── Queue helpers ──────────────────────────────────────────────────────────
+
+async function checkRedis(): Promise<boolean> {
+  const net = await import('net')
+  return new Promise((resolve) => {
+    const s = net.createConnection(43114, 'localhost')
+    s.setTimeout(2000)
+    s.on('connect', () => { s.destroy(); resolve(true) })
+    s.on('error',   () => resolve(false))
+    s.on('timeout', () => { s.destroy(); resolve(false) })
+  })
+}
+
+async function enqueueBullmqJob(data: Record<string, string>): Promise<boolean> {
+  try {
+    const { Queue } = await import('bullmq')
+    const { default: IORedis } = await import('ioredis')
+    const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:43114', {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    })
+    const queue = new Queue('omni-inbound-messages', { connection: redis })
+    await queue.add('PROCESS_INBOUND_MESSAGE', data, { attempts: 1 })
+    await queue.close()
+    await redis.quit()
+    return true
+  } catch (e) {
+    console.warn('  ⚠️  enqueueBullmqJob error:', e)
+    return false
+  }
+}
+
+async function getBullmqQueueDepth(): Promise<number> {
+  try {
+    const { Queue } = await import('bullmq')
+    const { default: IORedis } = await import('ioredis')
+    const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:43114', {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    })
+    const queue = new Queue('omni-inbound-messages', { connection: redis })
+    const counts = await queue.getJobCounts('waiting', 'active', 'delayed')
+    const depth = (counts.waiting ?? 0) + (counts.active ?? 0) + (counts.delayed ?? 0)
+    await queue.close()
+    await redis.quit()
+    return depth
+  } catch { return -1 }
+}
+
+async function runWorkerOnce(): Promise<boolean> {
+  try {
+    const { spawnSync } = await import('child_process')
+    const projectRoot = path.resolve(__dirname, '../../../')
+    // Use pnpm worker:once — resolves tsx + paths automatically
+    const result = spawnSync('pnpm', ['worker:once'], {
+      cwd:     projectRoot,
+      env:     { ...process.env },
+      timeout: 35_000,
+      stdio:   'pipe',
+      shell:   true,
+    })
+    const out = result.stdout?.toString().trim()
+    const err = result.stderr?.toString().trim()
+    if (out) console.log(out)
+    if (err && result.status !== 0) console.error(err)
+    return result.status === 0
+  } catch (e) {
+    console.warn('  ⚠️  runWorkerOnce error:', e)
+    return false
+  }
+}
+
+async function prismaGetAiStubReply(
+  conversationId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    const msg = await p.message.findFirst({
+      where: { conversationId, senderType: 'AI', direction: 'OUTBOUND' },
+      orderBy: { createdAt: 'desc' },
+    })
+    await p.$disconnect()
+    return msg as Record<string, unknown> | null
+  } catch { return null }
 }
 
 async function prismaDeleteAutomation(furIds: string[], hfrIds: string[]): Promise<void> {
