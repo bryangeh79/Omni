@@ -2,8 +2,7 @@
 import type { FastifyInstance } from 'fastify'
 
 import {
-  findActiveUserByEmail,
-  isTenantActive,
+  findActiveUserByTenantSlugAndEmail,
   verifyPassword,
   issueAccessToken,
   issueRefreshToken,
@@ -15,26 +14,29 @@ import type { JwtTokenPayload } from '../auth'
 export async function authRoutes(app: FastifyInstance) {
 
   // POST /auth/login
-  // Body: { email: string, password: string }
+  // Body: { tenantSlug, email, password }
   // Returns: { accessToken, refreshToken, user: { id, email, role, tenantId } }
+  //
+  // SaaS rule: tenantSlug is required so that the same email address in
+  // different tenants authenticates into the correct tenant.
+  // All auth failures return the same generic 401 to prevent enumeration attacks.
   app.post<{
-    Body: { email?: string; password?: string }
+    Body: { tenantSlug?: string; email?: string; password?: string }
   }>('/login', async (req, reply) => {
-    const { email, password } = req.body ?? {}
+    const { tenantSlug, email, password } = req.body ?? {}
 
-    if (!email || !password) {
-      return reply.status(400).send({ error: 'email and password are required' })
+    if (!tenantSlug || !email || !password) {
+      return reply.status(400).send({
+        error: 'tenantSlug, email, and password are required',
+      })
     }
 
-    const user = await findActiveUserByEmail(email)
+    // Tenant-scoped lookup — same generic error for all failures to prevent enumeration
+    const user = await findActiveUserByTenantSlugAndEmail(tenantSlug, email)
     if (!user) {
-      // Constant-time rejection — don't leak whether email exists
+      // Constant-time delay to resist timing attacks on non-existent accounts
       await new Promise((r) => setTimeout(r, 300))
       return reply.status(401).send({ error: 'Invalid credentials' })
-    }
-
-    if (!(await isTenantActive(user.tenantId))) {
-      return reply.status(403).send({ error: 'Tenant is inactive' })
     }
 
     const valid = await verifyPassword(password, user.passwordHash)
@@ -46,15 +48,16 @@ export async function authRoutes(app: FastifyInstance) {
     const accessToken  = issueAccessToken(app, tokenUser)
     const refreshToken = issueRefreshToken(app, tokenUser)
 
-    // Tokens not logged — never put in logs or error messages
+    // Tokens never logged
     return reply.status(200).send({
       accessToken,
       refreshToken,
       user: {
-        id:       user.id,
-        email:    user.email,
-        role:     user.role,
-        tenantId: user.tenantId,
+        id:         user.id,
+        email:      user.email,
+        role:       user.role,
+        tenantId:   user.tenantId,
+        tenantSlug: user.tenantSlug,
       },
     })
   })

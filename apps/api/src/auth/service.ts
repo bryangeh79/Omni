@@ -18,6 +18,7 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 export interface AuthUser {
   id:           string
   tenantId:     string
+  tenantSlug:   string
   email:        string
   passwordHash: string
   role:         string
@@ -25,12 +26,53 @@ export interface AuthUser {
   isActive:     boolean
 }
 
-export async function findActiveUserByEmail(email: string): Promise<AuthUser | null> {
-  const user = await prisma.user.findFirst({ where: { email, isActive: true } })
+/**
+ * SaaS-safe user lookup: tenant slug + email (tenant-scoped).
+ *
+ * Returns null for any of these (caller must give the same generic error):
+ *   - tenant slug not found
+ *   - tenant inactive
+ *   - user not found in that tenant
+ *   - user inactive
+ *
+ * Never leaks whether a tenant or user exists to the caller.
+ */
+export async function findActiveUserByTenantSlugAndEmail(
+  tenantSlug: string,
+  email: string,
+): Promise<AuthUser | null> {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } })
+  if (!tenant || !tenant.isActive) return null
+
+  const user = await prisma.user.findFirst({
+    where: { tenantId: tenant.id, email, isActive: true },
+  })
   if (!user) return null
+
   return {
     id:           user.id,
     tenantId:     user.tenantId,
+    tenantSlug:   tenant.slug,
+    email:        user.email,
+    passwordHash: user.passwordHash,
+    role:         user.role,
+    name:         user.name,
+    isActive:     user.isActive,
+  }
+}
+
+/**
+ * @deprecated Use findActiveUserByTenantSlugAndEmail for SaaS-safe login.
+ * Kept for internal/admin use only — not for login endpoints.
+ */
+export async function findActiveUserByEmail(email: string): Promise<AuthUser | null> {
+  const user = await prisma.user.findFirst({ where: { email, isActive: true } })
+  if (!user) return null
+  const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } })
+  return {
+    id:           user.id,
+    tenantId:     user.tenantId,
+    tenantSlug:   tenant?.slug ?? '',
     email:        user.email,
     passwordHash: user.passwordHash,
     role:         user.role,

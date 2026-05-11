@@ -8,9 +8,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
 const BASE = `http://localhost:${process.env.PORT_API ?? 43111}`
 
-// Demo credentials — DEV ONLY. These are for automated testing of the dev seed.
+// Demo credentials — DEV ONLY. Defined in docs/AUTH.md and docs/SAAS_TENANCY.md.
+const DEMO_SLUG     = 'omni-demo'
 const DEMO_EMAIL    = 'admin@omni-demo.test'
-// Password kept in env or AUTH.md — not repeated here for safety
 const DEMO_PASSWORD = process.env.OMNI_SMOKE_PASSWORD ?? 'OmniDemo2024!'
 
 let passed = 0
@@ -46,15 +46,56 @@ async function smoke() {
   const health = await get('/health')
   check('GET /health → 200', health.status === 200)
 
-  // ── 2. Login ─────────────────────────────────────────────────────────────
-  console.log('\n2. Login')
-  const loginRes = await post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD })
+  // ── 2. Login — missing fields → 400 ──────────────────────────────────────
+  console.log('\n2. Login validation')
+  const noSlugRes = await post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD })
+  check('missing tenantSlug → 400', noSlugRes.status === 400)
+
+  const noEmailRes = await post('/auth/login', { tenantSlug: DEMO_SLUG, password: DEMO_PASSWORD })
+  check('missing email → 400', noEmailRes.status === 400)
+
+  const noPassRes = await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL })
+  check('missing password → 400', noPassRes.status === 400)
+
+  const emptyRes = await post('/auth/login', {})
+  check('empty body → 400', emptyRes.status === 400)
+
+  // ── 3. Login — wrong tenantSlug → 401 (generic, no enumeration) ─────────
+  console.log('\n3. Wrong tenant rejection')
+  const wrongSlugRes = await post('/auth/login', {
+    tenantSlug: 'nonexistent-tenant-xyz',
+    email:      DEMO_EMAIL,
+    password:   DEMO_PASSWORD,
+  })
+  check('wrong tenantSlug → 401', wrongSlugRes.status === 401)
+  const wrongSlugBody = await wrongSlugRes.json() as Record<string, unknown>
+  check('wrong tenantSlug error is generic (no tenant detail)', wrongSlugBody.error === 'Invalid credentials')
+
+  // ── 4. Login — wrong password → 401 ──────────────────────────────────────
+  console.log('\n4. Wrong password rejection')
+  const wrongPassRes = await post('/auth/login', {
+    tenantSlug: DEMO_SLUG,
+    email:      DEMO_EMAIL,
+    password:   'wrong-password-123',
+  })
+  check('wrong password → 401', wrongPassRes.status === 401)
+
+  // ── 5. Valid login ────────────────────────────────────────────────────────
+  console.log('\n5. Valid login')
+  const loginRes = await post('/auth/login', {
+    tenantSlug: DEMO_SLUG,
+    email:      DEMO_EMAIL,
+    password:   DEMO_PASSWORD,
+  })
   check('POST /auth/login → 200', loginRes.status === 200)
 
   const loginBody = await loginRes.json() as Record<string, unknown>
   const hasTokens = typeof loginBody.accessToken === 'string' && typeof loginBody.refreshToken === 'string'
   check('response contains accessToken + refreshToken', hasTokens)
-  check('response contains user.tenantId', !!(loginBody.user as Record<string, unknown>)?.tenantId)
+  const userObj = loginBody.user as Record<string, unknown> | undefined
+  check('response contains user.tenantId',   typeof userObj?.tenantId   === 'string')
+  check('response contains user.tenantSlug', typeof userObj?.tenantSlug === 'string')
+  check('tenantSlug matches requested slug', userObj?.tenantSlug === DEMO_SLUG)
 
   if (!hasTokens) {
     console.error('[smoke] Cannot continue without tokens')
@@ -65,8 +106,8 @@ async function smoke() {
   const refreshToken = loginBody.refreshToken as string
   // Tokens never printed to console
 
-  // ── 3. /auth/me ──────────────────────────────────────────────────────────
-  console.log('\n3. GET /auth/me')
+  // ── 6. /auth/me ──────────────────────────────────────────────────────────
+  console.log('\n6. GET /auth/me')
   const meRes = await get('/auth/me', accessToken)
   check('GET /auth/me with token → 200', meRes.status === 200)
   const meBody = await meRes.json() as Record<string, unknown>
@@ -74,39 +115,33 @@ async function smoke() {
   check('/auth/me returns tenantId', typeof meBody.tenantId === 'string')
   check('/auth/me does NOT return password', !meBody.passwordHash && !meBody.password)
 
-  // ── 4. Protected route with token ─────────────────────────────────────────
-  console.log('\n4. Protected route — with token')
+  // ── 7. Protected route with token ─────────────────────────────────────────
+  console.log('\n7. Protected route — with token')
   const custRes = await get('/customers', accessToken)
   check('GET /customers with token → 200', custRes.status === 200)
 
-  // ── 5. Protected route without token → 401 ────────────────────────────────
-  console.log('\n5. Protected route — without token')
+  // ── 8. Protected route without token → 401 ────────────────────────────────
+  console.log('\n8. Protected route — without token')
   const noAuthRes = await get('/customers')
   check('GET /customers without token → 401', noAuthRes.status === 401)
 
-  // ── 6. Invalid token → 401 ───────────────────────────────────────────────
-  console.log('\n6. Invalid token rejection')
+  // ── 9. Invalid token → 401 ───────────────────────────────────────────────
+  console.log('\n9. Invalid token rejection')
   const badAuthRes = await get('/customers', 'not-a-real-token')
   check('GET /customers with bad token → 401', badAuthRes.status === 401)
 
-  // ── 7. Refresh token flow ─────────────────────────────────────────────────
-  console.log('\n7. Token refresh')
+  // ── 10. Refresh token flow ─────────────────────────────────────────────────
+  console.log('\n10. Token refresh')
   const refreshRes = await post('/auth/refresh', { refreshToken })
   check('POST /auth/refresh → 200', refreshRes.status === 200)
   const refreshBody = await refreshRes.json() as Record<string, unknown>
   check('refresh returns new accessToken', typeof refreshBody.accessToken === 'string')
 
-  // Verify new token works
   const meRes2 = await get('/auth/me', refreshBody.accessToken as string)
   check('new access token valid for /auth/me', meRes2.status === 200)
 
-  // ── 8. Wrong credential rejection ────────────────────────────────────────
-  console.log('\n8. Wrong credentials rejection')
-  const badLogin = await post('/auth/login', { email: DEMO_EMAIL, password: 'wrong-password' })
-  check('wrong password → 401', badLogin.status === 401)
-
-  // ── 9. WA Web connect (stub mode, auth required) ─────────────────────────
-  console.log('\n9. WA Web connect (stub mode)')
+  // ── 11. WA Web connect (stub mode, auth required) ─────────────────────────
+  console.log('\n11. WA Web connect (stub mode, auth required)')
   const waRes = await post('/channels/whatsapp-web/connect', { displayName: 'Smoke Test Channel' }, accessToken)
   check('POST /channels/whatsapp-web/connect with token → 201', waRes.status === 201)
   const waBody = await waRes.json() as Record<string, unknown>
@@ -114,8 +149,8 @@ async function smoke() {
   check('WA connect is in stubMode',    waBody.stubMode === true)
   // QR content never logged
 
-  // ── 10. Logout ───────────────────────────────────────────────────────────
-  console.log('\n10. Logout')
+  // ── 12. Logout ───────────────────────────────────────────────────────────
+  console.log('\n12. Logout')
   const logoutRes = await post('/auth/logout', {}, accessToken)
   check('POST /auth/logout with token → 200', logoutRes.status === 200)
 
