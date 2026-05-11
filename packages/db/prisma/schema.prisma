@@ -1,0 +1,286 @@
+// Omni Ai Chatbot — Database Schema Draft
+// Phase 0: draft only. Migrations applied in Phase 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT & AUTH
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  defaultLanguage String   @default("zh") // zh | en | ms
+  plan            String   @default("trial")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users           User[]
+  channels        Channel[]
+  customers       Customer[]
+  conversations   Conversation[]
+  knowledgeItems  KnowledgeItem[]
+  aiConfig        AiConfig?
+  followUpRules   FollowUpRule[]
+  handoffRules    HandoffRule[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  name         String
+  role         UserRole @default(AGENT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANNEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Channel {
+  id           String      @id @default(cuid())
+  tenantId     String
+  type         ChannelType
+  displayName  String
+  isActive     Boolean     @default(true)
+  // WhatsApp Web: session reference (not session content)
+  waWebSessionRef String?
+  // Meta API: phoneNumberId stored here; token in env only
+  metaPhoneNumberId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  conversations Conversation[]
+}
+
+enum ChannelType {
+  WHATSAPP_WEB
+  META_API
+  FACEBOOK_MESSENGER
+  INSTAGRAM
+  WECHAT
+  ZALO
+  LINE
+  TIKTOK
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CRM — CUSTOMER
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id                  String       @id @default(cuid())
+  tenantId            String
+  phone               String
+  whatsappName        String?
+  name                String?
+  company             String?
+  industry            String?
+  region              String?
+  languagePreference  String?      // zh | en | ms
+  source              String?
+  interestedProduct   String?
+  need                String?
+  budget              String?
+  purchaseTiming      String?
+  urgency             Int?         // 1-5
+  painPoint           String?
+  stage               LeadStage    @default(NEW)
+  score               Int          @default(0)
+  ownerId             String?
+  nextFollowUpAt      DateTime?
+  notes               String?
+  isBlacklisted       Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  tenant              Tenant       @relation(fields: [tenantId], references: [id])
+  tags                CustomerTag[]
+  conversations       Conversation[]
+
+  @@unique([tenantId, phone])
+}
+
+enum LeadStage {
+  NEW
+  INTERESTED
+  HIGH_INTENT
+  QUOTED
+  BOOKED
+  WON
+  LOST
+  AFTER_SALES
+}
+
+model CustomerTag {
+  id         String   @id @default(cuid())
+  customerId String
+  tag        String
+  createdAt  DateTime @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([customerId, tag])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSATION & MESSAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Conversation {
+  id              String             @id @default(cuid())
+  tenantId        String
+  channelId       String
+  customerId      String
+  status          ConversationStatus @default(AI_HANDLING)
+  assignedUserId  String?
+  lastMessageAt   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id])
+  channel         Channel            @relation(fields: [channelId], references: [id])
+  customer        Customer           @relation(fields: [customerId], references: [id])
+  messages        Message[]
+}
+
+enum ConversationStatus {
+  AI_HANDLING
+  HUMAN_HANDLING
+  PENDING_HANDOFF
+  CLOSED
+}
+
+model Message {
+  id               String      @id @default(cuid())
+  conversationId   String
+  direction        Direction
+  senderType       SenderType
+  content          String
+  detectedLanguage String?     // zh | en | ms
+  channelMessageId String?
+  isRead           Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+
+  conversation     Conversation @relation(fields: [conversationId], references: [id])
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+enum SenderType {
+  CUSTOMER
+  AI
+  HUMAN_AGENT
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KNOWLEDGE BASE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model KnowledgeItem {
+  id        String            @id @default(cuid())
+  tenantId  String
+  type      KnowledgeItemType
+  question  String?
+  answer    String
+  language  String            @default("zh")
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+}
+
+enum KnowledgeItemType {
+  GLOBAL_FAQ
+  PRODUCT_FAQ
+  KNOWLEDGE_CHUNK
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AiConfig {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  persona      String?
+  goals        String[] // array of goal keys
+  systemPrompt String?
+  model        String   @default("gpt-4o")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTOMATION RULES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FollowUpRule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  trigger      String   // e.g. PRICE_ASKED_NO_REPLY, CONSIDERING, HIGH_INTENT_UNHANDLED
+  delayHours   Int
+  messageTemplate String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model HandoffRule {
+  id        String   @id @default(cuid())
+  tenantId  String
+  condition String   // e.g. USER_REQUESTS_HUMAN, SCORE_GTE_80, FAQ_NO_ANSWER
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USAGE METERING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UsageRecord {
+  id          String   @id @default(cuid())
+  tenantId    String
+  date        DateTime @db.Date
+  llmTokens   Int      @default(0)
+  llmCostUsd  Float    @default(0)
+  messages    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, date])
+}

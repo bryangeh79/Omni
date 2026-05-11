@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+out/
+
+# Environment — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# WhatsApp Web sessions — sensitive, never commit
+data/wa-sessions/
+
+# Logs
+*.log
+logs/
+
+# Prisma generated client
+packages/db/node_modules/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
