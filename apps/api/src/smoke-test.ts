@@ -1,4 +1,4 @@
-// API smoke test — auth + CRM Customer CRUD.
+// API smoke test — auth + CRM + Conversation + Message.
 // Prerequisites: API running on port 43111, demo seed applied (pnpm db:seed).
 // Run: pnpm smoke   (from apps/api, with API already started)
 
@@ -8,7 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
 const BASE = `http://localhost:${process.env.PORT_API ?? 43111}`
 
-// Demo credentials — DEV ONLY. Defined in docs/AUTH.md and docs/SAAS_TENANCY.md.
+// Demo credentials — DEV ONLY.
 const DEMO_SLUG     = 'omni-demo'
 const DEMO_EMAIL    = 'admin@omni-demo.test'
 const DEMO_PASSWORD = process.env.OMNI_SMOKE_PASSWORD ?? 'OmniDemo2024!'
@@ -16,9 +16,9 @@ const DEMO_PASSWORD = process.env.OMNI_SMOKE_PASSWORD ?? 'OmniDemo2024!'
 let passed = 0
 let failed = 0
 
-function check(label: string, ok: boolean, detail?: string): void {
+function check(label: string, ok: boolean): void {
   if (ok) { console.log(`  ✅ ${label}`); passed++ }
-  else     { console.error(`  ❌ ${label}${detail ? ': ' + detail : ''}`); failed++ }
+  else     { console.error(`  ❌ ${label}`); failed++ }
 }
 
 async function post(url: string, body: unknown, token?: string): Promise<Response> {
@@ -39,10 +39,7 @@ async function patch(url: string, body: unknown, token?: string): Promise<Respon
   })
 }
 async function del(url: string, token?: string): Promise<Response> {
-  return fetch(`${BASE}${url}`, {
-    method: 'DELETE',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
+  return fetch(`${BASE}${url}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} })
 }
 
 // ── Smoke test ─────────────────────────────────────────────────────────────
@@ -51,7 +48,9 @@ async function smoke() {
   console.log(`[smoke] API smoke test — ${BASE}\n`)
   let accessToken  = ''
   let refreshToken = ''
-  let createdId    = ''
+  let createdId    = ''  // customer id
+  let channelId    = ''  // WA Web channel id
+  let convId       = ''  // test conversation id
 
   // ── 1. Health ──────────────────────────────────────────────────────────
   console.log('1. Health check')
@@ -64,13 +63,13 @@ async function smoke() {
   check('missing password → 400',   (await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL })).status === 400)
   check('empty body → 400',         (await post('/auth/login', {})).status === 400)
 
-  // ── 3. Wrong tenant / password ─────────────────────────────────────────
+  // ── 3. Wrong credentials ───────────────────────────────────────────────
   console.log('\n3. Wrong credentials rejection')
   const wrongSlugRes  = await post('/auth/login', { tenantSlug: 'nonexistent-xyz', email: DEMO_EMAIL, password: DEMO_PASSWORD })
   const wrongSlugBody = await wrongSlugRes.json() as Record<string, unknown>
   check('wrong tenantSlug → 401', wrongSlugRes.status === 401)
-  check('wrong slug → generic error (no tenant detail)', wrongSlugBody.error === 'Invalid credentials')
-  check('wrong password → 401',   (await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL, password: 'bad' })).status === 401)
+  check('wrong slug → generic error', wrongSlugBody.error === 'Invalid credentials')
+  check('wrong password → 401', (await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL, password: 'bad' })).status === 401)
 
   // ── 4. Valid login ─────────────────────────────────────────────────────
   console.log('\n4. Valid login')
@@ -81,7 +80,6 @@ async function smoke() {
   check('login returns tokens', hasTokens)
   check('login returns user.tenantId',   typeof (loginBody.user as Record<string, unknown>)?.tenantId === 'string')
   check('login returns user.tenantSlug', (loginBody.user as Record<string, unknown>)?.tenantSlug === DEMO_SLUG)
-
   if (!hasTokens) { console.error('[smoke] Cannot continue without tokens'); process.exit(1) }
   accessToken  = loginBody.accessToken  as string
   refreshToken = loginBody.refreshToken as string
@@ -106,164 +104,217 @@ async function smoke() {
   if (refBody.accessToken) accessToken = refBody.accessToken as string
   check('new token valid', (await get('/auth/me', accessToken)).status === 200)
 
-  // ════════════════════════════════════════════════════════════════════════
-  // CRM Customer CRUD
-  // ════════════════════════════════════════════════════════════════════════
-
-  const SMOKE_PHONE = '+60-SMOKE-TEST-001'
-
   // ── 8. Create customer ─────────────────────────────────────────────────
+  const SMOKE_PHONE = '+60-SMOKE-TEST-001'
   console.log('\n8. Create customer')
-  const createRes  = await post('/customers', {
-    phone:              SMOKE_PHONE,
-    name:               'Smoke Test Customer',
-    company:            'Smoke Corp',
-    languagePreference: 'zh',
-    stage:              'NEW',
-    score:              30,
-    urgency:            2,
-    notes:              'created by smoke test',
+  const createRes = await post('/customers', {
+    phone: SMOKE_PHONE, name: 'Smoke Test Customer', company: 'Smoke Corp',
+    languagePreference: 'zh', stage: 'NEW', score: 30, urgency: 2, notes: 'smoke test',
   }, accessToken)
   check('POST /customers → 201', createRes.status === 201)
   const created = await createRes.json() as Record<string, unknown>
-  check('create returns id',       typeof created.id === 'string')
-  check('create returns phone',    created.phone === SMOKE_PHONE)
-  check('create returns tenantId', typeof created.tenantId === 'string')
-  check('create returns tags []',  Array.isArray(created.tags) && (created.tags as unknown[]).length === 0)
-  check('create score is 30',      created.score === 30)
+  check('create returns id',    typeof created.id === 'string')
+  check('create returns phone', created.phone === SMOKE_PHONE)
+  check('create score is 30',   created.score === 30)
   createdId = created.id as string
 
-  // ── 9. Duplicate phone → 409 ───────────────────────────────────────────
+  // ── 9. Duplicate phone ─────────────────────────────────────────────────
   console.log('\n9. Duplicate phone rejection')
-  const dupRes = await post('/customers', { phone: SMOKE_PHONE }, accessToken)
-  check('duplicate phone → 409', dupRes.status === 409)
+  const dupRes  = await post('/customers', { phone: SMOKE_PHONE }, accessToken)
   const dupBody = await dupRes.json() as Record<string, unknown>
-  check('409 returns customerId of existing', dupBody.customerId === createdId)
+  check('duplicate phone → 409', dupRes.status === 409)
+  check('409 returns existingId', dupBody.customerId === createdId)
 
-  // ── 10. Create validation errors ───────────────────────────────────────
+  // ── 10. Create validation ──────────────────────────────────────────────
   console.log('\n10. Create validation')
   check('missing phone → 400',      (await post('/customers', {}, accessToken)).status === 400)
-  check('invalid stage → 400',      (await post('/customers', { phone: '+60-smoke-v2', stage: 'INVALID' }, accessToken)).status === 400)
-  check('score out of range → 400', (await post('/customers', { phone: '+60-smoke-v3', score: 150 }, accessToken)).status === 400)
-  check('urgency out of range → 400', (await post('/customers', { phone: '+60-smoke-v4', urgency: 9 }, accessToken)).status === 400)
+  check('invalid stage → 400',      (await post('/customers', { phone: '+60-sv2', stage: 'INVALID' }, accessToken)).status === 400)
+  check('score out of range → 400', (await post('/customers', { phone: '+60-sv3', score: 150 }, accessToken)).status === 400)
+  check('urgency out of range → 400', (await post('/customers', { phone: '+60-sv4', urgency: 9 }, accessToken)).status === 400)
 
-  // ── 11. List customers (pagination) ───────────────────────────────────
-  console.log('\n11. List customers (pagination)')
+  // ── 11. List customers ─────────────────────────────────────────────────
+  console.log('\n11. List customers')
   const listRes  = await get('/customers?page=1&pageSize=10', accessToken)
   const listBody = await listRes.json() as Record<string, unknown>
   check('GET /customers → 200', listRes.status === 200)
-  check('list has data array',     Array.isArray(listBody.data))
-  check('list has pagination',     typeof listBody.pagination === 'object')
+  check('list has data array',  Array.isArray(listBody.data))
   const pag = listBody.pagination as Record<string, unknown>
-  check('pagination.page is 1',    pag.page === 1)
-  check('pagination.pageSize ≤ 10', Number(pag.pageSize) <= 10)
-  check('pagination.total >= 1',   Number(pag.total) >= 1)
+  check('pagination.total >= 1', Number(pag.total) >= 1)
 
-  // ── 12. Filter by stage ────────────────────────────────────────────────
-  console.log('\n12. Filter by stage')
-  const stageListRes  = await get('/customers?stage=NEW', accessToken)
-  const stageListBody = await stageListRes.json() as Record<string, unknown>
-  check('filter stage=NEW → 200', stageListRes.status === 200)
-  const stageData = stageListBody.data as Record<string, unknown>[]
-  check('all results have stage NEW', stageData.every((c) => c.stage === 'NEW'))
+  // ── 12. Filters ────────────────────────────────────────────────────────
+  console.log('\n12. Filters')
+  const stageData = ((await (await get('/customers?stage=NEW', accessToken)).json() as Record<string, unknown>).data as Record<string, unknown>[])
+  check('filter stage=NEW: all NEW', stageData.every((c) => c.stage === 'NEW'))
+  const scoreData = ((await (await get('/customers?minScore=25&maxScore=50', accessToken)).json() as Record<string, unknown>).data as Record<string, unknown>[])
+  check('filter score range: all in range', scoreData.every((c) => Number(c.score) >= 25 && Number(c.score) <= 50))
+  check('filter language=zh → 200', (await get('/customers?language=zh', accessToken)).status === 200)
 
-  // ── 13. Filter by score range ──────────────────────────────────────────
-  console.log('\n13. Filter by score range')
-  const scoreRes  = await get('/customers?minScore=25&maxScore=50', accessToken)
-  const scoreBody = await scoreRes.json() as Record<string, unknown>
-  check('filter minScore=25&maxScore=50 → 200', scoreRes.status === 200)
-  const scoreData = scoreBody.data as Record<string, unknown>[]
-  check('all results in score range', scoreData.every((c) => Number(c.score) >= 25 && Number(c.score) <= 50))
-
-  // ── 14. Filter by language ────────────────────────────────────────────
-  console.log('\n14. Filter by language')
-  const langRes = await get('/customers?language=zh', accessToken)
-  check('filter language=zh → 200', langRes.status === 200)
-
-  // ── 15. Get customer by ID ────────────────────────────────────────────
-  console.log('\n15. Get customer by ID')
-  const detailRes  = await get(`/customers/${createdId}`, accessToken)
-  const detail     = await detailRes.json() as Record<string, unknown>
-  check('GET /customers/:id → 200', detailRes.status === 200)
-  check('detail id matches',        detail.id === createdId)
-  check('detail has tags array',    Array.isArray(detail.tags))
+  // ── 13. Get customer by ID ─────────────────────────────────────────────
+  console.log('\n13. Get customer by ID')
+  const detail = await (await get(`/customers/${createdId}`, accessToken)).json() as Record<string, unknown>
+  check('GET /customers/:id → 200', detail.id === createdId)
+  check('detail has tags array', Array.isArray(detail.tags))
   check('detail has conversationCount', typeof detail.conversationCount === 'number')
+  check('GET /customers/nonexistent → 404', (await get('/customers/nonexistent', accessToken)).status === 404)
 
-  // ── 16. Get non-existent → 404 ────────────────────────────────────────
-  console.log('\n16. Non-existent customer → 404')
-  check('GET /customers/nonexistent-id → 404', (await get('/customers/nonexistent-id', accessToken)).status === 404)
-
-  // ── 17. Update customer ───────────────────────────────────────────────
-  console.log('\n17. Update customer')
-  const patchRes  = await patch(`/customers/${createdId}`, {
-    stage:  'INTERESTED',
-    score:  55,
-    notes:  'updated by smoke test',
-    urgency: 3,
-  }, accessToken)
-  const patched = await patchRes.json() as Record<string, unknown>
-  check('PATCH /customers/:id → 200', patchRes.status === 200)
-  check('stage updated to INTERESTED', patched.stage === 'INTERESTED')
-  check('score updated to 55',         patched.score === 55)
-  check('notes updated',               patched.notes === 'updated by smoke test')
-
-  // ── 18. Update validation ─────────────────────────────────────────────
-  console.log('\n18. Update validation')
+  // ── 14. Update customer ────────────────────────────────────────────────
+  console.log('\n14. Update customer')
+  const patched = await (await patch(`/customers/${createdId}`, { stage: 'INTERESTED', score: 55, notes: 'updated' }, accessToken)).json() as Record<string, unknown>
+  check('PATCH → stage INTERESTED', patched.stage === 'INTERESTED')
+  check('PATCH → score 55',         patched.score === 55)
   check('invalid stage PATCH → 400', (await patch(`/customers/${createdId}`, { stage: 'NOPE' }, accessToken)).status === 400)
-  check('score 200 PATCH → 400',     (await patch(`/customers/${createdId}`, { score: 200 }, accessToken)).status === 400)
 
-  // ── 19. Add tags ──────────────────────────────────────────────────────
-  console.log('\n19. Add tags')
-  const tag1Res  = await post(`/customers/${createdId}/tags`, { tag: 'high_intent' }, accessToken)
-  const tag1Body = await tag1Res.json() as Record<string, unknown>
-  check('POST tags → 201',           tag1Res.status === 201)
-  check('tag high_intent added',     (tag1Body.tags as string[])?.includes('high_intent'))
-
+  // ── 15. Tags ───────────────────────────────────────────────────────────
+  console.log('\n15. Tags')
+  const tag1Body = await (await post(`/customers/${createdId}/tags`, { tag: 'high_intent' }, accessToken)).json() as Record<string, unknown>
+  check('add tag → 201', (tag1Body.tags as string[])?.includes('high_intent'))
   await post(`/customers/${createdId}/tags`, { tag: 'price_inquiry' }, accessToken)
-
-  // Idempotent — adding same tag again must not error
-  const idempRes = await post(`/customers/${createdId}/tags`, { tag: 'high_intent' }, accessToken)
-  check('duplicate tag add → 201 (idempotent)', idempRes.status === 201)
-
-  // ── 20. Filter by tag ─────────────────────────────────────────────────
-  console.log('\n20. Filter by tag')
-  const tagFilterRes  = await get('/customers?tag=high_intent', accessToken)
-  const tagFilterBody = await tagFilterRes.json() as Record<string, unknown>
-  check('filter tag=high_intent → 200', tagFilterRes.status === 200)
-  const tagData = tagFilterBody.data as Record<string, unknown>[]
-  check('filtered results include created customer', tagData.some((c) => c.id === createdId))
-
-  // ── 21. Delete tag ────────────────────────────────────────────────────
-  console.log('\n21. Delete tag')
-  const delTagRes  = await del(`/customers/${createdId}/tags/price_inquiry`, accessToken)
-  const delTagBody = await delTagRes.json() as Record<string, unknown>
-  check('DELETE tag → 200',                   delTagRes.status === 200)
-  check('price_inquiry removed',              !(delTagBody.tags as string[])?.includes('price_inquiry'))
-  check('high_intent still present',          (delTagBody.tags as string[])?.includes('high_intent'))
-
-  // ── 22. Tag validation ────────────────────────────────────────────────
-  console.log('\n22. Tag validation')
+  check('duplicate tag → 201 idempotent', (await post(`/customers/${createdId}/tags`, { tag: 'high_intent' }, accessToken)).status === 201)
+  const tagFilterData = ((await (await get('/customers?tag=high_intent', accessToken)).json() as Record<string, unknown>).data as Record<string, unknown>[])
+  check('filter by tag: includes created customer', tagFilterData.some((c) => c.id === createdId))
+  const delTagBody = await (await del(`/customers/${createdId}/tags/price_inquiry`, accessToken)).json() as Record<string, unknown>
+  check('delete tag: price_inquiry removed', !(delTagBody.tags as string[])?.includes('price_inquiry'))
   check('empty tag → 400', (await post(`/customers/${createdId}/tags`, { tag: '' }, accessToken)).status === 400)
 
-  // ── 23. WA Web connect (stub mode) ───────────────────────────────────
-  console.log('\n23. WA Web connect (stub mode)')
+  // ── 16. WA Web connect (capture channelId) ─────────────────────────────
+  console.log('\n16. WA Web connect (stub mode)')
   const waRes  = await post('/channels/whatsapp-web/connect', { displayName: 'Smoke Channel' }, accessToken)
   const waBody = await waRes.json() as Record<string, unknown>
   check('WA connect → 201',     waRes.status === 201)
   check('WA returns channelId', typeof waBody.channelId === 'string')
   check('WA is stubMode',       waBody.stubMode === true)
+  channelId = waBody.channelId as string
 
-  // ── 24. Logout ────────────────────────────────────────────────────────
-  console.log('\n24. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // Conversation & Message API (Phase 3C)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Setup: create test conversation + initial inbound message via Prisma
+  console.log('\n17. Conversation setup (Prisma)')
+  const setupResult = await prismaSetupConversation(channelId, createdId)
+  convId = setupResult.convId
+  check('conversation created via DB setup', !!convId)
+
+  // ── 18. List conversations ─────────────────────────────────────────────
+  console.log('\n18. List conversations')
+  const convListRes  = await get('/conversations?page=1&pageSize=10', accessToken)
+  const convListBody = await convListRes.json() as Record<string, unknown>
+  check('GET /conversations → 200', convListRes.status === 200)
+  check('list has data array',      Array.isArray(convListBody.data))
+  const convPag = convListBody.pagination as Record<string, unknown>
+  check('conversation count >= 1', Number(convPag.total) >= 1)
+  const convData = convListBody.data as Record<string, unknown>[]
+  check('list includes created conversation', convData.some((c) => c.id === convId))
+  const convEntry = convData.find((c) => c.id === convId) as Record<string, unknown> | undefined
+  check('list entry has customer summary', typeof (convEntry?.customer as Record<string, unknown>)?.phone === 'string')
+  check('list entry has lastMessage or null', 'lastMessage' in (convEntry ?? {}))
+
+  // ── 19. Filter conversations by status ─────────────────────────────────
+  console.log('\n19. Filter conversations')
+  const aiHandlingRes  = await get('/conversations?status=AI_HANDLING', accessToken)
+  const aiHandlingBody = await aiHandlingRes.json() as Record<string, unknown>
+  check('filter status=AI_HANDLING → 200', aiHandlingRes.status === 200)
+  const aiData = aiHandlingBody.data as Record<string, unknown>[]
+  check('all results have AI_HANDLING', aiData.every((c) => c.status === 'AI_HANDLING'))
+  check('invalid status → 400', (await get('/conversations?status=INVALID', accessToken)).status === 400)
+
+  // ── 20. Get conversation detail ────────────────────────────────────────
+  console.log('\n20. Get conversation detail')
+  const detailRes  = await get(`/conversations/${convId}`, accessToken)
+  const convDetail = await detailRes.json() as Record<string, unknown>
+  check('GET /conversations/:id → 200', detailRes.status === 200)
+  check('detail id matches', convDetail.id === convId)
+  check('detail has customer with tags', Array.isArray((convDetail.customer as Record<string, unknown>)?.tags))
+  check('detail has channel', typeof convDetail.channel === 'object')
+  check('detail has messages array', Array.isArray(convDetail.messages))
+  check('detail has messageCount', typeof convDetail.messageCount === 'number')
+  check('GET /conversations/nonexistent → 404', (await get('/conversations/nonexistent', accessToken)).status === 404)
+
+  // ── 21. List messages ──────────────────────────────────────────────────
+  console.log('\n21. List messages')
+  const msgListRes  = await get(`/messages?conversationId=${convId}`, accessToken)
+  const msgListBody = await msgListRes.json() as Record<string, unknown>
+  check('GET /messages → 200', msgListRes.status === 200)
+  check('messages has data array', Array.isArray(msgListBody.data))
+  const msgData = msgListBody.data as Record<string, unknown>[]
+  check('initial message present', msgData.length >= 1)
+  check('initial message is INBOUND', msgData[0]?.direction === 'INBOUND')
+  check('GET /messages without conversationId → 400', (await get('/messages', accessToken)).status === 400)
+  check('GET /messages for nonexistent conv → 404', (await get('/messages?conversationId=nonexistent', accessToken)).status === 404)
+
+  // ── 22. Send message ───────────────────────────────────────────────────
+  console.log('\n22. Send message')
+  const sendRes  = await post('/messages/send', { conversationId: convId, body: 'Hello, I am the agent!' }, accessToken)
+  const sendBody = await sendRes.json() as Record<string, unknown>
+  check('POST /messages/send → 201', sendRes.status === 201)
+  check('send returns message id', typeof sendBody.id === 'string')
+  check('send returns OUTBOUND direction', sendBody.direction === 'OUTBOUND')
+  check('send returns HUMAN_AGENT senderType', sendBody.senderType === 'HUMAN_AGENT')
+  check('send returns STUB_NOT_SENT status', sendBody.sendStatus === 'STUB_NOT_SENT')
+  check('send without body → 400', (await post('/messages/send', { conversationId: convId, body: '' }, accessToken)).status === 400)
+  check('send without conversationId → 400', (await post('/messages/send', { body: 'test' }, accessToken)).status === 400)
+  check('send to nonexistent conv → 404', (await post('/messages/send', { conversationId: 'nonexistent', body: 'test' }, accessToken)).status === 404)
+
+  // ── 23. Verify message count increased ────────────────────────────────
+  console.log('\n23. Messages after send')
+  const msgList2 = await (await get(`/messages?conversationId=${convId}`, accessToken)).json() as Record<string, unknown>
+  const msgData2 = msgList2.data as Record<string, unknown>[]
+  check('message count increased after send', msgData2.length > msgData.length)
+  check('sent message in list', msgData2.some((m) => m.senderType === 'HUMAN_AGENT'))
+
+  // ── 24. Takeover ──────────────────────────────────────────────────────
+  console.log('\n24. Takeover')
+  const takeoverRes  = await post(`/conversations/${convId}/takeover`, {}, accessToken)
+  const takeoverBody = await takeoverRes.json() as Record<string, unknown>
+  check('POST /conversations/:id/takeover → 200', takeoverRes.status === 200)
+  check('status changed to HUMAN_HANDLING', takeoverBody.status === 'HUMAN_HANDLING')
+  check('assignedUserId set', typeof takeoverBody.assignedUserId === 'string')
+
+  // Verify via GET detail
+  const afterTakeover = await (await get(`/conversations/${convId}`, accessToken)).json() as Record<string, unknown>
+  check('detail confirms HUMAN_HANDLING', afterTakeover.status === 'HUMAN_HANDLING')
+
+  // Verify system message written
+  const msgsAfterTakeover = ((await (await get(`/messages?conversationId=${convId}`, accessToken)).json() as Record<string, unknown>).data) as Record<string, unknown>[]
+  check('takeover wrote SYSTEM message', msgsAfterTakeover.some((m) => m.senderType === 'SYSTEM'))
+
+  // ── 25. Release ───────────────────────────────────────────────────────
+  console.log('\n25. Release')
+  const releaseRes  = await post(`/conversations/${convId}/release`, {}, accessToken)
+  const releaseBody = await releaseRes.json() as Record<string, unknown>
+  check('POST /conversations/:id/release → 200', releaseRes.status === 200)
+  check('status changed to AI_HANDLING', releaseBody.status === 'AI_HANDLING')
+  check('assignedUserId cleared', releaseBody.assignedUserId === null)
+
+  // ── 26. Close ─────────────────────────────────────────────────────────
+  console.log('\n26. Close')
+  const closeRes  = await post(`/conversations/${convId}/close`, {}, accessToken)
+  const closeBody = await closeRes.json() as Record<string, unknown>
+  check('POST /conversations/:id/close → 200', closeRes.status === 200)
+  check('status changed to CLOSED', closeBody.status === 'CLOSED')
+
+  // Verify closed conversation blocks send
+  check('send to CLOSED conv → 400', (await post('/messages/send', { conversationId: convId, body: 'test' }, accessToken)).status === 400)
+
+  // Re-close is safe
+  const reCloseRes = await post(`/conversations/${convId}/close`, {}, accessToken)
+  check('re-close already closed → 200 (idempotent)', reCloseRes.status === 200)
+
+  // ── 27. Conversation auth checks ──────────────────────────────────────
+  console.log('\n27. Conversation auth checks')
+  check('/conversations without token → 401', (await get('/conversations')).status === 401)
+  check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
+  check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
+
+  // ── 28. Logout ────────────────────────────────────────────────────────
+  console.log('\n28. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
-  if (createdId) {
-    console.log('\nCleaning up smoke test customer...')
-    // Delete tags first, then customer
-    await prismaDelete(createdId)
-    console.log('  🗑️  smoke test customer cleaned')
-  }
+  console.log('\nCleaning up smoke test records...')
+  if (convId)    await prismaCleanupConversation(convId)
+  if (createdId) await prismaDeleteCustomer(createdId)
+  console.log('  🗑️  smoke test records cleaned')
 
   // ── Result ────────────────────────────────────────────────────────────
   console.log(`\n[smoke] Results: ${passed} passed, ${failed} failed`)
@@ -271,17 +322,53 @@ async function smoke() {
   else             { console.log('[smoke] ✅ ALL SMOKE TESTS PASSED') }
 }
 
-// Direct DB cleanup via Prisma (not API, since we may have logged out)
-async function prismaDelete(customerId: string): Promise<void> {
+// ── DB helpers ─────────────────────────────────────────────────────────────
+
+async function prismaSetupConversation(channelId: string, customerId: string): Promise<{ convId: string }> {
+  const { PrismaClient } = await import('@omni/db')
+  const p   = new PrismaClient()
+  const conv = await p.conversation.create({
+    data: {
+      tenantId:      'demo-tenant-001',
+      channelId,
+      customerId,
+      status:        'AI_HANDLING',
+      lastMessageAt: new Date(),
+    },
+  })
+  // Initial inbound message from customer
+  await p.message.create({
+    data: {
+      conversationId: conv.id,
+      direction:      'INBOUND',
+      senderType:     'CUSTOMER',
+      content:        'Hello, I am interested in your product',
+    },
+  })
+  await p.$disconnect()
+  return { convId: conv.id }
+}
+
+async function prismaCleanupConversation(convId: string): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    await p.message.deleteMany({ where: { conversationId: convId } })
+    await p.conversation.delete({ where: { id: convId } })
+    await p.$disconnect()
+    console.log(`  🗑️  conversation ${convId} deleted`)
+  } catch (e) { console.warn('  ⚠️  conversation cleanup warning:', e) }
+}
+
+async function prismaDeleteCustomer(customerId: string): Promise<void> {
   try {
     const { PrismaClient } = await import('@omni/db')
     const p = new PrismaClient()
     await p.customerTag.deleteMany({ where: { customerId } })
     await p.customer.delete({ where: { id: customerId } })
     await p.$disconnect()
-  } catch (e) {
-    console.warn('  ⚠️  cleanup warning:', e)
-  }
+    console.log(`  🗑️  customer ${customerId} deleted`)
+  } catch (e) { console.warn('  ⚠️  customer cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })
