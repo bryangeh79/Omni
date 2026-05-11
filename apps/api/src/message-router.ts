@@ -1,0 +1,88 @@
+// Message Router — normalize inbound envelope → DB write → worker stub.
+// Enforces tenant isolation via scopeToTenant().
+
+import { prisma, scopeToTenant, Direction, SenderType } from '@omni/db'
+import type { InboundEnvelope } from '@omni/channel-adapters'
+
+import { workerStub_processInbound } from './worker-stub'
+
+export interface RouterResult {
+  customerId:        string
+  conversationId:    string
+  messageId:         string
+  isNewCustomer:     boolean
+  isNewConversation: boolean
+}
+
+export async function routeInboundMessage(
+  envelope: InboundEnvelope,
+  tenantId: string,
+): Promise<RouterResult> {
+  const db = scopeToTenant(prisma, tenantId)
+
+  // ── 1. Find or create Customer (by tenantId + phone) ─────────────────────
+  let isNewCustomer = false
+  let customer = await db.customers.byPhone(envelope.from)
+  if (!customer) {
+    customer = await db.customers.create({
+      phone:         envelope.from,
+      isBlacklisted: false,
+    })
+    isNewCustomer = true
+  }
+
+  // ── 2. Find or create open Conversation ──────────────────────────────────
+  let isNewConversation = false
+  const openConv = await prisma.conversation.findFirst({
+    where: {
+      tenantId,
+      channelId:  envelope.channelId,
+      customerId: customer.id,
+      status: { in: ['AI_HANDLING', 'HUMAN_HANDLING', 'PENDING_HANDOFF'] },
+    },
+    orderBy: { lastMessageAt: 'desc' },
+  })
+
+  let conversation = openConv
+  if (!conversation) {
+    conversation = await db.conversations.create({
+      channelId:  envelope.channelId,
+      customerId: customer.id,
+      status:     'AI_HANDLING',
+    })
+    isNewConversation = true
+  }
+
+  // ── 3. Write inbound Message to DB ────────────────────────────────────────
+  const message = await db.messages.create({
+    conversationId:   conversation.id,
+    direction:        Direction.INBOUND,
+    senderType:       SenderType.CUSTOMER,
+    content:          envelope.body,
+    channelMessageId: envelope.externalId,
+    detectedLanguage: null,
+  })
+
+  // ── 4. Update conversation.lastMessageAt ──────────────────────────────────
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data:  { lastMessageAt: new Date() },
+  })
+
+  // ── 5. Hand off to worker stub (Phase 2B) ─────────────────────────────────
+  await workerStub_processInbound({
+    messageId:      message.id,
+    conversationId: conversation.id,
+    tenantId,
+    customerId:     customer.id,
+    body:           envelope.body,
+  }).catch((err) => console.error('[message-router] worker stub error:', err))
+
+  return {
+    customerId:        customer.id,
+    conversationId:    conversation.id,
+    messageId:         message.id,
+    isNewCustomer,
+    isNewConversation,
+  }
+}

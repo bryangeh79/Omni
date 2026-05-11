@@ -1,19 +1,20 @@
-// Channel routes — skeleton
+// Channel routes
 import type { FastifyInstance } from 'fastify'
 
+import { whatsappWebRoutes } from './whatsapp-web'
+
 export async function channelRoutes(app: FastifyInstance) {
+  // ── Generic channel endpoints ─────────────────────────────────────────────
   // GET  /channels               list tenant channels
-  app.get('/',    async () => ({ todo: 'Phase 2' }))
+  app.get('/',    async () => ({ todo: 'Phase 3 (requires auth)' }))
 
-  // POST /channels               create channel config
-  app.post('/',   async () => ({ todo: 'Phase 2' }))
+  // POST /channels               create channel (use type-specific endpoints for now)
+  app.post('/',   async () => ({ todo: 'Phase 3 (requires auth)' }))
 
-  // GET  /channels/:id/qr        WhatsApp Web — get QR code for scan
-  app.get('/:id/qr', async () => ({ todo: 'Phase 2' }))
-
-  // GET  /channels/:id/status    connection status
-  app.get('/:id/status', async () => ({ todo: 'Phase 2' }))
-
-  // DELETE /channels/:id         disconnect + remove channel
-  app.delete('/:id', async () => ({ todo: 'Phase 2' }))
+  // ── WhatsApp Web sub-router ───────────────────────────────────────────────
+  // POST   /channels/whatsapp-web/connect
+  // GET    /channels/whatsapp-web/:channelId/status
+  // GET    /channels/whatsapp-web/:channelId/qr
+  // POST   /channels/whatsapp-web/:channelId/disconnect
+  await app.register(whatsappWebRoutes, { prefix: '/whatsapp-web' })
 }

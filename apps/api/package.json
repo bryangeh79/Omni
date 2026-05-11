@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@omni/channel-adapters": "workspace:*",
     "@omni/db": "workspace:*",
     "@omni/shared": "workspace:*",
-    "fastify": "^5.1.0",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "fastify": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
