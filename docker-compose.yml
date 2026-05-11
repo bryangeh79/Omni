@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omni-postgres-dev
+    environment:
+      POSTGRES_USER: omni_user
+      POSTGRES_PASSWORD: omni_dev_password
+      POSTGRES_DB: omni_dev
+    ports:
+      - "43113:5432"
+    volumes:
+      - omni-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: omni-redis-dev
+    ports:
+      - "43114:6379"
+    volumes:
+      - omni-redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  omni-postgres-data:
+    name: omni-postgres-data
+  omni-redis-data:
+    name: omni-redis-data

@@ -6,7 +6,6 @@ import type {
   BaseChannelAdapter,
   ChannelConfig,
   ChannelStatus,
-  InboundEnvelope,
   MessageHandler,
   OutboundEnvelope,
 } from '../base'
@@ -35,7 +34,7 @@ export class MetaApiAdapter implements BaseChannelAdapter {
   }
 
   // Called by the inbound webhook handler in apps/api
-  async handleWebhook(payload: unknown): Promise<void> {
+  async handleWebhook(_payload: unknown): Promise<void> {
     // Phase 5: parse payload, normalize to InboundEnvelope, call this.handler
     throw new Error('MetaApiAdapter.handleWebhook() not implemented (Phase 5)')
   }

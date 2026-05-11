@@ -1,9 +1,9 @@
-// Web Admin — root layout skeleton (Next.js App Router)
-// Full UI implementation in Phase 4.
+import type { Metadata } from 'next'
+import './globals.css'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Omni Ai Chatbot — Web Admin',
-  description: 'WhatsApp AI Customer Service CRM',
+  description: 'WhatsApp AI Customer Service CRM System',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

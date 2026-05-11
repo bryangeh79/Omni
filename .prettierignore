@@ -1,0 +1,6 @@
+node_modules
+dist
+.next
+.turbo
+*.prisma
+pnpm-lock.yaml

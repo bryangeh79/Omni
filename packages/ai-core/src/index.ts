@@ -1,14 +1,14 @@
 // AI Agent Orchestrator — skeleton
 // Full LLM integration in Phase 3.
 
-import type { InboundEnvelope } from '../../channel-adapters/src/base'
+import type { InboundEnvelope } from '@omni/channel-adapters'
 
 export interface AgentContext {
-  tenantId:      string
-  customerId:    string
+  tenantId:       string
+  customerId:     string
   conversationId: string
-  customerScore: number
-  history:       AgentMessage[]
+  customerScore:  number
+  history:        AgentMessage[]
 }
 
 export interface AgentMessage {
@@ -17,11 +17,11 @@ export interface AgentMessage {
 }
 
 export interface AgentResult {
-  reply:          string
-  shouldHandoff:  boolean
-  scoreAdjustment: number   // positive = add, negative = subtract
-  detectedLanguage: string  // zh | en | ms
-  detectedIntent:  string   // free text for now
+  reply:            string
+  shouldHandoff:    boolean
+  scoreAdjustment:  number   // positive = add, negative = subtract
+  detectedLanguage: string   // zh | en | ms
+  detectedIntent:   string
 }
 
 export class AiAgentOrchestrator {

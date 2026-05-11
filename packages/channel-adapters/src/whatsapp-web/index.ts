@@ -7,7 +7,6 @@ import type {
   BaseChannelAdapter,
   ChannelConfig,
   ChannelStatus,
-  InboundEnvelope,
   MessageHandler,
   OutboundEnvelope,
 } from '../base'

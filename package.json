@@ -1,0 +1,33 @@
+{
+  "name": "omni",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Omni Ai Chatbot — WhatsApp AI Customer Service CRM",
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "dev:web": "pnpm --filter @omni/web dev",
+    "dev:api": "pnpm --filter @omni/api dev",
+    "dev:worker": "pnpm --filter @omni/worker dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . --max-warnings=10",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yaml,yml,css,mjs}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml,yml,css,mjs}\"",
+    "db:generate": "pnpm --filter @omni/db generate",
+    "db:migrate": "pnpm --filter @omni/db migrate",
+    "db:studio": "pnpm --filter @omni/db studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
