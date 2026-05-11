@@ -11,16 +11,20 @@
     "generate": "prisma generate --schema=./prisma/schema.prisma",
     "migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
     "studio": "prisma studio --schema=./prisma/schema.prisma",
+    "seed": "tsx src/seed-dev.ts",
+    "smoke": "tsx src/smoke-test.ts",
     "build": "tsc",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "dotenv": "^16.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "prisma": "^5.22.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
