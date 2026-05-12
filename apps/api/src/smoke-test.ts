@@ -575,7 +575,8 @@ async function smoke() {
       check('AI stub reply written to DB',           aiReply !== null)
       check('AI reply senderType is AI',             aiReply?.senderType === 'AI')
       check('AI reply direction is OUTBOUND',        aiReply?.direction === 'OUTBOUND')
-      check('AI reply content contains [AI_STUB]',   String(aiReply?.content ?? '').includes('[AI_STUB]'))
+      // Phase 5A: worker uses AiAgentOrchestrator (dry-run) → [AI_DRY_RUN]
+      check('AI reply content contains [AI_DRY_RUN]', String(aiReply?.content ?? '').includes('[AI_DRY_RUN]'))
 
       // Verify queue is now empty
       const finalDepth = await getBullmqQueueDepth()
@@ -588,14 +589,99 @@ async function smoke() {
     console.log('  ⚠️  Queue tests skipped (Redis unavailable or no convId)')
   }
 
-  // ── 48. Conversation auth checks ──────────────────────────────────────
-  console.log('\n48. Conversation auth checks')
+  // ════════════════════════════════════════════════════════════════════════
+  // AI Provider Settings + Dry-run (Phase 5A)
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── 48. Provider list ─────────────────────────────────────────────────
+  console.log('\n48. AI provider list')
+  const provListRes  = await get('/ai-agent/providers', accessToken)
+  const provListBody = await provListRes.json() as Record<string, unknown>
+  check('GET /ai-agent/providers → 200', provListRes.status === 200)
+  check('providers array exists', Array.isArray(provListBody.providers))
+  const providers = provListBody.providers as Record<string, unknown>[]
+  const provNames  = providers.map((p) => p.provider as string)
+  check('OPENAI in providers',           provNames.includes('OPENAI'))
+  check('GEMINI in providers',           provNames.includes('GEMINI'))
+  check('DEEPSEEK in providers',         provNames.includes('DEEPSEEK'))
+  check('DRY_RUN in providers',          provNames.includes('DRY_RUN'))
+  const openaiEntry = providers.find((p) => p.provider === 'OPENAI') as Record<string, unknown> | undefined
+  check('OpenAI has models array', Array.isArray(openaiEntry?.models))
+
+  // ── 49. Get AI settings ───────────────────────────────────────────────
+  console.log('\n49. Get AI settings')
+  const settingsRes  = await get('/ai-agent/settings', accessToken)
+  const settingsBody = await settingsRes.json() as Record<string, unknown>
+  check('GET /ai-agent/settings → 200', settingsRes.status === 200)
+  check('settings has aiProvider',    typeof settingsBody.aiProvider === 'string')
+  check('settings has model',         typeof settingsBody.model === 'string')
+  check('settings has hasApiKey',     typeof settingsBody.hasApiKey === 'boolean')
+  check('settings NEVER exposes apiKeyRef', !('apiKeyRef' in settingsBody))
+
+  // ── 50. Patch AI settings — valid providers ───────────────────────────
+  console.log('\n50. Patch AI settings')
+  const patchOpenAiRes  = await patch('/ai-agent/settings', { aiProvider: 'OPENAI', model: 'gpt-4o-mini' }, accessToken)
+  const patchOpenAiBody = await patchOpenAiRes.json() as Record<string, unknown>
+  check('PATCH OpenAI/gpt-4o-mini → 200', patchOpenAiRes.status === 200)
+  check('aiProvider updated to OPENAI', patchOpenAiBody.aiProvider === 'OPENAI')
+  check('model updated to gpt-4o-mini', patchOpenAiBody.model === 'gpt-4o-mini')
+  check('patch never exposes apiKeyRef', !('apiKeyRef' in patchOpenAiBody))
+
+  const patchGeminiRes = await patch('/ai-agent/settings', { aiProvider: 'GEMINI', model: 'gemini-2.0-flash' }, accessToken)
+  check('PATCH GEMINI/gemini-2.0-flash → 200', patchGeminiRes.status === 200)
+
+  const patchDeepSeekRes = await patch('/ai-agent/settings', { aiProvider: 'DEEPSEEK', model: 'deepseek-chat' }, accessToken)
+  check('PATCH DEEPSEEK/deepseek-chat → 200', patchDeepSeekRes.status === 200)
+
+  // Restore to DRY_RUN for subsequent tests
+  await patch('/ai-agent/settings', { aiProvider: 'DRY_RUN', model: 'dry-run' }, accessToken)
+
+  // ── 51. Patch validation ──────────────────────────────────────────────
+  console.log('\n51. AI settings validation')
+  check('invalid provider → 400',         (await patch('/ai-agent/settings', { aiProvider: 'INVALID' }, accessToken)).status === 400)
+  check('invalid model for OPENAI → 400', (await patch('/ai-agent/settings', { aiProvider: 'OPENAI', model: 'unknown-model' }, accessToken)).status === 400)
+  check('temp out of range → 400',        (await patch('/ai-agent/settings', { temperature: 5 }, accessToken)).status === 400)
+  check('maxTokens out of range → 400',   (await patch('/ai-agent/settings', { maxTokens: 50 }, accessToken)).status === 400)
+
+  // ── 52. AI dry-run ────────────────────────────────────────────────────
+  console.log('\n52. AI dry-run endpoint')
+  const dryRunRes  = await post('/ai-agent/dry-run', { message: 'What services do you offer?' }, accessToken)
+  const dryRunBody = await dryRunRes.json() as Record<string, unknown>
+  check('POST /ai-agent/dry-run → 200', dryRunRes.status === 200)
+  check('dry-run returns reply',         typeof dryRunBody.reply === 'string')
+  check('reply contains [AI_DRY_RUN]',   String(dryRunBody.reply ?? '').includes('[AI_DRY_RUN]'))
+  check('dry-run returns shouldHandoff', typeof dryRunBody.shouldHandoff === 'boolean')
+  check('dry-run does NOT write to DB', dryRunBody.note?.toString().includes('no message written') ?? false)
+  check('dry-run no apiKey exposed',    !dryRunBody.apiKey && !dryRunBody.apiKeyRef)
+
+  // ── 53. Dry-run handoff detection ─────────────────────────────────────
+  console.log('\n53. Dry-run handoff detection')
+  const handoffRes  = await post('/ai-agent/dry-run', { message: 'I need a human agent please' }, accessToken)
+  const handoffBody = await handoffRes.json() as Record<string, unknown>
+  check('human keyword → shouldHandoff=true', handoffBody.shouldHandoff === true)
+  check('handoff → nextAction=HANDOFF',       handoffBody.nextAction === 'HANDOFF')
+
+  const normalRes  = await post('/ai-agent/dry-run', { message: 'Hello, tell me about your product.' }, accessToken)
+  const normalBody = await normalRes.json() as Record<string, unknown>
+  check('normal message → shouldHandoff=false', normalBody.shouldHandoff === false)
+  check('normal → nextAction=CONTINUE',          normalBody.nextAction === 'CONTINUE')
+
+  // Score adjustment check
+  const priceRes  = await post('/ai-agent/dry-run', { message: 'What is the price and package?' }, accessToken)
+  const priceBody = await priceRes.json() as Record<string, unknown>
+  check('price keyword → scoreAdjustment > 0', Number(priceBody.scoreAdjustment) > 0)
+
+  check('dry-run missing message → 400', (await post('/ai-agent/dry-run', {}, accessToken)).status === 400)
+  check('dry-run no auth → 401',         (await post('/ai-agent/dry-run', { message: 'test' })).status === 401)
+
+  // ── 54. Conversation auth checks ──────────────────────────────────────
+  console.log('\n54. Conversation auth checks')
   check('/conversations without token → 401', (await get('/conversations')).status === 401)
   check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
   check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
 
-  // ── 48. Logout ────────────────────────────────────────────────────────
-  console.log('\n48. Logout')
+  // ── 55. Logout ────────────────────────────────────────────────────────
+  console.log('\n55. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────

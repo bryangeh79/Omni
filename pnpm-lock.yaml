@@ -32,6 +32,9 @@ importers:
       '@fastify/jwt':
         specifier: ^9.0.0
         version: 9.1.0
+      '@omni/ai-core':
+        specifier: workspace:*
+        version: link:../../packages/ai-core
       '@omni/channel-adapters':
         specifier: workspace:*
         version: link:../../packages/channel-adapters
@@ -109,6 +112,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@omni/ai-core':
+        specifier: workspace:*
+        version: link:../../packages/ai-core
       '@omni/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -137,9 +143,6 @@ importers:
 
   packages/ai-core:
     dependencies:
-      '@omni/channel-adapters':
-        specifier: workspace:*
-        version: link:../channel-adapters
       '@omni/shared':
         specifier: workspace:*
         version: link:../shared

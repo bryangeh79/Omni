@@ -11,6 +11,7 @@ import { conversationRoutes } from './conversation'
 import { messageRoutes }      from './message'
 import { knowledgeRoutes }    from './knowledge'
 import { aiConfigRoutes }     from './ai-config'
+import { aiAgentRoutes }      from './ai-agent'
 import { automationRoutes }   from './automation'
 import { dashboardRoutes }    from './dashboard'
 import { usageRoutes }        from './usage'
@@ -24,6 +25,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(messageRoutes,      { prefix: '/messages' })
   await app.register(knowledgeRoutes,    { prefix: '/knowledge' })
   await app.register(aiConfigRoutes,     { prefix: '/ai-config' })
+  await app.register(aiAgentRoutes,      { prefix: '/ai-agent' })
   await app.register(automationRoutes,   { prefix: '/automation' })
   await app.register(dashboardRoutes,    { prefix: '/dashboard' })
   await app.register(usageRoutes,        { prefix: '/usage' })

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fastify/jwt": "^9.0.0",
+    "@omni/ai-core": "workspace:*",
     "@omni/channel-adapters": "workspace:*",
     "@omni/db": "workspace:*",
     "@omni/shared": "workspace:*",

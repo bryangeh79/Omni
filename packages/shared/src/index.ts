@@ -40,3 +40,11 @@ export interface PaginatedResult<T> {
 // ── Queue types ───────────────────────────────────────────────────────────────
 export { QUEUE_NAMES, JOB_NAMES } from './queue-types'
 export type { QueueName, InboundMessageJobData, FollowUpEvaluationJobData } from './queue-types'
+
+// ── AI types ──────────────────────────────────────────────────────────────────
+export { AI_PROVIDERS, isValidProviderModel, getModelsForProvider } from './ai-types'
+export type {
+  AiProvider, ReplyLanguagePolicy, AiModelOption,
+  TenantAiConfig, CustomerProfile, MessageHistory, KnowledgeSnippet,
+  AiAgentInput, AiAgentResult,
+} from './ai-types'

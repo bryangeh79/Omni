@@ -13,7 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@omni/channel-adapters": "workspace:*",
     "@omni/shared": "workspace:*"
   },
   "devDependencies": {
