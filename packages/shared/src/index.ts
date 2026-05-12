@@ -41,6 +41,13 @@ export interface PaginatedResult<T> {
 export { QUEUE_NAMES, JOB_NAMES } from './queue-types'
 export type { QueueName, InboundMessageJobData, FollowUpEvaluationJobData } from './queue-types'
 
+// ── API Key Vault ─────────────────────────────────────────────────────────────
+export {
+  isVaultConfigured, encryptApiKey, decryptApiKey, extractLast4, validateKeyShape,
+  KEY_PROVIDERS,
+} from './api-key-vault'
+export type { KeyProvider } from './api-key-vault'
+
 // ── AI types ──────────────────────────────────────────────────────────────────
 export { AI_PROVIDERS, isValidProviderModel, getModelsForProvider } from './ai-types'
 export type {

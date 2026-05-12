@@ -281,11 +281,18 @@ export async function aiAgentRoutes(app: FastifyInstance) {
   })
 
   // ── POST /ai-agent/dry-run ────────────────────────────────────────────────
+  // useRealProvider=true is only honoured when OMNI_ENABLE_REAL_OPENAI_SMOKE=true
+  // is set server-side, so the default test mode never makes external API calls.
   app.post<{
-    Body: { message?: string; customerId?: string; conversationId?: string }
+    Body: {
+      message?:           string
+      customerId?:        string
+      conversationId?:    string
+      useRealProvider?:   boolean
+    }
   }>('/dry-run', { preHandler: requireAuth }, async (req, reply) => {
     const { tenantId } = getAuthUser(req)
-    const { message, customerId, conversationId } = req.body ?? {}
+    const { message, customerId, conversationId, useRealProvider = false } = req.body ?? {}
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return reply.status(400).send({ error: 'message is required and must be non-empty' })
@@ -299,7 +306,30 @@ export async function aiAgentRoutes(app: FastifyInstance) {
       messageBody:    message.trim(),
     })
 
-    const result = await aiOrchestrator.process(agentInput)
-    return { ...result, note: 'Dry-run only — no message written to DB, no WhatsApp sent' }
+    // Real provider path: only if server-side flag enables it (prevents unintended external calls)
+    const serverAllowsReal = process.env.OMNI_ENABLE_REAL_OPENAI_SMOKE === 'true'
+    const shouldUseReal    = useRealProvider && serverAllowsReal
+
+    let providerOpts = {}
+    if (shouldUseReal) {
+      const config = await prisma.aiConfig.findUnique({ where: { tenantId } })
+      if (config?.aiProvider === 'OPENAI' && config.useTenantApiKey && config.apiKeyRef) {
+        try {
+          const rawKey = decryptApiKey(config.apiKeyRef)
+          providerOpts = { hasKey: true, apiKey: rawKey }
+        } catch {
+          // Decryption failed — fall back to dry-run
+        }
+      }
+    }
+
+    const result = await aiOrchestrator.process(agentInput, providerOpts)
+
+    return {
+      ...result,
+      note: shouldUseReal
+        ? 'Real provider called (if key configured). No DB write, no WhatsApp sent.'
+        : 'Dry-run only — no message written to DB, no WhatsApp sent',
+    }
   })
 }

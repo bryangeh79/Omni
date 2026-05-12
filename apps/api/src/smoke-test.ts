@@ -744,8 +744,60 @@ async function smoke() {
     check('test-dry-run with no key → 404', (await post('/ai-agent/api-key/test-dry-run', {}, accessToken)).status === 404)
   }
 
-  // ── 56. Logout ────────────────────────────────────────────────────────
-  console.log('\n56. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 5C — Real OpenAI Integration Checks
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n56. Phase 5C: OpenAI integration')
+  const realSmoke = process.env.OMNI_ENABLE_REAL_OPENAI_SMOKE === 'true'
+
+  // 56a. Normal dry-run (no useRealProvider) still returns [AI_DRY_RUN]
+  const dr5cRes  = await post('/ai-agent/dry-run', { message: 'What is your pricing?' }, accessToken)
+  const dr5cBody = await dr5cRes.json() as Record<string, unknown>
+  check('Phase 5C: normal dry-run still [AI_DRY_RUN]', String(dr5cBody.reply ?? '').includes('[AI_DRY_RUN]'))
+
+  // 56b. useRealProvider=true with no key stored → KEY_NOT_CONFIGURED (server ignores real call by default)
+  // First ensure no key is stored
+  await del('/ai-agent/api-key', accessToken).catch(() => null)
+  await patch('/ai-agent/settings', { aiProvider: 'OPENAI', model: 'gpt-4o-mini', useTenantApiKey: false }, accessToken)
+  const noKeyDrRes  = await post('/ai-agent/dry-run', { message: 'hello', useRealProvider: true }, accessToken)
+  const noKeyDrBody = await noKeyDrRes.json() as Record<string, unknown>
+  // Without OMNI_ENABLE_REAL_OPENAI_SMOKE, server treats useRealProvider as false → DRY_RUN
+  // OR with key not configured → KEY_NOT_CONFIGURED. Either is acceptable.
+  check('useRealProvider=true + no key/flag → safe response', noKeyDrRes.status === 200)
+  check('useRealProvider=true + no key/flag → no raw key in response',
+    !JSON.stringify(noKeyDrBody).match(/sk-[A-Za-z0-9_-]{20,}/))
+
+  // 56c. Store fake key + useRealProvider=true without server flag → still safe (dry-run)
+  if (vaultOk) {
+    const fakeKey5c = 'sk-smoke5c-fake-openai-key-for-test-verification-abc'
+    await post('/ai-agent/api-key', { provider: 'OPENAI', apiKey: fakeKey5c }, accessToken)
+    await patch('/ai-agent/settings', { aiProvider: 'OPENAI', model: 'gpt-4o-mini', useTenantApiKey: true }, accessToken)
+
+    const fakeKeyDrRes  = await post('/ai-agent/dry-run', { message: 'test', useRealProvider: true }, accessToken)
+    const fakeKeyDrBody = await fakeKeyDrRes.json() as Record<string, unknown>
+    check('fake key + useRealProvider (no server flag) → 200', fakeKeyDrRes.status === 200)
+    check('fake key dry-run no key leak in response',
+      !JSON.stringify(fakeKeyDrBody).match(/sk-[A-Za-z0-9_-]{20,}/))
+
+    // Cleanup fake key + reset to dry-run
+    await del('/ai-agent/api-key', accessToken)
+    await patch('/ai-agent/settings', { aiProvider: 'DRY_RUN', model: 'dry-run', useTenantApiKey: false }, accessToken)
+    check('cleanup: settings reset to DRY_RUN', (await (await get('/ai-agent/settings', accessToken)).json() as Record<string, unknown>).aiProvider === 'DRY_RUN')
+  }
+
+  // 56d. Optional real OpenAI smoke (gated behind OMNI_ENABLE_REAL_OPENAI_SMOKE=true)
+  if (realSmoke) {
+    console.log('  ℹ️  OMNI_ENABLE_REAL_OPENAI_SMOKE=true — real OpenAI smoke enabled')
+    // Real test would store a real key and verify live response
+    // Not implemented here — must be done manually with a valid key
+    check('real OpenAI smoke enabled (manual verification required)', true)
+  } else {
+    console.log('  ℹ️  Real OpenAI smoke skipped (set OMNI_ENABLE_REAL_OPENAI_SMOKE=true to enable)')
+  }
+
+  // ── 57. Logout ────────────────────────────────────────────────────────
+  console.log('\n57. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────

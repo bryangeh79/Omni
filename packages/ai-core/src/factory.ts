@@ -1,24 +1,21 @@
-// AiProviderFactory — returns the right provider based on tenant config.
-// Phase 5B: provider stubs. Real calls: Phase 5C (requires API key + SDK).
+// AiProviderFactory — creates the right provider based on tenant config.
+// Phase 5C: OpenAI real call implemented. Gemini/DeepSeek: Phase 5D.
 
 import type { AiProviderClient } from './provider-interface'
-import { OpenAiProvider, GeminiProvider, DeepSeekProvider } from './provider-interface'
-import { DryRunProvider } from './dry-run-provider'
+import { GeminiProvider, DeepSeekProvider }    from './provider-interface'
+import { DryRunProvider }                       from './dry-run-provider'
 import type { AiAgentInput, AiAgentResult, TenantAiConfig } from '@omni/shared'
+import { callOpenAi }                           from './openai-provider'
 
-// ── KEY_NOT_CONFIGURED provider ───────────────────────────────────────────────
+// ── KEY_NOT_CONFIGURED provider ────────────────────────────────────────────────
 
-/** Returned when a real provider is selected but no API key is configured. */
 class KeyNotConfiguredProvider implements AiProviderClient {
-  constructor(
-    readonly provider: string,
-    readonly model:    string,
-  ) {}
+  constructor(readonly provider: string, readonly model: string) {}
 
   async complete(_input: AiAgentInput): Promise<AiAgentResult> {
     return {
-      reply: `[KEY_NOT_CONFIGURED] Provider ${this.provider}/${this.model} requires an API key. Configure it in AI Agent Settings.`,
-      shouldHandoff:        true,    // always hand off if AI cannot process
+      reply:                `[KEY_NOT_CONFIGURED] Provider ${this.provider}/${this.model} requires an API key. Configure it in AI Agent Settings.`,
+      shouldHandoff:        true,
       scoreAdjustment:      0,
       suggestedTags:        ['needs_human'],
       nextAction:           'HANDOFF',
@@ -31,40 +28,46 @@ class KeyNotConfiguredProvider implements AiProviderClient {
   }
 }
 
-// ── Factory ───────────────────────────────────────────────────────────────────
+// ── OpenAI provider (real call in Phase 5C) ────────────────────────────────────
+
+class OpenAiProvider implements AiProviderClient {
+  readonly provider = 'OPENAI' as const
+
+  constructor(
+    readonly model:          string,
+    private readonly apiKey: string,
+  ) {}
+
+  async complete(input: AiAgentInput): Promise<AiAgentResult> {
+    return callOpenAi(this.apiKey, this.model, input)
+  }
+}
+
+// ── Factory ────────────────────────────────────────────────────────────────────
+
+export interface ProviderOptions {
+  hasKey?: boolean
+  apiKey?: string   // decrypted key — MUST NOT be logged or returned
+}
 
 export class AiProviderFactory {
-  /**
-   * Create the appropriate AI provider client.
-   *
-   * @param config  Provider + model selection from tenant AI config
-   * @param hasKey  Whether a tenant API key is configured in the vault
-   *
-   * Rules:
-   * - DRY_RUN / PLATFORM_DEFAULT → always DryRunProvider
-   * - Real provider (OPENAI/GEMINI/DEEPSEEK) + hasKey=false → KeyNotConfiguredProvider
-   * - Real provider + hasKey=true → provider stub (real call: Phase 5C)
-   */
   static create(
     config: Pick<TenantAiConfig, 'aiProvider' | 'model'>,
-    hasKey = false,
+    options: ProviderOptions = {},
   ): AiProviderClient {
     const realProviders = ['OPENAI', 'GEMINI', 'DEEPSEEK']
 
     if (realProviders.includes(config.aiProvider)) {
-      if (!hasKey) {
-        // Key not configured → safe fallback, always handoff
+      if (!options.hasKey || !options.apiKey) {
         return new KeyNotConfiguredProvider(config.aiProvider, config.model)
       }
-      // Key configured but real SDK call not implemented yet (Phase 5C)
       switch (config.aiProvider) {
-        case 'OPENAI':   return new OpenAiProvider(config.model)
-        case 'GEMINI':   return new GeminiProvider(config.model)
-        case 'DEEPSEEK': return new DeepSeekProvider(config.model)
+        case 'OPENAI':   return new OpenAiProvider(config.model, options.apiKey)
+        case 'GEMINI':   return new GeminiProvider(config.model)   // stub — Phase 5D
+        case 'DEEPSEEK': return new DeepSeekProvider(config.model) // stub — Phase 5D
       }
     }
 
-    // DRY_RUN, PLATFORM_DEFAULT, unknown → DryRunProvider
     return new DryRunProvider()
   }
 }

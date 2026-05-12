@@ -1,23 +1,22 @@
 // AiAgentOrchestrator — main entry point for AI processing.
-// Phase 5A/5B: DryRunProvider or KeyNotConfiguredProvider.
-// Real provider calls (Phase 5C) require a configured API key.
+// Phase 5C: real OpenAI calls supported via ProviderOptions.
 
 import type { AiAgentInput, AiAgentResult } from '@omni/shared'
-import { AiProviderFactory } from './factory'
+import { AiProviderFactory, type ProviderOptions } from './factory'
 
 export class AiAgentOrchestrator {
   /**
    * Process an inbound message and return an AI result.
    *
-   * @param input   Full agent input (built by context-builder)
-   * @param hasKey  Whether the tenant has a decryptable API key stored
+   * @param input    Full agent input (built by context-builder)
+   * @param options  hasKey + apiKey (decrypted, MUST NOT be logged or returned)
    *
    * Does NOT write to DB, does NOT send WhatsApp — callers handle those.
    */
-  async process(input: AiAgentInput, hasKey = false): Promise<AiAgentResult> {
+  async process(input: AiAgentInput, options: ProviderOptions = {}): Promise<AiAgentResult> {
     const provider = AiProviderFactory.create(
       { aiProvider: input.aiConfig.aiProvider, model: input.aiConfig.model },
-      hasKey,
+      options,
     )
     return provider.complete(input)
   }

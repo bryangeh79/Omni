@@ -1,9 +1,10 @@
-// Core inbound message job processor — Phase 5A.
-// Uses AiAgentOrchestrator (dry-run mode) instead of hardcoded stub.
-// Safety: tenant-scoped DB access, no real WhatsApp send, no real LLM call.
+// Core inbound message job processor — Phase 5C.
+// Decrypts tenant API key when available; calls real OpenAI if configured.
+// Safety: no WhatsApp send, no raw key logging, tenant-scoped DB access.
 
 import { prisma, Direction, SenderType } from '@omni/db'
 import type { InboundMessageJobData } from '@omni/shared'
+import { decryptApiKey, isVaultConfigured } from '@omni/shared'
 import { aiOrchestrator } from '@omni/ai-core'
 import { buildJobContext } from './context-builder'
 
@@ -25,9 +26,8 @@ export async function processInboundMessageJob(
     console.warn(`[worker] Job ${jobId}: conversation not found for tenant=${tenantId}, skipping`)
     return
   }
-
   if (conversation.status === 'CLOSED') {
-    console.log(`[worker] Job ${jobId}: conversation CLOSED, no AI reply`)
+    console.log(`[worker] Job ${jobId}: CLOSED, no AI reply`)
     return
   }
   if (conversation.status === 'HUMAN_HANDLING') {
@@ -35,26 +35,46 @@ export async function processInboundMessageJob(
     return
   }
 
-  // ── Build agent context from DB ───────────────────────────────────────────
-  // messageBody may not be in the job payload for older jobs; load from DB
+  // ── Load message body from DB ─────────────────────────────────────────────
   let messageBody = ''
   try {
     const msg = await prisma.message.findUnique({ where: { id: messageId } })
     messageBody = msg?.content ?? ''
-  } catch {
-    messageBody = ''
-  }
+  } catch { messageBody = '' }
 
+  // ── Build agent context ───────────────────────────────────────────────────
   const agentInput = await buildJobContext({
     tenantId, conversationId, customerId, messageId, messageBody,
   })
 
-  // ── Call AiAgentOrchestrator (dry-run in Phase 5A) ────────────────────────
-  const result = await aiOrchestrator.process(agentInput)
+  // ── Resolve API key (decrypt only if needed) ──────────────────────────────
+  // Key is decrypted here, used ONLY for the provider call, never logged or returned.
+  let apiKey: string | undefined
+
+  const aiCfg = agentInput.aiConfig
+  const isRealProvider = ['OPENAI', 'GEMINI', 'DEEPSEEK'].includes(aiCfg.aiProvider)
+
+  if (isRealProvider && aiCfg.aiProvider === 'OPENAI') {
+    const dbConfig = await prisma.aiConfig.findUnique({ where: { tenantId } })
+    if (dbConfig?.useTenantApiKey && dbConfig.apiKeyRef && isVaultConfigured()) {
+      try {
+        apiKey = decryptApiKey(dbConfig.apiKeyRef)
+        // Key exists — will be passed to orchestrator, not logged
+      } catch {
+        console.error(`[worker] Job ${jobId}: key decryption failed — using fallback`)
+      }
+    }
+  }
+
+  // ── Call AI orchestrator ──────────────────────────────────────────────────
+  const result = await aiOrchestrator.process(agentInput, {
+    hasKey: !!apiKey,
+    apiKey,  // undefined for dry-run; decrypted string for real call (not logged)
+  })
 
   console.log(
-    `[worker] Job ${jobId}: shouldHandoff=${result.shouldHandoff} ` +
-    `scoreAdj=${result.scoreAdjustment} lang=${result.detectedLanguage}`,
+    `[worker] Job ${jobId}: provider=${result.provider} shouldHandoff=${result.shouldHandoff} ` +
+    `scoreAdj=${result.scoreAdjustment} tokens=${result.inputTokensEstimate}+${result.outputTokensEstimate}`,
   )
 
   // ── Write AI reply to DB ──────────────────────────────────────────────────
@@ -68,34 +88,29 @@ export async function processInboundMessageJob(
     },
   })
 
-  // ── Update conversation status / lastMessageAt ────────────────────────────
+  // ── Update conversation ───────────────────────────────────────────────────
   await prisma.conversation.update({
     where: { id: conversationId },
     data:  {
       lastMessageAt: new Date(),
-      // Auto-escalate if AI says handoff needed
       ...(result.shouldHandoff && conversation.status === 'AI_HANDLING'
-        ? { status: 'PENDING_HANDOFF' }
-        : {}),
+        ? { status: 'PENDING_HANDOFF' } : {}),
     },
   })
 
-  // ── Update customer score if adjusted ────────────────────────────────────
+  // ── Update customer score ─────────────────────────────────────────────────
   if (result.scoreAdjustment !== 0) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: customerId, tenantId },
-    })
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } })
     if (customer) {
-      const newScore = Math.min(100, Math.max(0, customer.score + result.scoreAdjustment))
       await prisma.customer.update({
         where: { id: customerId },
-        data:  { score: newScore },
+        data:  { score: Math.min(100, Math.max(0, customer.score + result.scoreAdjustment)) },
       })
     }
   }
 
-  // ── Write usage/cost placeholder ──────────────────────────────────────────
-  // UsageRecord uses date-based unique key; safe to upsert
+  // ── Write usage record ────────────────────────────────────────────────────
+  // Cost = 0 for now; real pricing TODO Phase 6
   const today = new Date(); today.setUTCHours(0, 0, 0, 0)
   await prisma.usageRecord.upsert({
     where:  { tenantId_date: { tenantId, date: today } },
@@ -103,7 +118,7 @@ export async function processInboundMessageJob(
       tenantId,
       date:         today,
       llmTokens:    result.inputTokensEstimate + result.outputTokensEstimate,
-      llmCostUsd:   0,  // DRY_RUN has no real cost
+      llmCostUsd:   0,
       messages:     1,
     },
     update: {
@@ -112,6 +127,6 @@ export async function processInboundMessageJob(
     },
   })
 
-  console.log(`[worker] Job ${jobId}: AI dry-run reply written for conv=${conversationId}`)
-  // NOTE: sendMessage() NOT called — no real WhatsApp delivery in Phase 5A.
+  console.log(`[worker] Job ${jobId}: reply written for conv=${conversationId}`)
+  // NOTE: sendMessage() is NOT called — no real WhatsApp delivery.
 }
