@@ -236,7 +236,10 @@ model AiConfig {
   aiProvider          String   @default("DRY_RUN")   // OPENAI | GEMINI | DEEPSEEK | PLATFORM_DEFAULT | DRY_RUN
   model               String   @default("dry-run")
   useTenantApiKey     Boolean  @default(false)
-  apiKeyRef           String?  // placeholder reference only — never store raw key
+  apiKeyRef           String?  // AES-256-GCM encrypted key blob (base64) — never store raw
+  apiKeyLast4         String?  // last 4 chars of original key (for display only)
+  apiKeyProvider      String?  // OPENAI | GEMINI | DEEPSEEK — which provider the key is for
+  apiKeyUpdatedAt     DateTime?
   persona             String?
   goals               String[] // array of goal keys
   systemPrompt        String?

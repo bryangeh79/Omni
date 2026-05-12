@@ -680,8 +680,72 @@ async function smoke() {
   check('/conversations/:id without token → 401', (await get(`/conversations/${convId}`)).status === 401)
   check('/messages without token → 400 or 401', [400, 401].includes((await get(`/messages?conversationId=${convId}`)).status))
 
-  // ── 55. Logout ────────────────────────────────────────────────────────
-  console.log('\n55. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // API Key Vault (Phase 5B)
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n55. API key vault')
+  const vaultOk = !!process.env.OMNI_API_KEY_ENCRYPTION_SECRET
+
+  if (!vaultOk) {
+    console.log('  ⚠️  SKIPPED: OMNI_API_KEY_ENCRYPTION_SECRET not set — key vault tests skipped')
+  } else {
+    // 55a. Store a test OpenAI key (fake shape sk-smoke-test-xxxx)
+    const fakeKey   = 'sk-smoketest-placeholder-key-for-vault-check-1234'
+    const keyRes    = await post('/ai-agent/api-key', { provider: 'OPENAI', apiKey: fakeKey }, accessToken)
+    const keyBody   = await keyRes.json() as Record<string, unknown>
+    check('POST /ai-agent/api-key → 201',        keyRes.status === 201)
+    check('response has provider',               keyBody.provider === 'OPENAI')
+    check('response has apiKeyLast4',            typeof keyBody.apiKeyLast4 === 'string' && (keyBody.apiKeyLast4 as string).length === 4)
+    check('response has apiKeyUpdatedAt',        typeof keyBody.apiKeyUpdatedAt !== 'undefined')
+    check('response does NOT expose raw apiKey', !keyBody.apiKey && !keyBody.apiKeyRef && !keyBody.apiKeyEncrypted)
+    check('apiKeyLast4 matches key tail',        keyBody.apiKeyLast4 === fakeKey.slice(-4))
+
+    // 55b. GET settings shows hasApiKey=true + last4 only
+    const afterKeyRes  = await get('/ai-agent/settings', accessToken)
+    const afterKeyBody = await afterKeyRes.json() as Record<string, unknown>
+    check('settings hasApiKey=true after store',  afterKeyBody.hasApiKey === true)
+    check('settings has apiKeyLast4',             typeof afterKeyBody.apiKeyLast4 === 'string')
+    check('settings has apiKeyProvider=OPENAI',   afterKeyBody.apiKeyProvider === 'OPENAI')
+    check('settings NEVER exposes raw key',       !afterKeyBody.apiKey && !afterKeyBody.apiKeyRef && !afterKeyBody.apiKeyEncrypted)
+
+    // 55c. test-dry-run: decryptOk + returns last4 only
+    const testDrRes  = await post('/ai-agent/api-key/test-dry-run', {}, accessToken)
+    const testDrBody = await testDrRes.json() as Record<string, unknown>
+    check('POST api-key/test-dry-run → 200', testDrRes.status === 200)
+    check('test-dry-run decryptOk=true',     testDrBody.decryptOk === true)
+    check('test-dry-run has keyLast4',       typeof testDrBody.keyLast4 === 'string')
+    check('test-dry-run no raw key',         !testDrBody.apiKey && !testDrBody.decryptedKey)
+
+    // 55d. Validation: invalid provider, empty key
+    check('invalid provider → 400',   (await post('/ai-agent/api-key', { provider: 'INVALID', apiKey: fakeKey }, accessToken)).status === 400)
+    check('empty apiKey → 400',       (await post('/ai-agent/api-key', { provider: 'OPENAI', apiKey: '' }, accessToken)).status === 400)
+    check('bad key shape → 400',      (await post('/ai-agent/api-key', { provider: 'OPENAI', apiKey: 'not-a-real-key' }, accessToken)).status === 400)
+    check('DeepSeek key starts sk- check', (await post('/ai-agent/api-key', { provider: 'DEEPSEEK', apiKey: 'bad-shape' }, accessToken)).status === 400)
+
+    // 55e. Store Gemini key (no sk- requirement)
+    const geminiKey = 'AIzaSySmokePlaceholder_GEMINI_Key_12345678'
+    const gkRes = await post('/ai-agent/api-key', { provider: 'GEMINI', apiKey: geminiKey }, accessToken)
+    check('Gemini key stored → 201', gkRes.status === 201)
+
+    // 55f. DELETE key
+    const delKeyRes  = await del('/ai-agent/api-key', accessToken)
+    const delKeyBody = await delKeyRes.json() as Record<string, unknown>
+    check('DELETE /ai-agent/api-key → 200', delKeyRes.status === 200)
+    check('delete response hasApiKey=false', delKeyBody.hasApiKey === false)
+
+    // Settings shows hasApiKey=false after delete
+    const afterDelRes  = await get('/ai-agent/settings', accessToken)
+    const afterDelBody = await afterDelRes.json() as Record<string, unknown>
+    check('settings hasApiKey=false after delete', afterDelBody.hasApiKey === false)
+    check('settings apiKeyLast4 is null after delete', afterDelBody.apiKeyLast4 === null)
+
+    // test-dry-run with no key → 404
+    check('test-dry-run with no key → 404', (await post('/ai-agent/api-key/test-dry-run', {}, accessToken)).status === 404)
+  }
+
+  // ── 56. Logout ────────────────────────────────────────────────────────
+  console.log('\n56. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
