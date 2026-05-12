@@ -1,5 +1,5 @@
-// Real OpenAI Chat Completions provider (Phase 5C).
-// Uses native fetch — no additional SDK required.
+// Real DeepSeek Chat Completions provider (Phase 5D).
+// OpenAI-compatible API — uses native fetch, no additional SDK.
 //
 // SAFETY RULES:
 //   - apiKey MUST NOT be logged or returned.
@@ -10,22 +10,16 @@ import type { AiAgentInput, AiAgentResult } from '@omni/shared'
 import { buildSystemPrompt, buildKnowledgeContext } from './prompt-builder'
 import { keywordShouldHandoff, keywordScoreAdj, detectLang } from './provider-utils'
 
-const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions'
-const TIMEOUT_MS      = 30_000
+const DEEPSEEK_CHAT_URL = 'https://api.deepseek.com/v1/chat/completions'
+const TIMEOUT_MS        = 30_000
 
-// ── Allowed models ────────────────────────────────────────────────────────────
+const ALLOWED_MODELS   = new Set(['deepseek-chat', 'deepseek-reasoner'])
+// deepseek-reasoner does NOT support response_format json_object
+const JSON_MODE_MODELS = new Set(['deepseek-chat'])
 
-const ALLOWED_MODELS = new Set(['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'])
+// ── Message builder (OpenAI-compatible format) ────────────────────────────────
 
-// TODO Phase 6: real cost calculation (verify current pricing first)
-// INPUT_COST_PER_1M:  { 'gpt-4o-mini': 0.15, 'gpt-4o': 2.50, 'gpt-4.1-mini': 0.15, 'gpt-4.1': 2.00 }
-// OUTPUT_COST_PER_1M: { 'gpt-4o-mini': 0.60, 'gpt-4o': 10.00, 'gpt-4.1-mini': 0.60, 'gpt-4.1': 8.00 }
-
-// ── Message builder ───────────────────────────────────────────────────────────
-
-function buildOpenAiMessages(
-  input: AiAgentInput,
-): Array<{ role: string; content: string }> {
+function buildMessages(input: AiAgentInput): Array<{ role: string; content: string }> {
   const systemPrompt = buildSystemPrompt({
     config:        input.aiConfig,
     customerName:  input.customerProfile.name ?? undefined,
@@ -50,48 +44,37 @@ function buildOpenAiMessages(
     { role: 'system', content: fullSystem },
   ]
 
-  // Conversation history (last N messages)
   for (const msg of input.conversationHistory) {
     if      (msg.role === 'customer') messages.push({ role: 'user',      content: msg.content })
     else if (msg.role === 'ai')       messages.push({ role: 'assistant', content: msg.content })
-    // Skip 'system' and 'human' messages (internal events)
   }
 
-  // Current user message
   messages.push({ role: 'user', content: input.messageBody })
-
   return messages
 }
 
-// ── OpenAI API call ───────────────────────────────────────────────────────────
+// ── Response types ────────────────────────────────────────────────────────────
 
-interface OpenAiChoice {
-  message: { content: string }
-}
-interface OpenAiUsage {
-  prompt_tokens: number
-  completion_tokens: number
-}
-interface OpenAiResponse {
-  choices?: OpenAiChoice[]
-  usage?:   OpenAiUsage
+interface DeepSeekChoice  { message: { content: string } }
+interface DeepSeekUsage   { prompt_tokens: number; completion_tokens: number }
+interface DeepSeekResponse {
+  choices?: DeepSeekChoice[]
+  usage?:   DeepSeekUsage
   error?:   { message?: string; code?: string }
 }
 
-function buildProviderErrorResult(
-  model: string,
-  statusCode: number,
-  errorMsg: string,
-): AiAgentResult {
-  const code = statusCode === 401 ? 'INVALID_KEY' : statusCode === 429 ? 'RATE_LIMITED' : 'API_ERROR'
+function buildProviderErrorResult(model: string, statusCode: number, errorMsg: string): AiAgentResult {
+  const code = statusCode === 401 ? 'INVALID_KEY'
+             : statusCode === 429 ? 'RATE_LIMITED'
+             : 'API_ERROR'
   return {
-    reply:                `[PROVIDER_ERROR: OPENAI ${code}] ${errorMsg}`,
+    reply:                `[PROVIDER_ERROR: DEEPSEEK ${code}] ${errorMsg}`,
     shouldHandoff:        true,
     scoreAdjustment:      0,
     suggestedTags:        ['needs_human'],
     nextAction:           'HANDOFF',
     detectedLanguage:     'en',
-    provider:             'OPENAI',
+    provider:             'DEEPSEEK',
     model,
     inputTokensEstimate:  0,
     outputTokensEstimate: 0,
@@ -101,10 +84,10 @@ function buildProviderErrorResult(
 // ── Main function ─────────────────────────────────────────────────────────────
 
 /**
- * Call OpenAI Chat Completions.
+ * Call DeepSeek Chat Completions (OpenAI-compatible endpoint).
  * apiKey MUST NOT be logged. Result is returned to caller only (no DB/WA write here).
  */
-export async function callOpenAi(
+export async function callDeepSeek(
   apiKey: string,
   model: string,
   input: AiAgentInput,
@@ -113,31 +96,35 @@ export async function callOpenAi(
     return buildProviderErrorResult(model, 0, `Model ${model} not in allowed list`)
   }
 
-  const messages = buildOpenAiMessages(input)
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages:    buildMessages(input),
+    temperature: input.aiConfig.temperature ?? 0.7,
+    max_tokens:  input.aiConfig.maxTokens   ?? 800,
+  }
+  // JSON mode only for deepseek-chat; deepseek-reasoner does not support it
+  if (JSON_MODE_MODELS.has(model)) {
+    requestBody.response_format = { type: 'json_object' }
+  }
+
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer      = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   let response: Response
   try {
-    response = await fetch(OPENAI_CHAT_URL, {
+    response = await fetch(DEEPSEEK_CHAT_URL, {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${apiKey}`,  // key used only here, never logged
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature:     input.aiConfig.temperature    ?? 0.7,
-        max_tokens:      input.aiConfig.maxTokens      ?? 800,
-        response_format: { type: 'json_object' },
-      }),
+      body:   JSON.stringify(requestBody),
       signal: controller.signal,
     })
   } catch (err) {
     clearTimeout(timer)
     const isTimeout = (err as Error).name === 'AbortError'
-    console.error(`[openai] ${isTimeout ? 'Timeout' : 'Fetch error'}: ${(err as Error).message}`)
+    console.error(`[deepseek] ${isTimeout ? 'Timeout' : 'Fetch error'}: ${(err as Error).message}`)
     return buildProviderErrorResult(model, isTimeout ? 408 : 0,
       isTimeout ? 'Request timed out' : 'Network error')
   }
@@ -146,17 +133,16 @@ export async function callOpenAi(
   if (!response.ok) {
     let errMsg = `HTTP ${response.status}`
     try {
-      const errJson = await response.json() as OpenAiResponse
-      // Never log apiKey; log only error message (no key in OpenAI error bodies)
+      const errJson = await response.json() as DeepSeekResponse
       errMsg = errJson.error?.message?.slice(0, 120) ?? errMsg
-      console.error(`[openai] API error ${response.status}: ${errMsg}`)
+      console.error(`[deepseek] API error ${response.status}: ${errMsg}`)
     } catch { /* ignore parse error */ }
     return buildProviderErrorResult(model, response.status, errMsg)
   }
 
-  let data: OpenAiResponse
+  let data: DeepSeekResponse
   try {
-    data = await response.json() as OpenAiResponse
+    data = await response.json() as DeepSeekResponse
   } catch {
     return buildProviderErrorResult(model, 0, 'Failed to parse API response')
   }
@@ -164,23 +150,19 @@ export async function callOpenAi(
   const rawContent = data.choices?.[0]?.message?.content ?? ''
   const usage      = data.usage
 
-  let reply          = rawContent
-  let shouldHandoff  = false
+  let reply         = rawContent
+  let shouldHandoff = false
 
   try {
     const parsed = JSON.parse(rawContent) as Record<string, unknown>
     reply         = String(parsed.reply ?? rawContent)
     shouldHandoff = parsed.shouldHandoff === true
   } catch {
-    // JSON parse failed — use raw text + keyword heuristic
     shouldHandoff = keywordShouldHandoff(rawContent)
   }
 
   const inputTok  = usage?.prompt_tokens     ?? Math.ceil(input.messageBody.split(/\s+/).length * 1.5 + 500)
   const outputTok = usage?.completion_tokens ?? 100
-  // Cost: TODO Phase 6 — estimate below is approximate; verify before billing
-  // const estimatedCostUsd = (inputTok / 1_000_000) * (INPUT_COST_PER_1M[model] ?? 0)
-  //                        + (outputTok / 1_000_000) * (OUTPUT_COST_PER_1M[model] ?? 0)
 
   return {
     reply,
@@ -189,7 +171,7 @@ export async function callOpenAi(
     suggestedTags:    shouldHandoff ? ['needs_human'] : [],
     nextAction:       shouldHandoff ? 'HANDOFF' : 'CONTINUE',
     detectedLanguage: detectLang(reply || input.messageBody),
-    provider:         'OPENAI',
+    provider:         'DEEPSEEK',
     model,
     inputTokensEstimate:  inputTok,
     outputTokensEstimate: outputTok,

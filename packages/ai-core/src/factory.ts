@@ -1,11 +1,12 @@
 // AiProviderFactory — creates the right provider based on tenant config.
-// Phase 5C: OpenAI real call implemented. Gemini/DeepSeek: Phase 5D.
+// Phase 5C: OpenAI real call. Phase 5D: Gemini + DeepSeek real calls.
 
 import type { AiProviderClient } from './provider-interface'
-import { GeminiProvider, DeepSeekProvider }    from './provider-interface'
 import { DryRunProvider }                       from './dry-run-provider'
 import type { AiAgentInput, AiAgentResult, TenantAiConfig } from '@omni/shared'
 import { callOpenAi }                           from './openai-provider'
+import { callGemini }                           from './gemini-provider'
+import { callDeepSeek }                         from './deepseek-provider'
 
 // ── KEY_NOT_CONFIGURED provider ────────────────────────────────────────────────
 
@@ -28,18 +29,29 @@ class KeyNotConfiguredProvider implements AiProviderClient {
   }
 }
 
-// ── OpenAI provider (real call in Phase 5C) ────────────────────────────────────
+// ── Real provider wrappers ─────────────────────────────────────────────────────
 
 class OpenAiProvider implements AiProviderClient {
   readonly provider = 'OPENAI' as const
-
-  constructor(
-    readonly model:          string,
-    private readonly apiKey: string,
-  ) {}
-
+  constructor(readonly model: string, private readonly apiKey: string) {}
   async complete(input: AiAgentInput): Promise<AiAgentResult> {
     return callOpenAi(this.apiKey, this.model, input)
+  }
+}
+
+class GeminiProvider implements AiProviderClient {
+  readonly provider = 'GEMINI' as const
+  constructor(readonly model: string, private readonly apiKey: string) {}
+  async complete(input: AiAgentInput): Promise<AiAgentResult> {
+    return callGemini(this.apiKey, this.model, input)
+  }
+}
+
+class DeepSeekProvider implements AiProviderClient {
+  readonly provider = 'DEEPSEEK' as const
+  constructor(readonly model: string, private readonly apiKey: string) {}
+  async complete(input: AiAgentInput): Promise<AiAgentResult> {
+    return callDeepSeek(this.apiKey, this.model, input)
   }
 }
 
@@ -62,9 +74,9 @@ export class AiProviderFactory {
         return new KeyNotConfiguredProvider(config.aiProvider, config.model)
       }
       switch (config.aiProvider) {
-        case 'OPENAI':   return new OpenAiProvider(config.model, options.apiKey)
-        case 'GEMINI':   return new GeminiProvider(config.model)   // stub — Phase 5D
-        case 'DEEPSEEK': return new DeepSeekProvider(config.model) // stub — Phase 5D
+        case 'OPENAI':   return new OpenAiProvider(config.model,   options.apiKey)
+        case 'GEMINI':   return new GeminiProvider(config.model,   options.apiKey)
+        case 'DEEPSEEK': return new DeepSeekProvider(config.model, options.apiKey)
       }
     }
 

@@ -281,8 +281,9 @@ export async function aiAgentRoutes(app: FastifyInstance) {
   })
 
   // ── POST /ai-agent/dry-run ────────────────────────────────────────────────
-  // useRealProvider=true is only honoured when OMNI_ENABLE_REAL_OPENAI_SMOKE=true
-  // is set server-side, so the default test mode never makes external API calls.
+  // useRealProvider=true is only honoured when the matching per-provider server flag is set:
+  //   OMNI_ENABLE_REAL_OPENAI_SMOKE, OMNI_ENABLE_REAL_GEMINI_SMOKE, OMNI_ENABLE_REAL_DEEPSEEK_SMOKE
+  // Default: never makes external API calls.
   app.post<{
     Body: {
       message?:           string
@@ -306,19 +307,28 @@ export async function aiAgentRoutes(app: FastifyInstance) {
       messageBody:    message.trim(),
     })
 
-    // Real provider path: only if server-side flag enables it (prevents unintended external calls)
-    const serverAllowsReal = process.env.OMNI_ENABLE_REAL_OPENAI_SMOKE === 'true'
-    const shouldUseReal    = useRealProvider && serverAllowsReal
+    // Per-provider env flags — prevent unintended external calls in default/test mode
+    const REAL_SMOKE_FLAGS: Record<string, string> = {
+      OPENAI:   'OMNI_ENABLE_REAL_OPENAI_SMOKE',
+      GEMINI:   'OMNI_ENABLE_REAL_GEMINI_SMOKE',
+      DEEPSEEK: 'OMNI_ENABLE_REAL_DEEPSEEK_SMOKE',
+    }
 
-    let providerOpts = {}
-    if (shouldUseReal) {
-      const config = await prisma.aiConfig.findUnique({ where: { tenantId } })
-      if (config?.aiProvider === 'OPENAI' && config.useTenantApiKey && config.apiKeyRef) {
+    let providerOpts: { hasKey?: boolean; apiKey?: string } = {}
+    let serverAllowsReal = false
+
+    if (useRealProvider) {
+      const config   = await prisma.aiConfig.findUnique({ where: { tenantId } })
+      const provider = config?.aiProvider ?? 'DRY_RUN'
+      const flagName = REAL_SMOKE_FLAGS[provider]
+      serverAllowsReal = !!flagName && process.env[flagName] === 'true'
+
+      if (serverAllowsReal && config?.useTenantApiKey && config.apiKeyRef) {
         try {
           const rawKey = decryptApiKey(config.apiKeyRef)
           providerOpts = { hasKey: true, apiKey: rawKey }
         } catch {
-          // Decryption failed — fall back to dry-run
+          // Decryption failed — fall back to dry-run / KEY_NOT_CONFIGURED
         }
       }
     }
@@ -327,7 +337,7 @@ export async function aiAgentRoutes(app: FastifyInstance) {
 
     return {
       ...result,
-      note: shouldUseReal
+      note: serverAllowsReal && providerOpts.hasKey
         ? 'Real provider called (if key configured). No DB write, no WhatsApp sent.'
         : 'Dry-run only — no message written to DB, no WhatsApp sent',
     }

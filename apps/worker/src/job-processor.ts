@@ -54,7 +54,7 @@ export async function processInboundMessageJob(
   const aiCfg = agentInput.aiConfig
   const isRealProvider = ['OPENAI', 'GEMINI', 'DEEPSEEK'].includes(aiCfg.aiProvider)
 
-  if (isRealProvider && aiCfg.aiProvider === 'OPENAI') {
+  if (isRealProvider) {
     const dbConfig = await prisma.aiConfig.findUnique({ where: { tenantId } })
     if (dbConfig?.useTenantApiKey && dbConfig.apiKeyRef && isVaultConfigured()) {
       try {
