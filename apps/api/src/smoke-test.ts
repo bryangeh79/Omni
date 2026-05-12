@@ -71,6 +71,9 @@ async function smoke() {
   const furIds: string[] = []   // follow-up rule ids for cleanup
   const hfrIds: string[] = []   // handoff rule ids for cleanup
 
+  // ── Pre-cleanup: remove leftovers from a previous failed smoke run ────────
+  await prismaDeleteCustomerByPhone('+60-SMOKE-TEST-001').catch(() => null)
+
   // ── 1. Health ──────────────────────────────────────────────────────────
   console.log('1. Health check')
   check('GET /health → 200', (await get('/health')).status === 200)
@@ -1344,6 +1347,162 @@ async function smoke() {
     check('DELETE response no raw secrets',          !JSON.stringify(delAllBody).includes(SMOKE_APP_SECRET))
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 8A — Conversation Dashboard + Real-Time Foundation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n70. Phase 8A: Conversation list dashboard fields')
+
+  // 70a. Basic list — check required dashboard fields
+  const dashListRes  = await get('/conversations?pageSize=5', accessToken)
+  const dashListBody = await dashListRes.json() as Record<string, unknown>
+  check('GET /conversations → 200',                dashListRes.status === 200)
+  check('conversations has data array',            Array.isArray(dashListBody.data))
+  const dashConvs = dashListBody.data as Record<string, unknown>[]
+  if (dashConvs.length > 0) {
+    const dc = dashConvs[0]!
+    check('conversation has needsHuman field',     'needsHuman' in dc)
+    check('conversation has unreadCount field',    'unreadCount' in dc && typeof dc.unreadCount === 'number')
+    check('conversation has customer.tags array',  Array.isArray((dc.customer as Record<string, unknown>)?.tags))
+    check('conversation has lastMessage field',    'lastMessage' in dc)
+    check('conversation has status field',         typeof dc.status === 'string')
+  } else {
+    check('list returned (may be empty)', true)
+  }
+
+  // 70b. handoff filter
+  const dashHandoffRes  = await get('/conversations?handoff=true', accessToken)
+  check('GET /conversations?handoff=true → 200',   dashHandoffRes.status === 200)
+  const dashHandoffBody = await dashHandoffRes.json() as Record<string, unknown>
+  const handoffConvs = dashHandoffBody.data as Record<string, unknown>[]
+  if (handoffConvs.length > 0) {
+    check('handoff=true only returns PENDING_HANDOFF', handoffConvs.every((c) => c.status === 'PENDING_HANDOFF'))
+  } else {
+    check('handoff=true filter works (no results = OK)', true)
+  }
+
+  // 70c. Auth guard
+  check('GET /conversations without auth → 401',   (await get('/conversations')).status === 401)
+
+  // 70d. sort param
+  check('GET /conversations?sort=createdAt → 200', (await get('/conversations?sort=createdAt', accessToken)).status === 200)
+
+  console.log('\n71. Phase 8A: Conversation detail /:id/messages')
+
+  if (convId) {
+    // 71a. GET /conversations/:id
+    const detailRes  = await get(`/conversations/${convId}`, accessToken)
+    const detailBody = await detailRes.json() as Record<string, unknown>
+    check('GET /conversations/:id → 200',           detailRes.status === 200)
+    check('detail has customer.tags array',         Array.isArray((detailBody.customer as Record<string, unknown>)?.tags))
+    check('detail has needsHuman',                  'needsHuman' in detailBody)
+    check('detail has unreadCount',                 'unreadCount' in detailBody)
+    check('detail has messages array',              Array.isArray(detailBody.messages))
+
+    // 71b. GET /conversations/:id/messages
+    const msgListRes  = await get(`/conversations/${convId}/messages`, accessToken)
+    const msgListBody = await msgListRes.json() as Record<string, unknown>
+    check('GET /conversations/:id/messages → 200',  msgListRes.status === 200)
+    check('messages endpoint has data array',       Array.isArray(msgListBody.data))
+    check('messages endpoint has pagination',       typeof (msgListBody.pagination as Record<string, unknown>)?.total === 'number')
+
+    // 71c. Messages have expected fields
+    const msgs = (Array.isArray(msgListBody.data) ? msgListBody.data : []) as Record<string, unknown>[]
+    if (msgs.length > 0) {
+      const m = msgs[0]!
+      check('message has direction field',    typeof m.direction === 'string')
+      check('message has senderType field',   typeof m.senderType === 'string')
+      check('message has content field',      typeof m.content === 'string')
+      check('message has createdAt field',    typeof m.createdAt === 'string')
+    } else {
+      check('messages list accessible (may be empty)', true)
+    }
+
+    // 71d. Auth guards
+    check('GET /conversations/:id without auth → 401',  (await get(`/conversations/${convId}`)).status === 401)
+    check('GET /conversations/:id/messages without auth → 401', (await get(`/conversations/${convId}/messages`)).status === 401)
+  } else {
+    console.log('  ⚠️  Phase 8A detail tests skipped (no convId from setup)')
+  }
+
+  console.log('\n72. Phase 8A: Takeover + Release-AI endpoints')
+
+  let phase8aConvId = ''
+  if (channelId && createdId) {
+    const { convId: p8aId } = await prismaSetupConversation(channelId, createdId)
+    phase8aConvId = p8aId
+  }
+
+  if (phase8aConvId) {
+    // 72a. Takeover
+    const takeoverRes  = await post(`/conversations/${phase8aConvId}/takeover`, {}, accessToken)
+    const takeoverBody = await takeoverRes.json() as Record<string, unknown>
+    check('POST /conversations/:id/takeover → 200',   takeoverRes.status === 200)
+    check('takeover returns status HUMAN_HANDLING',   takeoverBody.status === 'HUMAN_HANDLING')
+    check('takeover returns conversationId',          takeoverBody.conversationId === phase8aConvId)
+
+    // Verify via GET
+    const afterTakeoverRes  = await get(`/conversations/${phase8aConvId}`, accessToken)
+    const afterTakeoverBody = await afterTakeoverRes.json() as Record<string, unknown>
+    check('after takeover: status=HUMAN_HANDLING',    afterTakeoverBody.status === 'HUMAN_HANDLING')
+    check('after takeover: needsHuman=false',         afterTakeoverBody.needsHuman === false)
+
+    // 72b. Release-AI (canonical Phase 8A endpoint)
+    const releaseRes  = await post(`/conversations/${phase8aConvId}/release-ai`, {}, accessToken)
+    const releaseBody = await releaseRes.json() as Record<string, unknown>
+    check('POST /conversations/:id/release-ai → 200', releaseRes.status === 200)
+    check('release-ai returns status AI_HANDLING',    releaseBody.status === 'AI_HANDLING')
+
+    // Verify via GET
+    const afterReleaseRes  = await get(`/conversations/${phase8aConvId}`, accessToken)
+    const afterReleaseBody = await afterReleaseRes.json() as Record<string, unknown>
+    check('after release-ai: status=AI_HANDLING',     afterReleaseBody.status === 'AI_HANDLING')
+
+    // 72c. Legacy release alias still works
+    const legacyReleaseRes = await post(`/conversations/${phase8aConvId}/takeover`, {}, accessToken)
+    check('takeover again → 200',   legacyReleaseRes.status === 200)
+    const legacyRelRes  = await post(`/conversations/${phase8aConvId}/release`, {}, accessToken)
+    const legacyRelBody = await legacyRelRes.json() as Record<string, unknown>
+    check('POST /conversations/:id/release (legacy) → 200', legacyRelRes.status === 200)
+    check('legacy release returns AI_HANDLING', legacyRelBody.status === 'AI_HANDLING')
+
+    // 72d. Tenant isolation — unknown id → 404
+    check('takeover unknown conv → 404',    (await post(`/conversations/nonexistent-conv/takeover`, {}, accessToken)).status === 404)
+    check('release-ai unknown conv → 404',  (await post(`/conversations/nonexistent-conv/release-ai`, {}, accessToken)).status === 404)
+
+    // 72e. Auth guards
+    check('takeover without auth → 401',    (await post(`/conversations/${phase8aConvId}/takeover`, {})).status === 401)
+    check('release-ai without auth → 401',  (await post(`/conversations/${phase8aConvId}/release-ai`, {})).status === 401)
+
+    // Cleanup
+    await prismaCleanupConversation(phase8aConvId)
+  } else {
+    console.log('  ⚠️  Phase 8A takeover/release-ai tests skipped (no channel or customer available)')
+  }
+
+  console.log('\n73. Phase 8A: SSE /realtime/events auth gate')
+
+  // 73a. No token → 401
+  const sseNoAuthRes = await get('/realtime/events')
+  check('GET /realtime/events no token → 401', sseNoAuthRes.status === 401)
+
+  // 73b. Invalid token → 401
+  const sseBadTokenRes = await get('/realtime/events?token=not-a-valid-jwt')
+  check('GET /realtime/events invalid token → 401', sseBadTokenRes.status === 401)
+
+  // 73c. Valid token via query param → SSE stream opens (200 with text/event-stream)
+  // We only check the status code + Content-Type; we don't keep the stream open in smoke test.
+  try {
+    const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, {
+      signal: AbortSignal.timeout(3000),
+    })
+    check('GET /realtime/events valid token → 200',              sseRes.status === 200)
+    check('GET /realtime/events Content-Type: text/event-stream', (sseRes.headers.get('content-type') ?? '').startsWith('text/event-stream'))
+    sseRes.body?.cancel().catch(() => null)
+  } catch {
+    check('SSE connection timeout/error (API may not be running streaming)', false)
+  }
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -1399,6 +1558,25 @@ async function prismaCleanupConversation(convId: string): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  conversation ${convId} deleted`)
   } catch (e) { console.warn('  ⚠️  conversation cleanup warning:', e) }
+}
+
+async function prismaDeleteCustomerByPhone(phone: string): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    const existing = await p.customer.findFirst({ where: { phone } })
+    if (existing) {
+      await p.customerTag.deleteMany({ where: { customerId: existing.id } })
+      await p.conversation.findMany({ where: { customerId: existing.id } }).then(async (convs) => {
+        for (const conv of convs) {
+          await p.message.deleteMany({ where: { conversationId: conv.id } })
+          await p.conversation.delete({ where: { id: conv.id } })
+        }
+      })
+      await p.customer.delete({ where: { id: existing.id } })
+    }
+    await p.$disconnect()
+  } catch { /* ignore — may not exist */ }
 }
 
 async function prismaDeleteCustomer(customerId: string): Promise<void> {

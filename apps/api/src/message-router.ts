@@ -5,6 +5,7 @@ import { prisma, scopeToTenant, Direction, SenderType } from '@omni/db'
 import type { InboundEnvelope } from '@omni/channel-adapters'
 
 import { enqueueInboundMessage } from './queue'
+import { publishEvent }         from './realtime-bus'
 
 export interface RouterResult {
   customerId:        string
@@ -69,7 +70,21 @@ export async function routeInboundMessage(
     data:  { lastMessageAt: new Date() },
   })
 
-  // ── 5. Enqueue for async worker processing (BullMQ) ───────────────────────
+  // ── 5. Publish real-time events (API-process SSE subscribers) ───────────────
+  // Worker-process AI reply events cannot be published here (separate process).
+  // Clients should reconnect / refetch on SSE close until Phase 8B Redis pub/sub.
+  publishEvent(tenantId, 'conversation.message.created', {
+    conversationId: conversation.id,
+    messageId:      message.id,
+    direction:      'INBOUND',
+    senderType:     'CUSTOMER',
+  })
+  publishEvent(tenantId, 'conversation.updated', {
+    conversationId: conversation.id,
+    lastMessageAt:  new Date().toISOString(),
+  })
+
+  // ── 6. Enqueue for async worker processing (BullMQ) ───────────────────────
   // Non-fatal if Redis is unavailable — DB write already succeeded.
   await enqueueInboundMessage({
     tenantId,

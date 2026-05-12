@@ -16,6 +16,7 @@ import { automationRoutes }   from './automation'
 import { dashboardRoutes }    from './dashboard'
 import { usageRoutes }        from './usage'
 import { webhookMetaRoutes }  from './webhook-meta'
+import { realtimeRoutes }     from './realtime'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -32,4 +33,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(usageRoutes,        { prefix: '/usage' })
   // Inbound webhooks — no auth; public routes for channel providers (Phase 7A+)
   await app.register(webhookMetaRoutes,  { prefix: '/webhooks' })
+  // Real-time SSE — auth via ?token= query param
+  await app.register(realtimeRoutes,     { prefix: '/realtime' })
 }

@@ -5,6 +5,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma, Direction, SenderType, PrismaChannelType } from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
+import { publishEvent } from '../realtime-bus'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_SIZE = 50
@@ -125,6 +126,18 @@ export async function messageRoutes(app: FastifyInstance) {
     // - Meta API channels: real send requires OMNI_ENABLE_REAL_META_SEND=true (default: disabled)
     // - WhatsApp Web channels: stub only (OMNI_ALLOW_WA_SESSION not enabled by default)
     const sendStatus = isMetaChannel ? 'META_SEND_DISABLED' as const : 'STUB_NOT_SENT' as const
+
+    // Publish real-time events for SSE subscribers in this API process
+    publishEvent(tenantId, 'conversation.message.created', {
+      conversationId,
+      messageId:  message.id,
+      direction:  'OUTBOUND',
+      senderType: 'HUMAN_AGENT',
+    })
+    publishEvent(tenantId, 'conversation.updated', {
+      conversationId,
+      lastMessageAt: new Date().toISOString(),
+    })
 
     return reply.status(201).send({
       ...message,
