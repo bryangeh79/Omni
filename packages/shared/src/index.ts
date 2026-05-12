@@ -50,6 +50,10 @@ export type { KeyProvider } from './api-key-vault'
 
 // ── AI types ──────────────────────────────────────────────────────────────────
 export { AI_PROVIDERS, isValidProviderModel, getModelsForProvider } from './ai-types'
+
+// ── AI pricing + cost calculation ─────────────────────────────────────────────
+export { AI_MODEL_PRICING, getModelPricing, calculateAiCostUsd } from './ai-pricing'
+export type { AiModelPricing } from './ai-pricing'
 export type {
   AiProvider, ReplyLanguagePolicy, AiModelOption,
   TenantAiConfig, CustomerProfile, MessageHistory, KnowledgeSnippet,

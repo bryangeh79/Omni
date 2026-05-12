@@ -880,8 +880,114 @@ async function smoke() {
     console.log('  ℹ️  Real DeepSeek smoke skipped (set OMNI_ENABLE_REAL_DEEPSEEK_SMOKE=true to enable)')
   }
 
-  // ── 58. Logout ────────────────────────────────────────────────────────
-  console.log('\n58. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 6 — AI Usage Cost Foundation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n58. Phase 6: AI usage pricing table')
+
+  // 58a. GET /usage/ai-costs → pricing table with all providers
+  const costsRes  = await get('/usage/ai-costs', accessToken)
+  const costsBody = await costsRes.json() as Record<string, unknown>
+  check('GET /usage/ai-costs → 200',             costsRes.status === 200)
+  check('ai-costs has pricingTable array',        Array.isArray(costsBody.pricingTable))
+  const pricingTable = costsBody.pricingTable as Record<string, unknown>[]
+  const ptProviders  = pricingTable.map((p) => p.provider as string)
+  check('pricingTable has OpenAI entries',        ptProviders.includes('OPENAI'))
+  check('pricingTable has Gemini entries',        ptProviders.includes('GEMINI'))
+  check('pricingTable has DeepSeek entries',      ptProviders.includes('DEEPSEEK'))
+  check('pricingTable has gpt-4o-mini',           pricingTable.some((p) => p.model === 'gpt-4o-mini'))
+  check('pricingTable has deepseek-chat',         pricingTable.some((p) => p.model === 'deepseek-chat'))
+  check('gpt-4o-mini has known inputCost',        pricingTable.find((p) => p.model === 'gpt-4o-mini')?.inputCostPer1MTokensUsd === 0.15)
+  check('gemini-2.5-pro cost is null (unconfirmed)', pricingTable.find((p) => p.model === 'gemini-2.5-pro')?.inputCostPer1MTokensUsd === null)
+  check('GET /usage/ai-costs without auth → 401', (await get('/usage/ai-costs')).status === 401)
+
+  console.log('\n59. Phase 6: Usage summary endpoint')
+
+  // 59a. GET /usage/summary → 200 with expected fields
+  const summaryRes  = await get('/usage/summary', accessToken)
+  const summaryBody = await summaryRes.json() as Record<string, unknown>
+  check('GET /usage/summary → 200',            summaryRes.status === 200)
+  check('summary has tenantId',                typeof summaryBody.tenantId === 'string')
+  check('summary has totalMessages',           typeof summaryBody.totalMessages === 'number')
+  check('summary has totalAiReplies',          typeof summaryBody.totalAiReplies === 'number')
+  check('summary has totalLlmTokens',          typeof summaryBody.totalLlmTokens === 'number')
+  check('summary has totalLlmCostUsd',         typeof summaryBody.totalLlmCostUsd === 'number')
+  check('summary has records array',           Array.isArray(summaryBody.records))
+  check('summary has from/to dates',           typeof summaryBody.from === 'string' && typeof summaryBody.to === 'string')
+
+  // 59b. Date range filter
+  const summaryRangeRes = await get('/usage/summary?from=2024-01-01&to=2026-12-31', accessToken)
+  check('summary with date range → 200', summaryRangeRes.status === 200)
+
+  // 59c. Validation
+  check('summary invalid from → 400',    (await get('/usage/summary?from=not-a-date', accessToken)).status === 400)
+  check('summary reversed range → 400',  (await get('/usage/summary?from=2026-01-01&to=2020-01-01', accessToken)).status === 400)
+  check('summary without auth → 401',    (await get('/usage/summary')).status === 401)
+
+  // 59d. Summary tenantId is the logged-in tenant (no cross-tenant access)
+  check('summary tenantId matches JWT', summaryBody.tenantId === (await (await get('/auth/me', accessToken)).json() as Record<string, unknown>).tenantId)
+
+  console.log('\n60. Phase 6: Cost calculator endpoint')
+
+  // 60a. Known model (gpt-4o-mini) → non-null estimatedAiCostUsd
+  const calcRes  = await post('/usage/cost-calculator', {
+    monthlyActiveCustomers:  100,
+    avgAiRepliesPerCustomer: 5,
+    avgInputTokensPerReply:  600,
+    avgOutputTokensPerReply: 100,
+    provider:                'OPENAI',
+    model:                   'gpt-4o-mini',
+  }, accessToken)
+  const calcBody = await calcRes.json() as Record<string, unknown>
+  check('POST /usage/cost-calculator → 200',                     calcRes.status === 200)
+  check('known model: estimatedAiCostUsd is non-null number',    typeof calcBody.estimatedAiCostUsd === 'number' && (calcBody.estimatedAiCostUsd as number) > 0)
+  check('known model: estimatedAiReplies = 500',                 calcBody.estimatedAiReplies === 500)
+  check('known model: estimatedTokens = 350000',                 calcBody.estimatedTokens === 350_000)
+  check('cost calculator has note (internal)',                    typeof calcBody.note === 'string')
+  check('cost calculator no raw API key in response',            !JSON.stringify(calcBody).match(/sk-[A-Za-z0-9_-]{20,}/))
+
+  // 60b. Unknown pricing (gemini-2.5-pro → null cost fields)
+  const calcNullRes  = await post('/usage/cost-calculator', {
+    monthlyActiveCustomers:  100,
+    avgAiRepliesPerCustomer: 5,
+    avgInputTokensPerReply:  600,
+    avgOutputTokensPerReply: 100,
+    provider:                'GEMINI',
+    model:                   'gemini-2.5-pro',
+  }, accessToken)
+  const calcNullBody = await calcNullRes.json() as Record<string, unknown>
+  check('unknown model: estimatedAiCostUsd is null',     calcNullRes.status === 200 && calcNullBody.estimatedAiCostUsd === null)
+  check('unknown model: estimatedTotalCostUsd is null',  calcNullBody.estimatedTotalCostUsd === null)
+
+  // 60c. With target margin → suggestedMinimumPriceUsd
+  const calcMarginRes  = await post('/usage/cost-calculator', {
+    monthlyActiveCustomers:  100,
+    avgAiRepliesPerCustomer: 5,
+    avgInputTokensPerReply:  600,
+    avgOutputTokensPerReply: 100,
+    provider:                'OPENAI',
+    model:                   'gpt-4o-mini',
+    serverCostUsd:           50,
+    targetGrossMarginPct:    40,
+  }, accessToken)
+  const calcMarginBody = await calcMarginRes.json() as Record<string, unknown>
+  check('with margin: suggestedMinimumPriceUsd is positive number',
+    typeof calcMarginBody.suggestedMinimumPriceUsd === 'number' && (calcMarginBody.suggestedMinimumPriceUsd as number) > 0)
+
+  // 60d. Validation — missing required fields
+  check('cost-calculator missing fields → 400', (await post('/usage/cost-calculator', {}, accessToken)).status === 400)
+  check('cost-calculator missing model → 400',  (await post('/usage/cost-calculator', {
+    monthlyActiveCustomers: 100, avgAiRepliesPerCustomer: 5,
+    avgInputTokensPerReply: 600, avgOutputTokensPerReply: 100, provider: 'OPENAI',
+  }, accessToken)).status === 400)
+  check('cost-calculator without auth → 401',   (await post('/usage/cost-calculator', {
+    monthlyActiveCustomers: 100, avgAiRepliesPerCustomer: 5,
+    avgInputTokensPerReply: 600, avgOutputTokensPerReply: 100, provider: 'OPENAI', model: 'gpt-4o-mini',
+  })).status === 401)
+
+  // ── 61. Logout ────────────────────────────────────────────────────────
+  console.log('\n61. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────

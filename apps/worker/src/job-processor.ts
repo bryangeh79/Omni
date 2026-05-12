@@ -4,7 +4,7 @@
 
 import { prisma, Direction, SenderType } from '@omni/db'
 import type { InboundMessageJobData } from '@omni/shared'
-import { decryptApiKey, isVaultConfigured } from '@omni/shared'
+import { decryptApiKey, isVaultConfigured, calculateAiCostUsd } from '@omni/shared'
 import { aiOrchestrator } from '@omni/ai-core'
 import { buildJobContext } from './context-builder'
 
@@ -110,20 +110,30 @@ export async function processInboundMessageJob(
   }
 
   // ── Write usage record ────────────────────────────────────────────────────
-  // Cost = 0 for now; real pricing TODO Phase 6
   const today = new Date(); today.setUTCHours(0, 0, 0, 0)
+  const llmTokens   = result.inputTokensEstimate + result.outputTokensEstimate
+  // calculateAiCostUsd returns null when pricing is unknown; fall back to 0
+  // (schema requires Float, not Float?). Cost is an estimate — verify before billing.
+  const llmCostUsd  = calculateAiCostUsd({
+    provider:     result.provider,
+    model:        result.model,
+    inputTokens:  result.inputTokensEstimate,
+    outputTokens: result.outputTokensEstimate,
+  }) ?? 0
+
   await prisma.usageRecord.upsert({
     where:  { tenantId_date: { tenantId, date: today } },
     create: {
       tenantId,
-      date:         today,
-      llmTokens:    result.inputTokensEstimate + result.outputTokensEstimate,
-      llmCostUsd:   0,
-      messages:     1,
+      date:      today,
+      llmTokens,
+      llmCostUsd,
+      messages:  1,
     },
     update: {
-      llmTokens: { increment: result.inputTokensEstimate + result.outputTokensEstimate },
-      messages:  { increment: 1 },
+      llmTokens:  { increment: llmTokens },
+      llmCostUsd: { increment: llmCostUsd },
+      messages:   { increment: 1 },
     },
   })
 
