@@ -51,6 +51,7 @@ async function smoke() {
   let createdId    = ''  // customer id
   let channelId    = ''  // WA Web channel id
   let convId       = ''  // test conversation id
+  let metaChannelId = '' // Meta channel id (Phase 7A)
   const kbIds: string[] = []    // knowledge item ids for cleanup
   const furIds: string[] = []   // follow-up rule ids for cleanup
   const hfrIds: string[] = []   // handoff rule ids for cleanup
@@ -986,14 +987,204 @@ async function smoke() {
     avgInputTokensPerReply: 600, avgOutputTokensPerReply: 100, provider: 'OPENAI', model: 'gpt-4o-mini',
   })).status === 401)
 
-  // ── 61. Logout ────────────────────────────────────────────────────────
-  console.log('\n61. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 7A — Meta WhatsApp Business Platform Connector
+  // ════════════════════════════════════════════════════════════════════════
+
+  const FAKE_META_TOKEN   = 'EAAOmniSmokePhase7AFakeMetaAccessTokenForTest12345678'
+  const FAKE_VERIFY_TOKEN = 'omni-smoke-7a-webhook-verify-token'
+  const SMOKE_WAMID       = 'wamid.smoke7a-test-message-id-001'
+
+  console.log('\n62. Phase 7A: Meta channel config API')
+
+  // 62a. Create Meta channel with fake token (vault required)
+  if (vaultOk) {
+    const mcRes  = await post('/channels/meta', {
+      displayName:        'Omni Smoke Meta Channel',
+      phoneNumberId:      '10987654321',
+      wabaId:             '20987654321',
+      displayPhoneNumber: '+60 19-876 5432',
+      metaAccessToken:    FAKE_META_TOKEN,
+      webhookVerifyToken: FAKE_VERIFY_TOKEN,
+    }, accessToken)
+    const mcBody = await mcRes.json() as Record<string, unknown>
+    check('POST /channels/meta → 201',                 mcRes.status === 201)
+    check('meta channel has phoneNumberId',            mcBody.phoneNumberId === '10987654321')
+    check('meta channel hasAccessToken=true',          mcBody.hasAccessToken === true)
+    check('meta channel hasWebhookVerifyToken=true',   mcBody.hasWebhookVerifyToken === true)
+    check('meta channel NEVER exposes raw token',      !JSON.stringify(mcBody).includes(FAKE_META_TOKEN))
+    check('meta channel NEVER exposes encrypted blob', !mcBody.metaAccessTokenRef && !mcBody.webhookVerifyTokenRef)
+    check('meta channel accessTokenLast4 correct',    mcBody.accessTokenLast4 === FAKE_META_TOKEN.slice(-4))
+    metaChannelId = mcBody.id as string ?? ''
+  } else {
+    console.log('  ⚠️  Vault not configured — Meta token tests skipped')
+    // Create channel without tokens for basic routing tests
+    const mcNoTokRes  = await post('/channels/meta', { phoneNumberId: '10987654321' }, accessToken)
+    const mcNoTokBody = await mcNoTokRes.json() as Record<string, unknown>
+    check('POST /channels/meta (no token) → 201',    mcNoTokRes.status === 201)
+    metaChannelId = mcNoTokBody.id as string ?? ''
+  }
+
+  // 62b. GET /channels/meta — list (no raw tokens)
+  const mcListRes  = await get('/channels/meta', accessToken)
+  const mcListBody = await mcListRes.json() as Record<string, unknown>
+  check('GET /channels/meta → 200',           mcListRes.status === 200)
+  check('meta list has data array',           Array.isArray(mcListBody.data))
+  const mcList = mcListBody.data as Record<string, unknown>[]
+  check('meta list includes created channel', mcList.some((c) => c.id === metaChannelId))
+  check('meta list no encrypted blobs',       !JSON.stringify(mcListBody).includes('metaAccessTokenRef'))
+
+  if (metaChannelId) {
+    // 62c. GET /channels/meta/:id
+    const mcGetRes  = await get(`/channels/meta/${metaChannelId}`, accessToken)
+    const mcGetBody = await mcGetRes.json() as Record<string, unknown>
+    check('GET /channels/meta/:id → 200',          mcGetRes.status === 200)
+    check('get detail has phoneNumberId',          typeof mcGetBody.phoneNumberId === 'string')
+    check('get detail NEVER exposes raw token',    !JSON.stringify(mcGetBody).includes(FAKE_META_TOKEN))
+    check('get detail no metaAccessTokenRef key',  !('metaAccessTokenRef' in mcGetBody))
+
+    // 62d. PATCH /channels/meta/:id
+    const mcPatchRes  = await patch(`/channels/meta/${metaChannelId}`, { displayName: 'Updated Meta Channel' }, accessToken)
+    check('PATCH /channels/meta/:id → 200',         mcPatchRes.status === 200)
+    const mcPatchBody = await mcPatchRes.json() as Record<string, unknown>
+    check('patch updated displayName',              mcPatchBody.displayName === 'Updated Meta Channel')
+
+    // 62e. test-config-dry-run
+    const dryRunRes  = await post(`/channels/meta/${metaChannelId}/test-config-dry-run`, {}, accessToken)
+    const dryRunBody = await dryRunRes.json() as Record<string, unknown>
+    check('POST test-config-dry-run → 200',              dryRunRes.status === 200)
+    check('dry-run no external call (has note)',          typeof dryRunBody.note === 'string')
+    check('dry-run configValid (phoneNumberId present)',  dryRunBody.configValid === true)
+    check('dry-run NEVER exposes raw token',              !JSON.stringify(dryRunBody).includes(FAKE_META_TOKEN))
+  }
+
+  // 62f. Validation
+  check('POST /channels/meta missing phoneNumberId → 400', (await post('/channels/meta', {}, accessToken)).status === 400)
+  check('GET /channels/meta without auth → 401',           (await get('/channels/meta')).status === 401)
+  check('GET /channels/meta/nonexistent → 404',            (await get('/channels/meta/nonexistent', accessToken)).status === 404)
+
+  console.log('\n63. Phase 7A: Webhook verification + inbound')
+
+  if (metaChannelId && vaultOk) {
+    // 63a. Webhook GET — correct verify token → challenge returned as plain text
+    const verifyUrl = `/webhooks/meta/whatsapp/${metaChannelId}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(FAKE_VERIFY_TOKEN)}&hub.challenge=smoke7a-challenge-abc`
+    const verifyRes = await get(verifyUrl)
+    const verifyText = await verifyRes.text()
+    check('webhook GET correct token → 200',              verifyRes.status === 200)
+    check('webhook GET returns challenge plain text',     verifyText === 'smoke7a-challenge-abc')
+
+    // 63b. Webhook GET — wrong verify token → 403
+    const wrongUrl = `/webhooks/meta/whatsapp/${metaChannelId}?hub.mode=subscribe&hub.verify_token=wrong-token&hub.challenge=xxx`
+    check('webhook GET wrong token → 403',   (await get(wrongUrl)).status === 403)
+
+    // 63c. Webhook GET — missing params → 400
+    check('webhook GET missing params → 400', (await get(`/webhooks/meta/whatsapp/${metaChannelId}`)).status === 400)
+
+    // 63d. Webhook GET — unknown channelId → 404
+    check('webhook GET unknown channelId → 404', (await get(`/webhooks/meta/whatsapp/nonexistent?hub.mode=subscribe&hub.verify_token=x&hub.challenge=y`)).status === 404)
+
+    // 63e. Webhook POST — inbound text message → 200, creates message, enqueues job
+    const waMsgPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: '20987654321',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '+60 19-876 5432', phone_number_id: '10987654321' },
+            contacts: [{ profile: { name: 'Smoke Test Customer Meta' }, wa_id: '60198765432' }],
+            messages: [{
+              from:      '60198765432',
+              id:        SMOKE_WAMID,
+              timestamp: String(Math.floor(Date.now() / 1000)),
+              type:      'text',
+              text:      { body: 'Hello from Meta WhatsApp smoke test!' },
+            }],
+          },
+        }],
+      }],
+    }
+    const wbRes = await post(`/webhooks/meta/whatsapp/${metaChannelId}`, waMsgPayload)
+    check('webhook POST inbound → 200',   wbRes.status === 200)
+    const wbBody = await wbRes.json() as Record<string, unknown>
+    check('webhook POST returns received', wbBody.received === true)
+
+    // 63f. Brief settle then verify message was created in DB
+    await new Promise((r) => setTimeout(r, 400))
+    const metaInbound = await prismaGetMessageByChannelMsgId(SMOKE_WAMID)
+    check('webhook POST created inbound message in DB',    metaInbound !== null)
+    check('webhook POST message direction is INBOUND',     metaInbound?.direction === 'INBOUND')
+    check('webhook POST message senderType is CUSTOMER',   metaInbound?.senderType === 'CUSTOMER')
+    check('webhook POST message content matches',          metaInbound?.content === 'Hello from Meta WhatsApp smoke test!')
+
+    // 63g. Duplicate wamid → idempotent (no duplicate message created)
+    await post(`/webhooks/meta/whatsapp/${metaChannelId}`, waMsgPayload)
+    await new Promise((r) => setTimeout(r, 200))
+    const dupCount = await prismaCountMessagesByChannelMsgId(SMOKE_WAMID)
+    check('webhook duplicate wamid → idempotent (1 message only)', dupCount === 1)
+
+    // 63h. POST with malformed object → graceful 200
+    const malRes = await post(`/webhooks/meta/whatsapp/${metaChannelId}`, { object: 'something_else' })
+    check('webhook POST non-whatsapp payload → 200 (safe)',  malRes.status === 200)
+
+  } else {
+    console.log('  ⚠️  Webhook tests skipped (vault not configured or no Meta channel)')
+  }
+
+  console.log('\n64. Phase 7A: Message send on Meta channel')
+
+  if (metaChannelId) {
+    // Create a conversation on the Meta channel for send test
+    const metaConvId = await prismaCreateMetaConversation(metaChannelId, createdId)
+    if (metaConvId) {
+      const sendMetaRes  = await post('/messages/send', { conversationId: metaConvId, body: 'Test reply on Meta channel' }, accessToken)
+      const sendMetaBody = await sendMetaRes.json() as Record<string, unknown>
+      check('send on Meta channel → 201',                 sendMetaRes.status === 201)
+      check('send on Meta channel → META_SEND_DISABLED',  sendMetaBody.sendStatus === 'META_SEND_DISABLED')
+      check('send Meta no raw token in response',         !JSON.stringify(sendMetaBody).includes(FAKE_META_TOKEN))
+
+      // Cleanup Meta conv
+      await prismaCleanupConversation(metaConvId)
+    }
+  } else {
+    console.log('  ⚠️  Meta send test skipped (no Meta channel created)')
+  }
+
+  // 65. Token management cleanup
+  console.log('\n65. Phase 7A: Token management')
+  if (metaChannelId && vaultOk) {
+    // Update token via POST /:id/token
+    const newFakeToken = 'EAAOmniSmokePhase7ANewFakeToken99999999999999'
+    const tokUpdateRes  = await post(`/channels/meta/${metaChannelId}/token`, {
+      metaAccessToken: newFakeToken,
+    }, accessToken)
+    const tokUpdateBody = await tokUpdateRes.json() as Record<string, unknown>
+    check('POST /channels/meta/:id/token → 200',    tokUpdateRes.status === 200)
+    check('token update accessTokenLast4 correct',  tokUpdateBody.accessTokenLast4 === newFakeToken.slice(-4))
+    check('token update no raw token in response',  !JSON.stringify(tokUpdateBody).includes(newFakeToken))
+
+    // DELETE token
+    const tokDelRes  = await del(`/channels/meta/${metaChannelId}/token`, accessToken)
+    const tokDelBody = await tokDelRes.json() as Record<string, unknown>
+    check('DELETE /channels/meta/:id/token → 200', tokDelRes.status === 200)
+    check('token deleted: hasAccessToken=false',   tokDelBody.hasAccessToken === false)
+    check('token deleted: hasWebhookToken=false',  tokDelBody.hasWebhookVerifyToken === false)
+
+    // Missing token body → 400
+    check('POST /channels/meta/:id/token empty body → 400',
+      (await post(`/channels/meta/${metaChannelId}/token`, {}, accessToken)).status === 400)
+  }
+
+  // ── 66. Logout ────────────────────────────────────────────────────────
+  console.log('\n66. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up smoke test records...')
-  if (convId)    await prismaCleanupConversation(convId)
-  if (createdId) await prismaDeleteCustomer(createdId)
+  if (convId)         await prismaCleanupConversation(convId)
+  if (metaChannelId)  await prismaCleanupMetaChannel(metaChannelId)
+  if (createdId)      await prismaDeleteCustomer(createdId)
   if (kbIds.length  > 0) await prismaDeleteKnowledge(kbIds)
   if (furIds.length > 0 || hfrIds.length > 0) await prismaDeleteAutomation(furIds, hfrIds)
   console.log('  🗑️  smoke test records cleaned')
@@ -1159,6 +1350,72 @@ async function prismaDeleteAutomation(furIds: string[], hfrIds: string[]): Promi
     await p.$disconnect()
     console.log(`  🗑️  ${furIds.length} follow-up + ${hfrIds.length} handoff rules deleted`)
   } catch (e) { console.warn('  ⚠️  automation cleanup warning:', e) }
+}
+
+// ── Phase 7A DB helpers ────────────────────────────────────────────────────
+
+async function prismaGetMessageByChannelMsgId(
+  channelMessageId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p   = new PrismaClient()
+    const msg = await p.message.findFirst({ where: { channelMessageId } })
+    await p.$disconnect()
+    return msg as Record<string, unknown> | null
+  } catch { return null }
+}
+
+async function prismaCountMessagesByChannelMsgId(channelMessageId: string): Promise<number> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p   = new PrismaClient()
+    const n   = await p.message.count({ where: { channelMessageId } })
+    await p.$disconnect()
+    return n
+  } catch { return -1 }
+}
+
+async function prismaCreateMetaConversation(channelId: string, customerId: string): Promise<string | null> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p    = new PrismaClient()
+    const conv = await p.conversation.create({
+      data: {
+        tenantId:      'demo-tenant-001',
+        channelId,
+        customerId,
+        status:        'AI_HANDLING',
+        lastMessageAt: new Date(),
+      },
+    })
+    await p.$disconnect()
+    return conv.id
+  } catch (e) { console.warn('  ⚠️  prismaCreateMetaConversation error:', e); return null }
+}
+
+async function prismaCleanupMetaChannel(channelId: string): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    // Delete all messages in conversations of this channel
+    const convs = await p.conversation.findMany({ where: { channelId } })
+    for (const c of convs) {
+      await p.message.deleteMany({ where: { conversationId: c.id } })
+      await p.conversation.delete({ where: { id: c.id } })
+    }
+    // Also find and delete any customers created by smoke webhook test
+    const smokeCustomer = await p.customer.findFirst({
+      where: { phone: '+60198765432', tenantId: 'demo-tenant-001' },
+    })
+    if (smokeCustomer) {
+      await p.customerTag.deleteMany({ where: { customerId: smokeCustomer.id } })
+      await p.customer.delete({ where: { id: smokeCustomer.id } })
+    }
+    await p.channel.delete({ where: { id: channelId } })
+    await p.$disconnect()
+    console.log(`  🗑️  Meta channel ${channelId} and related records deleted`)
+  } catch (e) { console.warn('  ⚠️  Meta channel cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })

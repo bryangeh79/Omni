@@ -3,7 +3,7 @@
 // Outbound send writes to DB only; real WhatsApp delivery not implemented here.
 
 import type { FastifyInstance } from 'fastify'
-import { prisma, Direction, SenderType } from '@omni/db'
+import { prisma, Direction, SenderType, PrismaChannelType } from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
 
 const DEFAULT_PAGE = 1
@@ -97,6 +97,13 @@ export async function messageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Cannot send to a closed conversation' })
     }
 
+    // Detect channel type to determine send status
+    const channel = await prisma.channel.findUnique({
+      where:  { id: conversation.channelId },
+      select: { type: true },
+    })
+    const isMetaChannel = channel?.type === PrismaChannelType.META_API
+
     // Write message to DB
     const message = await prisma.message.create({
       data: {
@@ -114,11 +121,14 @@ export async function messageRoutes(app: FastifyInstance) {
       data:  { lastMessageAt: new Date() },
     })
 
-    // Real WhatsApp delivery not implemented in Phase 3C.
-    // Phase 4: look up adapter from registry and call sendMessage().
+    // Real delivery path:
+    // - Meta API channels: real send requires OMNI_ENABLE_REAL_META_SEND=true (default: disabled)
+    // - WhatsApp Web channels: stub only (OMNI_ALLOW_WA_SESSION not enabled by default)
+    const sendStatus = isMetaChannel ? 'META_SEND_DISABLED' as const : 'STUB_NOT_SENT' as const
+
     return reply.status(201).send({
       ...message,
-      sendStatus: 'STUB_NOT_SENT' as const,
+      sendStatus,
     })
   })
 

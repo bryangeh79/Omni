@@ -69,8 +69,15 @@ model Channel {
   isActive     Boolean     @default(true)
   // WhatsApp Web: session reference (not session content)
   waWebSessionRef String?
-  // Meta API: phoneNumberId stored here; token in env only
-  metaPhoneNumberId String?
+  // Meta WhatsApp Business Platform API fields
+  metaPhoneNumberId         String?    // numeric phone number ID from Meta
+  wabaId                    String?    // WhatsApp Business Account ID
+  displayPhoneNumber        String?    // human-readable display number
+  metaAccessTokenRef        String?    // AES-256-GCM encrypted Meta access token
+  metaAccessTokenLast4      String?    // last 4 chars (display only, never raw)
+  metaAccessTokenUpdatedAt  DateTime?
+  webhookVerifyTokenRef     String?    // AES-256-GCM encrypted webhook verify token
+  lastWebhookAt             DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
