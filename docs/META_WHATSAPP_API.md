@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 7A implements the Meta WhatsApp Business Platform (official API) connector foundation. This is the **enterprise/official API path**, separate from the WhatsApp Web connector.
+Phase 7A/7B implements the Meta WhatsApp Business Platform (official API) connector with security hardening. This is the **enterprise/official API path**, separate from the WhatsApp Web connector.
 
 **Ordinary WhatsApp / WhatsApp Business App** uses the WhatsApp Web connector (Baileys session).  
 **Meta WhatsApp Business Platform** uses the official Meta Cloud API via Graph API endpoints.
@@ -95,12 +95,53 @@ Supported in Phase 7A: **text messages only**. Media/templates/interactive are T
 
 ---
 
+## Meta App Secret (Phase 7B)
+
+The Meta App Secret is used to verify `X-Hub-Signature-256` HMAC signatures on inbound webhook POST requests. Without it, webhook POST is accepted without signature verification (less secure).
+
+### Configuration
+
+```http
+POST /channels/meta/:id/token
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "appSecret": "your-meta-app-secret"
+}
+```
+
+### HMAC Verification Flow (when appSecret configured)
+
+```
+Meta → POST /webhooks/meta/whatsapp/:channelId
+  Header: x-hub-signature-256: sha256=<hmac>
+  Body: { "object": "whatsapp_business_account", ... }
+
+Server:
+  1. Capture raw body bytes (before JSON parsing)
+  2. Decrypt metaAppSecretRef from DB
+  3. Compute expected = sha256(appSecret, rawBody)
+  4. Constant-time compare with incoming sha256=<hmac> header
+  5. If mismatch → 403 Forbidden
+  6. Replay check: reject if same signature seen within 5 min window
+     (process-scoped; use Redis for multi-instance deployments)
+  7. If all clear → process message normally
+```
+
+### When appSecret is NOT configured
+
+The webhook POST is accepted without signature verification. A warning is logged. This should only be used in development/testing — configure appSecret before production deployment.
+
+---
+
 ## Token Safety
 
 | Token | Storage | Returned in API? |
 |---|---|---|
 | Meta access token | AES-256-GCM encrypted in `Channel.metaAccessTokenRef` | Never — `hasAccessToken` bool + `accessTokenLast4` only |
 | Webhook verify token | AES-256-GCM encrypted in `Channel.webhookVerifyTokenRef` | Never |
+| Meta app secret | AES-256-GCM encrypted in `Channel.metaAppSecretRef` | Never — `hasAppSecret` bool + `appSecretLast4` only |
 
 Both tokens use the same vault as AI API keys (`OMNI_API_KEY_ENCRYPTION_SECRET`).
 
@@ -123,10 +164,10 @@ OMNI_ENABLE_REAL_META_SEND=false
 
 ## What This Phase Does NOT Implement
 
-- HMAC signature verification for webhook POST (TODO Phase 7B)
 - Media message sending/receiving
 - Template message sending
 - Meta token refresh / long-lived token exchange
 - WhatsApp Web session activation (remains OMNI_ALLOW_WA_SESSION guarded)
 - Marketing broadcast / ads
 - Meta message fee tracking in UsageRecord
+- Multi-instance replay protection (current cache is process-scoped — needs Redis for HA)

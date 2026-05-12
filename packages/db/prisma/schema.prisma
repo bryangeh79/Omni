@@ -77,6 +77,9 @@ model Channel {
   metaAccessTokenLast4      String?    // last 4 chars (display only, never raw)
   metaAccessTokenUpdatedAt  DateTime?
   webhookVerifyTokenRef     String?    // AES-256-GCM encrypted webhook verify token
+  metaAppSecretRef          String?    // AES-256-GCM encrypted Meta app secret (for HMAC verification)
+  metaAppSecretLast4        String?    // last 4 chars (display only)
+  metaAppSecretUpdatedAt    DateTime?
   lastWebhookAt             DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt

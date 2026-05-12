@@ -1,15 +1,18 @@
-// Meta WhatsApp Business Platform inbound webhook (Phase 7A).
-// Public routes — no JWT auth. Secured by channelId path scoping + verify token check.
+// Meta WhatsApp Business Platform inbound webhook (Phase 7A + 7B security hardening).
+// Public routes — no JWT auth. Secured by:
+//   Phase 7A: channelId path scoping + verify-token handshake
+//   Phase 7B: X-Hub-Signature-256 HMAC verification + replay cache
 //
 // SAFETY RULES:
-//   - Never log hub.verify_token or any raw token value
-//   - Always return 200 to prevent Meta retry storms
+//   - Never log hub.verify_token, app secret, raw signature, or raw body content
+//   - Always return 200 to prevent Meta retry storms (errors are logged only)
 //   - Idempotent by Meta message ID (wamid)
-//   - No reply sent from webhook handler — enqueue only
-//   - TODO Phase 7B: add X-Hub-Signature-256 HMAC verification for full security
+//   - No AI reply sent from webhook handler — enqueue only
+//   - Replay cache is process-scoped (document: multi-instance needs Redis-backed cache)
 
-import crypto from 'crypto'
-import type { FastifyInstance } from 'fastify'
+import crypto            from 'crypto'
+import type { IncomingMessage } from 'http'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { prisma, PrismaChannelType } from '@omni/db'
 import { decryptApiKey, isVaultConfigured } from '@omni/shared'
 import { routeInboundMessage } from '../message-router'
@@ -40,9 +43,65 @@ interface MetaWebhookPayload {
   }>
 }
 
+// ── Raw body store (scoped to this plugin) ────────────────────────────────────
+// WeakMap keyed by Node IncomingMessage — entries are GC'd when request ends.
+// Required for X-Hub-Signature-256 HMAC verification.
+const rawBodyMap = new WeakMap<IncomingMessage, Buffer>()
+
+// ── HMAC verification ─────────────────────────────────────────────────────────
+
+function verifyMetaHmac(rawBody: Buffer, appSecret: string, headerSig: string | undefined): boolean {
+  if (!headerSig || !headerSig.startsWith('sha256=')) return false
+
+  const expected = 'sha256=' + crypto.createHmac('sha256', appSecret)
+    .update(rawBody)
+    .digest('hex')
+
+  const sigBuf = Buffer.from(headerSig, 'utf8')
+  const expBuf = Buffer.from(expected,  'utf8')
+  if (sigBuf.length !== expBuf.length) return false
+  return crypto.timingSafeEqual(sigBuf, expBuf)
+}
+
+// ── Replay protection (best-effort, process-scoped) ───────────────────────────
+// Caches a SHA-256 hash of each seen signature for REPLAY_WINDOW_MS.
+// Limitation: does NOT prevent replays across multiple server instances.
+// For production multi-instance deployments, back this with Redis.
+
+const REPLAY_WINDOW_MS = 5 * 60 * 1000  // 5 minutes
+const seenSigHashes    = new Map<string, number>()
+
+function isReplaySignature(sig: string): boolean {
+  const now = Date.now()
+  for (const [s, ts] of seenSigHashes) {
+    if (now - ts > REPLAY_WINDOW_MS) seenSigHashes.delete(s)
+  }
+  const h = crypto.createHash('sha256').update(sig).digest('hex')
+  if (seenSigHashes.has(h)) return true
+  seenSigHashes.set(h, now)
+  return false
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function webhookMetaRoutes(app: FastifyInstance) {
+
+  // Capture raw request body for HMAC verification.
+  // In Fastify 5, addContentTypeParser callback receives FastifyRequest (not IncomingMessage).
+  // We key the WeakMap by req.raw (the underlying IncomingMessage) for type-safe lookup.
+  // Overrides JSON parser for this plugin scope only — other routes are unaffected.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'buffer' },
+    (fastifyReq: FastifyRequest, body: Buffer, done: (err: Error | null, body?: unknown) => void) => {
+      rawBodyMap.set(fastifyReq.raw as IncomingMessage, body)
+      try {
+        done(null, JSON.parse(body.toString('utf8')))
+      } catch (err) {
+        done(err as Error, undefined)
+      }
+    },
+  )
 
   // ── GET /webhooks/meta/whatsapp/:channelId — Meta webhook verification ─────
   app.get<{
@@ -77,46 +136,78 @@ export async function webhookMetaRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Token decryption failed' })
       }
 
-      // Constant-time comparison to prevent timing side-channels
-      const inBuf  = Buffer.from(token,       'utf8')
+      const inBuf     = Buffer.from(token,       'utf8')
       const storedBuf = Buffer.from(storedToken, 'utf8')
       if (inBuf.length !== storedBuf.length || !crypto.timingSafeEqual(inBuf, storedBuf)) {
         return reply.status(403).send({ error: 'Webhook verification failed' })
       }
 
-      // Return challenge as plain text (Meta requirement)
       return reply.type('text/plain').send(challenge)
     },
   )
 
   // ── POST /webhooks/meta/whatsapp/:channelId — inbound messages ─────────────
-  // Always returns 200. Process errors are logged, never propagated.
+  // Phase 7B: verifies X-Hub-Signature-256 when appSecret is configured.
+  // Always returns 200 — processing errors are logged, never propagated.
   app.post<{ Params: { channelId: string }; Body: MetaWebhookPayload }>(
     '/meta/whatsapp/:channelId',
     async (req, reply) => {
       const { channelId } = req.params
 
       try {
+        // ── Phase 7B: X-Hub-Signature-256 HMAC verification ──────────────────
+        const ch = await prisma.channel.findFirst({
+          where: { id: channelId, type: PrismaChannelType.META_API },
+        })
+
+        if (ch?.metaAppSecretRef && isVaultConfigured()) {
+          const rawBody = rawBodyMap.get(req.raw)
+          const sig     = req.headers['x-hub-signature-256'] as string | undefined
+
+          if (!rawBody) {
+            console.error(`[webhook-meta] No raw body available for HMAC check, channelId=${channelId}`)
+            return reply.status(400).send({ error: 'Cannot verify signature — raw body unavailable' })
+          }
+
+          let appSecret: string
+          try {
+            appSecret = decryptApiKey(ch.metaAppSecretRef)
+          } catch {
+            console.error(`[webhook-meta] App secret decryption failed, channelId=${channelId}`)
+            return reply.status(500).send({ error: 'Internal error verifying signature' })
+          }
+
+          if (!sig) {
+            return reply.status(403).send({ error: 'Missing x-hub-signature-256 header' })
+          }
+          if (!verifyMetaHmac(rawBody, appSecret, sig)) {
+            return reply.status(403).send({ error: 'Invalid webhook signature' })
+          }
+
+          // Replay check (best-effort, process-scoped)
+          if (isReplaySignature(sig)) {
+            console.warn(`[webhook-meta] Replay detected, channelId=${channelId}`)
+            return reply.status(200).send({ received: true, note: 'duplicate' })
+          }
+
+        } else if (!ch) {
+          console.warn(`[webhook-meta] Unknown channelId=${channelId}`)
+          return reply.status(200).send({ received: true })
+        }
+
+        // ── Parse and route payload ───────────────────────────────────────────
         const payload = req.body as MetaWebhookPayload
         if (payload?.object !== 'whatsapp_business_account') {
           return reply.status(200).send({ received: true })
         }
 
-        const ch = await prisma.channel.findFirst({
-          where: { id: channelId, type: PrismaChannelType.META_API },
-        })
-        if (!ch) {
-          console.warn(`[webhook-meta] Unknown channelId=${channelId}`)
-          return reply.status(200).send({ received: true })
-        }
+        // ch is guaranteed non-null here (checked above)
+        const tenantId = ch!.tenantId
 
-        // Update lastWebhookAt (non-fatal if it fails)
         await prisma.channel.update({
           where: { id: channelId },
           data:  { lastWebhookAt: new Date() },
         }).catch(() => { /* non-fatal */ })
-
-        const tenantId = ch.tenantId
 
         for (const entry of (payload.entry ?? [])) {
           for (const change of (entry.changes ?? [])) {
@@ -130,7 +221,7 @@ export async function webhookMetaRoutes(app: FastifyInstance) {
               const wamid = msg.id
               const from  = msg.from.startsWith('+') ? msg.from : `+${msg.from}`
 
-              // ── Idempotency: skip duplicate wamid ───────────────────────
+              // ── Idempotency: skip duplicate wamid ─────────────────────────
               const exists = await prisma.message.findFirst({
                 where: { channelMessageId: wamid },
                 select: { id: true },
@@ -140,7 +231,6 @@ export async function webhookMetaRoutes(app: FastifyInstance) {
                 continue
               }
 
-              // ── Route to DB + BullMQ ─────────────────────────────────────
               try {
                 await routeInboundMessage(
                   {

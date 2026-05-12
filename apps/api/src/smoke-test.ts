@@ -4,6 +4,7 @@
 
 import dotenv from 'dotenv'
 import path from 'path'
+import crypto from 'crypto'
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
 const BASE = `http://localhost:${process.env.PORT_API ?? 43111}`
@@ -40,6 +41,20 @@ async function patch(url: string, body: unknown, token?: string): Promise<Respon
 }
 async function del(url: string, token?: string): Promise<Response> {
   return fetch(`${BASE}${url}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+}
+// POST with arbitrary extra headers (used for Phase 7B HMAC tests)
+async function postWithHeaders(url: string, body: unknown, headers: Record<string, string>): Promise<Response> {
+  const bodyStr = JSON.stringify(body)
+  return fetch(`${BASE}${url}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body:    bodyStr,
+  })
+}
+// Compute Meta HMAC signature over JSON-stringified body
+function metaHmacSig(bodyObj: unknown, appSecret: string): string {
+  const h = crypto.createHmac('sha256', appSecret).update(JSON.stringify(bodyObj), 'utf8').digest('hex')
+  return `sha256=${h}`
 }
 
 // ── Smoke test ─────────────────────────────────────────────────────────────
@@ -1164,20 +1179,173 @@ async function smoke() {
     check('token update accessTokenLast4 correct',  tokUpdateBody.accessTokenLast4 === newFakeToken.slice(-4))
     check('token update no raw token in response',  !JSON.stringify(tokUpdateBody).includes(newFakeToken))
 
-    // DELETE token
-    const tokDelRes  = await del(`/channels/meta/${metaChannelId}/token`, accessToken)
-    const tokDelBody = await tokDelRes.json() as Record<string, unknown>
-    check('DELETE /channels/meta/:id/token → 200', tokDelRes.status === 200)
-    check('token deleted: hasAccessToken=false',   tokDelBody.hasAccessToken === false)
-    check('token deleted: hasWebhookToken=false',  tokDelBody.hasWebhookVerifyToken === false)
-
-    // Missing token body → 400
+    // Validation: empty body → 400
     check('POST /channels/meta/:id/token empty body → 400',
       (await post(`/channels/meta/${metaChannelId}/token`, {}, accessToken)).status === 400)
   }
 
-  // ── 66. Logout ────────────────────────────────────────────────────────
-  console.log('\n66. Logout')
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 7B — Meta Webhook Security Hardening
+  // ════════════════════════════════════════════════════════════════════════
+
+  const SMOKE_APP_SECRET  = 'smoke7b-fake-app-secret-for-hmac-test'
+  const SMOKE_WAMID_7B    = 'wamid.smoke7b-hmac-test-message-001'
+  const SMOKE_WAMID_7B_2  = 'wamid.smoke7b-hmac-test-message-002'
+
+  console.log('\n66. Phase 7B: App secret vault')
+
+  if (metaChannelId && vaultOk) {
+    // Re-add webhookVerifyToken + store appSecret in one call
+    const as7bRes  = await post(`/channels/meta/${metaChannelId}/token`, {
+      webhookVerifyToken: 'omni-smoke-7a-webhook-verify-token',
+      appSecret:          SMOKE_APP_SECRET,
+    }, accessToken)
+    const as7bBody = await as7bRes.json() as Record<string, unknown>
+    check('POST /:id/token with appSecret → 200',       as7bRes.status === 200)
+    check('response hasAppSecret=true',                 as7bBody.hasAppSecret === true)
+    check('response appSecretLast4 correct',            as7bBody.appSecretLast4 === SMOKE_APP_SECRET.slice(-4))
+    check('response NEVER exposes raw appSecret',       !JSON.stringify(as7bBody).includes(SMOKE_APP_SECRET))
+    check('response no metaAppSecretRef in body',       !('metaAppSecretRef' in as7bBody))
+
+    // GET channel → hasAppSecret=true but no raw/encrypted blob
+    const asGetRes  = await get(`/channels/meta/${metaChannelId}`, accessToken)
+    const asGetBody = await asGetRes.json() as Record<string, unknown>
+    check('GET channel hasAppSecret=true after store',  asGetBody.hasAppSecret === true)
+    check('GET channel no raw appSecret',               !JSON.stringify(asGetBody).includes(SMOKE_APP_SECRET))
+    check('GET channel no metaAppSecretRef key',        !('metaAppSecretRef' in asGetBody))
+
+    // test-config-dry-run shows hasAppSecret
+    const drRes  = await post(`/channels/meta/${metaChannelId}/test-config-dry-run`, {}, accessToken)
+    const drBody = await drRes.json() as Record<string, unknown>
+    check('dry-run checks.hasAppSecret=true',           (drBody.checks as Record<string, unknown>)?.hasAppSecret === true)
+    check('dry-run hmacReady=true',                     drBody.hmacReady === true)
+    check('dry-run no raw appSecret',                   !JSON.stringify(drBody).includes(SMOKE_APP_SECRET))
+  } else {
+    console.log('  ⚠️  Phase 7B app secret tests skipped (vault not configured or no Meta channel)')
+  }
+
+  console.log('\n67. Phase 7B: HMAC signature verification')
+
+  if (metaChannelId && vaultOk) {
+    const HMAC_MSG_PAYLOAD = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: '20987654321',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '+60 19-876 5432', phone_number_id: '10987654321' },
+            contacts: [{ profile: { name: 'HMAC Test' }, wa_id: '60198765432' }],
+            messages: [{
+              from:      '60198765432',
+              id:        SMOKE_WAMID_7B,
+              timestamp: '1700000000',
+              type:      'text',
+              text:      { body: 'Phase 7B HMAC test message' },
+            }],
+          },
+        }],
+      }],
+    }
+
+    // 67a. Valid HMAC → 200 and message created
+    const validSig = metaHmacSig(HMAC_MSG_PAYLOAD, SMOKE_APP_SECRET)
+    const validRes = await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, HMAC_MSG_PAYLOAD, {
+      'x-hub-signature-256': validSig,
+    })
+    check('webhook POST valid HMAC → 200',    validRes.status === 200)
+    const validBody = await validRes.json() as Record<string, unknown>
+    check('webhook POST valid HMAC received', validBody.received === true)
+
+    // Brief settle then verify message created
+    await new Promise((r) => setTimeout(r, 400))
+    const hmacMsg = await prismaGetMessageByChannelMsgId(SMOKE_WAMID_7B)
+    check('valid HMAC: inbound message created in DB',   hmacMsg !== null)
+    check('valid HMAC: message is INBOUND',              hmacMsg?.direction === 'INBOUND')
+    check('valid HMAC response no raw appSecret',        !JSON.stringify(validBody).includes(SMOKE_APP_SECRET))
+
+    // 67b. Invalid HMAC → 403
+    const badSigRes = await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, HMAC_MSG_PAYLOAD, {
+      'x-hub-signature-256': 'sha256=000000000000000000000000000000000000000000000000000000000000dead',
+    })
+    check('webhook POST invalid HMAC → 403', badSigRes.status === 403)
+
+    // 67c. Missing signature → 403
+    const noSigRes = await post(`/webhooks/meta/whatsapp/${metaChannelId}`, HMAC_MSG_PAYLOAD)
+    check('webhook POST missing signature → 403', noSigRes.status === 403)
+
+    // 67d. Duplicate wamid still idempotent (valid HMAC, same wamid as 67a)
+    const dupPayload = {
+      ...HMAC_MSG_PAYLOAD,
+      entry: [{
+        ...HMAC_MSG_PAYLOAD.entry[0],
+        changes: [{
+          field: 'messages',
+          value: {
+            ...HMAC_MSG_PAYLOAD.entry[0].changes[0].value,
+            messages: [{
+              ...HMAC_MSG_PAYLOAD.entry[0].changes[0].value.messages[0],
+              id: SMOKE_WAMID_7B,  // same wamid — should be idempotent
+            }],
+          },
+        }],
+      }],
+    }
+    const dupSig = metaHmacSig(dupPayload, SMOKE_APP_SECRET)
+    await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, dupPayload, {
+      'x-hub-signature-256': dupSig,
+    })
+    await new Promise((r) => setTimeout(r, 200))
+    check('duplicate wamid + valid HMAC → still idempotent',
+      (await prismaCountMessagesByChannelMsgId(SMOKE_WAMID_7B)) === 1)
+
+    // 67e. New wamid with valid HMAC → message created normally
+    const newMsgPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: '20987654321',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '+60 19-876 5432', phone_number_id: '10987654321' },
+            contacts: [{ profile: { name: 'HMAC Test 2' }, wa_id: '60198765432' }],
+            messages: [{
+              from:      '60198765432',
+              id:        SMOKE_WAMID_7B_2,
+              timestamp: '1700000001',
+              type:      'text',
+              text:      { body: 'Second HMAC test message' },
+            }],
+          },
+        }],
+      }],
+    }
+    const newSig = metaHmacSig(newMsgPayload, SMOKE_APP_SECRET)
+    await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, newMsgPayload, {
+      'x-hub-signature-256': newSig,
+    })
+    await new Promise((r) => setTimeout(r, 400))
+    check('new wamid + valid HMAC → message created', (await prismaGetMessageByChannelMsgId(SMOKE_WAMID_7B_2)) !== null)
+  } else {
+    console.log('  ⚠️  HMAC verification tests skipped (vault not configured or no Meta channel)')
+  }
+
+  // ── 68. Token + secret cleanup ────────────────────────────────────────
+  console.log('\n68. Token and secret cleanup')
+  if (metaChannelId && vaultOk) {
+    const delAllRes  = await del(`/channels/meta/${metaChannelId}/token`, accessToken)
+    const delAllBody = await delAllRes.json() as Record<string, unknown>
+    check('DELETE /:id/token clears all → 200',      delAllRes.status === 200)
+    check('after delete: hasAccessToken=false',      delAllBody.hasAccessToken === false)
+    check('after delete: hasWebhookToken=false',     delAllBody.hasWebhookVerifyToken === false)
+    check('after delete: hasAppSecret=false',        delAllBody.hasAppSecret === false)
+    check('DELETE response no raw secrets',          !JSON.stringify(delAllBody).includes(SMOKE_APP_SECRET))
+  }
+
+  // ── 69. Logout ────────────────────────────────────────────────────────
+  console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
