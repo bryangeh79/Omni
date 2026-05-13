@@ -15,6 +15,8 @@ export {
   ChannelType as PrismaChannelType,
   FollowUpStatus,
   OnboardingStatus,
+  ChannelSetupStatus,
+  CredentialStatus,
 } from '@prisma/client'
 
 export { prisma, connectDb, disconnectDb } from './client'

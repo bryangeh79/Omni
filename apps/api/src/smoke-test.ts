@@ -2578,6 +2578,111 @@ async function smoke() {
   check('OMNI_ENABLE_REAL_META_SEND not enabled',       process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
   check('OMNI_ENABLE_ONBOARDING_AI not enabled',        process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
 
+  // ── Phase 13A: Persisted Channel Setup + Credential Vault + Activation ──
+
+  console.log('\n115. Phase 13A: /channels/setup/status persists to DB')
+  const cs13StatusRes  = await get('/channels/setup/status', accessToken)
+  const cs13StatusBody = await cs13StatusRes.json() as Record<string, unknown>
+  check('GET /channels/setup/status → 200',              cs13StatusRes.status === 200)
+  check('status has tenantId',                           typeof cs13StatusBody.tenantId === 'string')
+  check('status has setupStatus field',                  typeof cs13StatusBody.setupStatus === 'string')
+  check('status has credentialStatus field',             typeof cs13StatusBody.credentialStatus === 'string')
+  check('status realWaSessionEnabled=false',             cs13StatusBody.realWaSessionEnabled === false)
+  check('status realMetaSendEnabled=false',              cs13StatusBody.realMetaSendEnabled === false)
+  check('status no credentialRef in response',           !('credentialRef' in cs13StatusBody))
+  check('status no secrets',                             !JSON.stringify(cs13StatusBody).includes('JWT_SECRET'))
+
+  console.log('\n116. Phase 13A: /channels/setup/save-draft persists channelType + phoneLast4')
+  const cs13SaveRes  = await post('/channels/setup/save-draft', {
+    channelType:  'META_WA_BUSINESS',
+    displayName:  'Smoke Test Channel 13A',
+    phoneNumber:  '+60123456789',   // only last 4 stored: 6789
+  }, accessToken)
+  const cs13SaveBody = await cs13SaveRes.json() as Record<string, unknown>
+  check('POST /channels/setup/save-draft → 200',         cs13SaveRes.status === 200)
+  check('save-draft saved=true',                         cs13SaveBody.saved === true)
+  check('save-draft channelType=META_WA_BUSINESS',       cs13SaveBody.channelType === 'META_WA_BUSINESS')
+  check('save-draft phoneLast4 stored (not full phone)', cs13SaveBody.phoneLast4 === '6789')
+  check('save-draft realWaSessionEnabled=false',         cs13SaveBody.realWaSessionEnabled === false)
+  check('save-draft realMetaSendEnabled=false',          cs13SaveBody.realMetaSendEnabled === false)
+  check('save-draft no raw phone in response',           !JSON.stringify(cs13SaveBody).includes('+60123456789'))
+  // Invalid type
+  check('save-draft invalid type → 400', (await post('/channels/setup/save-draft', { channelType: 'UNKNOWN' }, accessToken)).status === 400)
+  // Auth guard
+  check('save-draft without auth → 401', (await post('/channels/setup/save-draft', { channelType: 'WA_WEB' })).status === 401)
+
+  console.log('\n117. Phase 13A: /channels/setup/test updates DB testStatus')
+  const cs13TestRes  = await post('/channels/setup/test', { channelType: 'META_WA_BUSINESS' }, accessToken)
+  const cs13TestBody = await cs13TestRes.json() as Record<string, unknown>
+  check('POST /channels/setup/test → 200',               cs13TestRes.status === 200)
+  check('test testResult=STUB',                          cs13TestBody.testResult === 'STUB')
+  check('test metaApiCalled=false',                      cs13TestBody.metaApiCalled === false)
+  check('test whatsappSessionStarted=false',             cs13TestBody.whatsappSessionStarted === false)
+  check('test has setupStatus in response',              typeof cs13TestBody.setupStatus === 'string')
+  check('test without auth → 401',                       (await post('/channels/setup/test', {})).status === 401)
+
+  console.log('\n118. Phase 13A: /channels/setup/credentials-draft (vault redaction)')
+  const cs13CredRes  = await post('/channels/setup/credentials-draft', {
+    channelType:   'META_WA_BUSINESS',
+    wabaId:        'fake-waba-id-smoke',
+    phoneNumberId: 'fake-phone-id-smoke',
+    accessToken:   'EAAsmoke_test_fake_token_1234',  // fake/safe — last4: 1234
+  }, accessToken)
+  const cs13CredBody = await cs13CredRes.json() as Record<string, unknown>
+  check('POST /channels/setup/credentials-draft → 200', cs13CredRes.status === 200)
+  check('cred draft saved=true',                         cs13CredBody.saved === true)
+  check('cred draft has credentialStatus',               typeof cs13CredBody.credentialStatus === 'string')
+  check('cred draft has vaultConfigured flag',           typeof cs13CredBody.vaultConfigured === 'boolean')
+  // Critical: raw credentials must NOT appear in response
+  check('cred draft no raw accessToken in response',    !JSON.stringify(cs13CredBody).includes('EAAsmoke_test_fake_token_1234'))
+  check('cred draft no raw wabaId in response',         !JSON.stringify(cs13CredBody).includes('fake-waba-id-smoke'))
+  check('cred draft no credentialRef exposed',           !('credentialRef' in cs13CredBody))
+  check('cred draft no JWT_SECRET',                      !JSON.stringify(cs13CredBody).includes('JWT_SECRET'))
+  check('cred without auth → 401',                       (await post('/channels/setup/credentials-draft', { wabaId: 'x' })).status === 401)
+  // Validation: no fields → 400
+  check('cred draft no fields → 400',                   (await post('/channels/setup/credentials-draft', {}, accessToken)).status === 400)
+
+  console.log('\n119. Phase 13A: /channels/setup/credentials-status (metadata only)')
+  const cs13CredStatRes  = await get('/channels/setup/credentials-status', accessToken)
+  const cs13CredStatBody = await cs13CredStatRes.json() as Record<string, unknown>
+  check('GET /channels/setup/credentials-status → 200',  cs13CredStatRes.status === 200)
+  check('credentials-status has credentialStatus',        typeof cs13CredStatBody.credentialStatus === 'string')
+  check('credentials-status has hasStoredRef (bool)',     typeof cs13CredStatBody.hasStoredRef === 'boolean')
+  check('credentials-status no raw credentialRef',        !('credentialRef' in cs13CredStatBody))
+  check('credentials-status no secrets',                  !JSON.stringify(cs13CredStatBody).includes('JWT_SECRET'))
+  check('credentials-status without auth → 401',          (await get('/channels/setup/credentials-status')).status === 401)
+
+  console.log('\n120. Phase 13A: /channels/setup/request-activation (blocked by default)')
+  const cs13ReqActRes  = await post('/channels/setup/request-activation', {}, accessToken)
+  const cs13ReqActBody = await cs13ReqActRes.json() as Record<string, unknown>
+  check('POST /channels/setup/request-activation → 200',  cs13ReqActRes.status === 200)
+  check('request-activation activated=false (env not set)', cs13ReqActBody.activated === false)
+  check('request-activation blocked=true (env not set)',   cs13ReqActBody.blocked === true)
+  check('request-activation has missingConditions array',  Array.isArray(cs13ReqActBody.missingConditions))
+  check('request-activation realWaSessionEnabled=false',   cs13ReqActBody.realWaSessionEnabled === false)
+  check('request-activation realMetaSendEnabled=false',    cs13ReqActBody.realMetaSendEnabled === false)
+  check('request-activation no secrets',                   !JSON.stringify(cs13ReqActBody).includes('JWT_SECRET'))
+  check('request-activation without auth → 401',           (await post('/channels/setup/request-activation', {})).status === 401)
+
+  console.log('\n121. Phase 13A: /channels/setup/confirm-activation (blocked by default)')
+  const cs13ConfActRes  = await post('/channels/setup/confirm-activation', {}, accessToken)
+  const cs13ConfActBody = await cs13ConfActRes.json() as Record<string, unknown>
+  check('POST /channels/setup/confirm-activation → 200',   cs13ConfActRes.status === 200)
+  check('confirm-activation activated=false (env not set)', cs13ConfActBody.activated === false)
+  check('confirm-activation blocked=true',                  cs13ConfActBody.blocked === true)
+  check('confirm-activation realSessionStarted=false',      cs13ConfActBody.realSessionStarted === false)
+  check('confirm-activation realSendEnabled=false',         cs13ConfActBody.realSendEnabled === false)
+  check('confirm-activation no secrets',                    !JSON.stringify(cs13ConfActBody).includes('JWT_SECRET'))
+  check('confirm-activation without auth → 401',            (await post('/channels/setup/confirm-activation', {})).status === 401)
+
+  console.log('\n122. Phase 13A: /channels/setup/credentials DELETE')
+  const cs13DelCredRes  = await del('/channels/setup/credentials', accessToken)
+  const cs13DelCredBody = await cs13DelCredRes.json() as Record<string, unknown>
+  check('DELETE /channels/setup/credentials → 200',         cs13DelCredRes.status === 200)
+  check('credentials cleared=true',                         cs13DelCredBody.cleared === true)
+  check('credentials status reset',                         typeof cs13DelCredBody.credentialStatus === 'string')
+  check('credentials delete without auth → 401',            (await del('/channels/setup/credentials')).status === 401)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

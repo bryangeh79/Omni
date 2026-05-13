@@ -525,10 +525,17 @@ export interface ChannelSetupStatus {
   tenantId:             string
   channelType:          string | null
   displayName:          string | null
-  testStatus:           'NOT_TESTED' | 'STUB' | 'OK' | 'FAILED'
+  phoneLast4:           string | null
+  setupStatus:          string
+  credentialStatus:     string
+  credentialLast4:      string | null
+  testStatus:           string
+  lastTestAt:           string | null
   realWaSessionEnabled: boolean
   realMetaSendEnabled:  boolean
-  note:                 string
+  activationNotes:      string | null
+  createdAt:            string
+  updatedAt:            string
 }
 
 export interface ChannelSetupTestResult {
@@ -539,7 +546,32 @@ export interface ChannelSetupTestResult {
   realMetaSendEnabled:    boolean
   metaApiCalled:          boolean
   whatsappSessionStarted: boolean
+  testedAt:               string
+  setupStatus:            string
   note:                   string
+}
+
+export interface CredentialsStatus {
+  tenantId:         string
+  credentialStatus: string
+  credentialLast4:  string | null
+  setupStatus:      string
+  channelType:      string | null
+  vaultConfigured:  boolean
+  hasStoredRef:     boolean
+  note:             string
+}
+
+export interface ActivationResult {
+  tenantId:             string
+  activated:            boolean
+  blocked:              boolean
+  missingConditions?:   string[]
+  blockers?:            string[]
+  setupStatus:          string
+  realWaSessionEnabled: boolean
+  realMetaSendEnabled:  boolean
+  note:                 string
 }
 
 export async function fetchChannelSetupStatus(): Promise<ChannelSetupStatus> {
@@ -550,7 +582,7 @@ export async function saveChannelSetupDraft(data: {
   channelType?: string
   displayName?: string
   phoneNumber?: string
-}): Promise<{ saved: boolean; channelType: string | null; note: string }> {
+}): Promise<ChannelSetupStatus & { saved: boolean; note: string }> {
   return apiFetch('/channels/setup/save-draft', {
     method: 'POST',
     body:   JSON.stringify(data),
@@ -562,6 +594,42 @@ export async function testChannelSetup(channelType?: string): Promise<ChannelSet
     method: 'POST',
     body:   JSON.stringify({ channelType }),
   })
+}
+
+export async function saveCredentialsDraft(data: {
+  wabaId?:        string
+  phoneNumberId?: string
+  accessToken?:   string
+  metaAppSecret?: string
+  channelType?:   string
+}): Promise<{
+  saved:            boolean
+  credentialStatus: string
+  credentialLast4:  string | null
+  setupStatus:      string
+  vaultConfigured:  boolean
+  note:             string
+}> {
+  return apiFetch('/channels/setup/credentials-draft', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function fetchCredentialsStatus(): Promise<CredentialsStatus> {
+  return apiFetch<CredentialsStatus>('/channels/setup/credentials-status')
+}
+
+export async function clearCredentials(): Promise<{ cleared: boolean; credentialStatus: string; setupStatus: string }> {
+  return apiFetch('/channels/setup/credentials', { method: 'DELETE' })
+}
+
+export async function requestActivation(): Promise<ActivationResult> {
+  return apiFetch<ActivationResult>('/channels/setup/request-activation', { method: 'POST' })
+}
+
+export async function confirmActivation(): Promise<ActivationResult & { realSessionStarted: boolean; realSendEnabled: boolean }> {
+  return apiFetch('/channels/setup/confirm-activation', { method: 'POST' })
 }
 
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────

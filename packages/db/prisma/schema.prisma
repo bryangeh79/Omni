@@ -34,6 +34,7 @@ model Tenant {
   followUpTasks     FollowUpTask[]
   handoffRules      HandoffRule[]
   onboardingDraft   OnboardingDraft?
+  channelSetupDraft ChannelSetupDraft?
 }
 
 model User {
@@ -373,6 +374,47 @@ enum OnboardingStatus {
   DRAFT
   PREVIEWED
   ENABLED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANNEL SETUP DRAFT (Phase 13A)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChannelSetupDraft {
+  id               String              @id @default(cuid())
+  tenantId         String              @unique          // one draft per tenant
+  channelType      String?                              // WA_WEB | META_WA_BUSINESS
+  displayName      String?
+  phoneLast4       String?                              // last 4 digits only — never store full phone
+  setupStatus      ChannelSetupStatus  @default(DRAFT)
+  credentialStatus CredentialStatus    @default(NONE)
+  credentialRef    String?                              // AES-256-GCM encrypted JSON blob — never plaintext
+  credentialLast4  String?                              // last 4 chars of access token for display only
+  testStatus       String              @default("NOT_TESTED")
+  lastTestAt       DateTime?
+  realWaSessionEnabled Boolean         @default(false)  // safety flag snapshot — always false by default
+  realMetaSendEnabled  Boolean         @default(false)  // safety flag snapshot — always false by default
+  activationNotes  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+}
+
+enum ChannelSetupStatus {
+  DRAFT
+  TESTED_STUB
+  READY_FOR_CREDENTIALS
+  CREDENTIALS_SAVED
+  ACTIVATION_PENDING
+  ACTIVE
+  FAILED
+}
+
+enum CredentialStatus {
+  NONE
+  DRAFT
+  ENCRYPTED_STORED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

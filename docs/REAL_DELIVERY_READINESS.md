@@ -103,8 +103,38 @@ No AI provider calls — purely deterministic keyword matching.
 1. ✅ Guard layer exists (`checkMetaSendGuard`)
 2. ✅ Audit logging exists (`auditSendAttempt`)
 3. ✅ `OMNI_ENABLE_REAL_META_SEND=false` default
-4. ☐ Set `OMNI_ENABLE_REAL_META_SEND=true` in production env
-5. ☐ Configure channel with valid Meta access token
-6. ☐ Review `DeliveryLog` DB table (Phase 11)
-7. ☐ Rate limiting on `/messages/send` (Phase 11)
-8. ☐ Test real send in staging environment first
+4. ✅ Channel Setup Wizard with guarded activation (Phase 13A)
+5. ✅ Credential vault with AES-256-GCM encryption (Phase 13A)
+6. ☐ Set `OMNI_ENABLE_REAL_META_SEND=true` in production env
+7. ☐ Configure channel credentials via `/channels/setup/credentials-draft`
+8. ☐ Complete activation flow: request-activation → confirm-activation
+9. ☐ Real WA Web QR scan (Phase 14)
+10. ☐ Meta webhook registration (Phase 14)
+11. ☐ Rate limiting on `/messages/send` (Phase 14)
+12. ☐ Test real send in staging environment first
+
+---
+
+## Phase 13A: Channel Setup Credential Vault
+
+### Credential Encryption
+
+All channel credentials (Meta access tokens, app secrets) are encrypted before storage using `encryptApiKey()` from `@omni/shared`:
+- Algorithm: AES-256-GCM
+- Key source: `OMNI_API_KEY_ENCRYPTION_SECRET` env var
+- Encrypted blob: `base64(IV[12] + AuthTag[16] + Ciphertext)`
+
+### What Is Never Stored/Returned
+- Raw access tokens
+- Raw app secrets
+- Full phone numbers (only `phoneLast4`)
+- Encrypted `credentialRef` blob is never in any API response
+
+### Activation Gates (Default: Blocked)
+
+| Channel | Required env flag | Default |
+|---------|------------------|---------|
+| WA_WEB | `OMNI_ALLOW_WA_SESSION=true` | false |
+| META_WA_BUSINESS | `OMNI_ENABLE_REAL_META_SEND=true` | false |
+
+Both `request-activation` and `confirm-activation` return `activated=false, blocked=true` unless the correct env flag is set by the operator.

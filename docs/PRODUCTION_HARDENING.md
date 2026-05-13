@@ -96,9 +96,40 @@ The `realtime-bus` now handles runtime Redis reconnects:
 - [ ] `REDIS_URL` points to production Redis
 - [ ] `JWT_SECRET` is a long random string (not shared with dev)
 - [ ] `NODE_ENV=production` (enables httpOnly cookie Secure flag)
+- [ ] `OMNI_API_KEY_ENCRYPTION_SECRET` set (32-byte hex/base64) — required for credential vault
 - [ ] `OMNI_ENABLE_REAL_META_SEND` reviewed and set intentionally
-- [ ] Meta channel has access token configured
+- [ ] Channel credentials saved via `/channels/setup/credentials-draft` (encrypted)
+- [ ] Channel activation flow completed (`request-activation` → `confirm-activation`)
 - [ ] HTTPS / TLS configured (nginx/reverse proxy)
 - [ ] Rate limiting enabled on auth and send endpoints
 - [ ] Log aggregation configured for `[delivery-audit]` entries
 - [ ] `/ops/health` responds 200 before traffic is sent
+
+---
+
+## Phase 13A: Credential Vault Hardening
+
+### OMNI_API_KEY_ENCRYPTION_SECRET
+
+- **Required** for storing channel credentials and AI API keys
+- Must be 32-byte hex (64 hex chars), base64 (44 chars), or any string (SHA-256 hashed)
+- Never commit to version control
+- Rotate by re-encrypting stored `credentialRef` blobs (tooling in Phase 14)
+
+### Channel Credential Storage Rules
+
+| Data | Storage | Never stored |
+|------|---------|-------------|
+| WABA ID | Plaintext (non-secret) | — |
+| Phone Number ID | Plaintext (non-secret) | — |
+| Access Token | AES-256-GCM encrypted `credentialRef` | Raw value |
+| App Secret | AES-256-GCM encrypted `credentialRef` | Raw value |
+| Phone Number | `phoneLast4` (last 4 digits only) | Full number |
+
+### Safety Flag Defaults
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `OMNI_ALLOW_WA_SESSION` | `false` | Required for WA Web session activation |
+| `OMNI_ENABLE_REAL_META_SEND` | `false` | Required for Meta API message send |
+| `OMNI_ENABLE_ONBOARDING_AI` | `false` | Required for AI-generated onboarding preview |
