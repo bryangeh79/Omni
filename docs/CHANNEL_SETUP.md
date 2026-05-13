@@ -1,4 +1,4 @@
-# Omni Channel Setup Wizard — Phase 12B → 13A
+# Omni Channel Setup Wizard — Phase 12B → 13B
 
 ## Purpose
 
@@ -149,10 +149,42 @@ Phase 13A additions:
 
 ---
 
-## Limitations (Phase 13A)
+## Phase 13B Additions
+
+### Meta Webhook Setup Wizard (`/channels/setup/meta-webhook`)
+
+Step-by-step guide for configuring Meta WhatsApp Business Platform webhook:
+1. Create Meta App
+2. Add WhatsApp product, connect WABA
+3. Get Phone Number ID
+4. Configure webhook callback URL + verify token
+5. Subscribe to `messages` webhook field
+6. Save credentials
+
+**Wizard state** stored in `ChannelSetupDraft.activationNotes` JSON (no new DB migration needed).
+
+New API endpoints:
+- `GET /channels/setup/meta-webhook/status` — wizard progress, no raw tokens
+- `POST /channels/setup/meta-webhook/save-draft` — saves step progress, verify token last4 only
+- `POST /channels/setup/meta-webhook/test-stub` — STUB test, no Meta API call
+
+### Launch Checklist (`/launch-checklist`)
+
+Deterministic readiness checklist with 9 items, 3 launch status values, and safety state display. See `docs/LAUNCH_CHECKLIST.md` for full reference.
+
+`GET /channels/setup/launch-checklist` — no DB writes, no external calls.
+
+### Test Message Stub
+
+`POST /channels/setup/test-message-stub` — accepts `{ toPhone, message, channelType }`, returns preview with `sendStatus: 'STUB_NOT_SENT'`. Raw phone never stored or returned (phoneMasked only).
+
+---
+
+## Limitations (Phase 13B)
 
 - Real WA Web QR scan not implemented (Phase 14)
-- Real Meta webhook configuration wizard not implemented (Phase 14)
+- Real webhook delivery verification not implemented (Phase 14)
 - `credentialRef` encryption requires `OMNI_API_KEY_ENCRYPTION_SECRET` to be configured
 - One draft per tenant (not per channel) — multi-channel support is Phase 14+
 - No credential rotation flow yet
+- Meta App Dashboard steps must be done manually (no API automation)

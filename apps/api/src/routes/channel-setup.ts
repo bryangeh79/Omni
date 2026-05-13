@@ -1,5 +1,6 @@
-// Channel Setup Wizard API — Phase 13A: DB persistence + credential vault + guarded activation
+// Channel Setup Wizard API — Phase 13A + 13B
 //
+// Phase 13A:
 // GET  /channels/setup/status           — persisted draft state (no secrets)
 // POST /channels/setup/save-draft       — persist draft to DB
 // POST /channels/setup/test             — stub test + update DB testStatus
@@ -8,6 +9,13 @@
 // DELETE /channels/setup/credentials   — clear stored credential ref
 // POST /channels/setup/request-activation — guarded; blocked by default without env flags
 // POST /channels/setup/confirm-activation — guarded; blocked by default without env flags
+//
+// Phase 13B:
+// GET  /channels/setup/meta-webhook/status   — Meta webhook wizard state (no secrets)
+// POST /channels/setup/meta-webhook/save-draft — save webhook wizard progress
+// POST /channels/setup/meta-webhook/test-stub  — stub webhook test (no Meta API call)
+// GET  /channels/setup/launch-checklist       — deterministic launch readiness checklist
+// POST /channels/setup/test-message-stub      — stub send preview (never sends)
 //
 // Safety rules:
 //   - All endpoints: requireAuth, tenantId from JWT only.
@@ -384,6 +392,293 @@ export async function channelSetupRoutes(app: FastifyInstance) {
       note: activated
         ? 'Setup draft marked ACTIVE. Real channel session start (QR/Meta webhook) is a separate step — see /channels/setup/status for next steps.'
         : `Activation confirm blocked. ${blockers.join('; ')}`,
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 13B: Meta Webhook Setup Wizard
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/meta-webhook/status ───────────────────────────────
+  // Returns webhook wizard state — no secrets, no verify tokens
+  app.get('/meta-webhook/status', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const draft = await getOrCreateDraft(tenantId)
+
+    // Parse webhook wizard progress from activationNotes JSON
+    let webhookProgress: Record<string, unknown> = {}
+    try {
+      if (draft.activationNotes) {
+        const parsed = JSON.parse(draft.activationNotes) as Record<string, unknown>
+        if (parsed.webhookWizard) webhookProgress = parsed.webhookWizard as Record<string, unknown>
+      }
+    } catch { /* ignore parse errors — treat as empty */ }
+
+    return {
+      tenantId,
+      channelType:          draft.channelType,
+      credentialStatus:     draft.credentialStatus,
+      webhookSubscribed:    webhookProgress.webhookSubscribed ?? false,
+      verifyTokenSet:       webhookProgress.verifyTokenSet ?? false,
+      verifyTokenLast4:     webhookProgress.verifyTokenLast4 ?? null,  // safe display only
+      stepCompleted:        webhookProgress.stepCompleted ?? 0,
+      webhookCallbackNote:  'Callback URL: {your-api-base}/webhook/meta — configure in Meta App Dashboard',
+      realMetaSendEnabled:  false,
+      note: 'Webhook setup wizard state. No raw tokens returned.',
+    }
+  })
+
+  // ── POST /channels/setup/meta-webhook/save-draft ──────────────────────────
+  // Save webhook wizard progress — stores progress in activationNotes JSON
+  app.post<{
+    Body: {
+      webhookSubscribed?:  boolean
+      verifyTokenHint?:    string   // only last 4 chars stored; never echoed raw
+      stepCompleted?:      number
+      wabaId?:             string
+      phoneNumberId?:      string
+    }
+  }>('/meta-webhook/save-draft', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const { webhookSubscribed, verifyTokenHint, stepCompleted, wabaId, phoneNumberId } = req.body ?? {}
+
+    const draft = await getOrCreateDraft(tenantId)
+
+    // Parse existing activationNotes
+    let notes: Record<string, unknown> = {}
+    try {
+      if (draft.activationNotes) notes = JSON.parse(draft.activationNotes) as Record<string, unknown>
+    } catch { /* ignore */ }
+
+    // Update webhook wizard progress
+    const existingWizard = (notes.webhookWizard as Record<string, unknown>) ?? {}
+    const verifyTokenLast4 = verifyTokenHint ? verifyTokenHint.trim().slice(-4) : (existingWizard.verifyTokenLast4 ?? null)
+
+    notes.webhookWizard = {
+      ...existingWizard,
+      ...(webhookSubscribed !== undefined ? { webhookSubscribed } : {}),
+      ...(verifyTokenHint   !== undefined ? { verifyTokenSet: true, verifyTokenLast4 } : {}),
+      ...(stepCompleted     !== undefined ? { stepCompleted } : {}),
+      ...(wabaId            !== undefined ? { wabaIdSet: true } : {}),
+      ...(phoneNumberId     !== undefined ? { phoneNumberIdSet: true } : {}),
+      savedAt: new Date().toISOString(),
+    }
+
+    await prisma.channelSetupDraft.update({
+      where: { tenantId },
+      data:  { activationNotes: JSON.stringify(notes) },
+    })
+
+    return {
+      saved:              true,
+      tenantId,
+      stepCompleted:      notes.webhookWizard && typeof (notes.webhookWizard as Record<string, unknown>).stepCompleted === 'number'
+        ? (notes.webhookWizard as Record<string, unknown>).stepCompleted
+        : 0,
+      webhookSubscribed:  !!(notes.webhookWizard as Record<string, unknown>).webhookSubscribed,
+      verifyTokenSet:     !!(notes.webhookWizard as Record<string, unknown>).verifyTokenSet,
+      verifyTokenLast4:   (notes.webhookWizard as Record<string, unknown>).verifyTokenLast4 ?? null,
+      note: 'Webhook wizard progress saved. No raw tokens stored or returned.',
+    }
+  })
+
+  // ── POST /channels/setup/meta-webhook/test-stub ───────────────────────────
+  // Stub webhook test — NEVER calls real Meta API
+  app.post('/meta-webhook/test-stub', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    return {
+      tenantId,
+      testResult:       'STUB',
+      metaApiCalled:    false,
+      webhookVerified:  false,
+      note: 'Safe stub test. Real webhook verification requires Meta App Dashboard configuration and real credentials.',
+      realMetaSendEnabled: false,
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 13B: Launch Checklist
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/launch-checklist ─────────────────────────────────
+  // Deterministic readiness checklist — no real calls, no secrets
+  app.get('/launch-checklist', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    // Fetch all relevant state in parallel
+    const [onboarding, kbCount, draft, followUpRuleCount] = await Promise.all([
+      prisma.onboardingDraft.findUnique({ where: { tenantId } }),
+      prisma.knowledgeItem.count({ where: { tenantId, isActive: true } }),
+      prisma.channelSetupDraft.findUnique({ where: { tenantId } }),
+      prisma.followUpRule.count({ where: { tenantId } }),
+    ])
+
+    const waSessionAllowed  = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed   = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+    const aiEnabled         = process.env.OMNI_ENABLE_ONBOARDING_AI  === 'true'
+
+    const onboardingCompleted = onboarding?.status === 'ENABLED'
+    const kbReady             = kbCount > 0
+    const channelTypeSaved    = !!draft?.channelType
+    const credentialsSaved    = draft?.credentialStatus === 'ENCRYPTED_STORED' || draft?.credentialStatus === 'DRAFT'
+    const stubTestDone        = draft?.setupStatus !== 'DRAFT' && !!draft?.lastTestAt
+    const activationRequested = draft?.setupStatus === 'ACTIVATION_PENDING' || draft?.setupStatus === 'ACTIVE'
+    const followUpReady       = followUpRuleCount > 0
+
+    const items = [
+      {
+        key:     'onboarding_completed',
+        label:   'Onboarding wizard completed',
+        status:  onboardingCompleted ? 'DONE' : 'PENDING',
+        action:  '/onboarding',
+        detail:  onboardingCompleted ? 'Enabled' : 'Complete onboarding wizard first',
+      },
+      {
+        key:     'knowledge_base_ready',
+        label:   'Knowledge base has active items',
+        status:  kbReady ? 'DONE' : 'WARN',
+        action:  '/knowledge',
+        detail:  kbReady ? `${kbCount} active item${kbCount !== 1 ? 's' : ''}` : 'Add product/service materials in onboarding or manually',
+      },
+      {
+        key:     'channel_type_saved',
+        label:   'Channel type selected and draft saved',
+        status:  channelTypeSaved ? 'DONE' : 'PENDING',
+        action:  '/channels/setup',
+        detail:  channelTypeSaved ? `Type: ${draft?.channelType}` : 'Choose WA_WEB or META_WA_BUSINESS',
+      },
+      {
+        key:     'credentials_saved',
+        label:   'Channel credentials configured (Meta API)',
+        status:  credentialsSaved ? 'DONE' : (draft?.channelType === 'META_WA_BUSINESS' ? 'PENDING' : 'SKIP'),
+        action:  '/channels/setup',
+        detail:  credentialsSaved ? `Credential status: ${draft?.credentialStatus}` : (draft?.channelType !== 'META_WA_BUSINESS' ? 'Not required for WA_WEB' : 'Save Meta API credentials'),
+      },
+      {
+        key:     'stub_test_done',
+        label:   'Stub connection test completed',
+        status:  stubTestDone ? 'DONE' : 'PENDING',
+        action:  '/channels/setup',
+        detail:  stubTestDone ? `Last test: ${draft?.lastTestAt?.toISOString() ?? 'unknown'}` : 'Run stub test from channel setup',
+      },
+      {
+        key:     'activation_requested',
+        label:   'Activation requested',
+        status:  activationRequested ? 'DONE' : 'PENDING',
+        action:  '/channels/setup',
+        detail:  activationRequested ? `Status: ${draft?.setupStatus}` : 'Request activation from channel setup',
+      },
+      {
+        key:     'follow_up_rules',
+        label:   'Follow-up automation rules configured',
+        status:  followUpReady ? 'DONE' : 'WARN',
+        action:  '/boss',
+        detail:  followUpReady ? `${followUpRuleCount} rule${followUpRuleCount !== 1 ? 's' : ''} configured` : 'Optional — configure follow-up rules for better conversion',
+      },
+      {
+        key:     'real_wa_session_flag',
+        label:   'OMNI_ALLOW_WA_SESSION enabled (WA Web activation)',
+        status:  waSessionAllowed ? 'DONE' : 'BLOCKED',
+        action:  null,
+        detail:  waSessionAllowed ? 'Enabled by operator' : 'Operator must set OMNI_ALLOW_WA_SESSION=true in .env to activate WA Web',
+      },
+      {
+        key:     'real_meta_send_flag',
+        label:   'OMNI_ENABLE_REAL_META_SEND enabled (Meta API activation)',
+        status:  metaSendAllowed ? 'DONE' : 'BLOCKED',
+        action:  null,
+        detail:  metaSendAllowed ? 'Enabled by operator' : 'Operator must set OMNI_ENABLE_REAL_META_SEND=true in .env to activate Meta API',
+      },
+    ]
+
+    // Determine overall launch status
+    const criticalPending = items
+      .filter(i => i.status === 'PENDING' && ['onboarding_completed', 'channel_type_saved'].includes(i.key))
+      .length
+
+    const allFlagsBlocked = !waSessionAllowed && !metaSendAllowed
+    const basicConfigDone = onboardingCompleted && channelTypeSaved
+
+    let launchStatus: string
+    let launchNote: string
+
+    if (criticalPending > 0) {
+      launchStatus = 'NOT_READY'
+      launchNote   = 'Complete onboarding and choose a channel type before proceeding.'
+    } else if (!basicConfigDone) {
+      launchStatus = 'NOT_READY'
+      launchNote   = 'Basic configuration incomplete.'
+    } else if (allFlagsBlocked) {
+      launchStatus = 'READY_FOR_STAGING'
+      launchNote   = 'Configuration is ready. Real sending is disabled by default — operator must enable flags for live use.'
+    } else {
+      launchStatus = 'READY_FOR_PRODUCTION_REVIEW'
+      launchNote   = 'Real send flag(s) are enabled. Review all settings before going live.'
+    }
+
+    return {
+      tenantId,
+      launchStatus,
+      launchNote,
+      items,
+      summary: {
+        done:    items.filter(i => i.status === 'DONE').length,
+        pending: items.filter(i => i.status === 'PENDING').length,
+        warn:    items.filter(i => i.status === 'WARN').length,
+        blocked: items.filter(i => i.status === 'BLOCKED').length,
+        skip:    items.filter(i => i.status === 'SKIP').length,
+      },
+      safety: {
+        realWaSessionEnabled:  waSessionAllowed,
+        realMetaSendEnabled:   metaSendAllowed,
+        aiProviderEnabled:     aiEnabled,
+        realSendActive:        false,  // always false in this response
+      },
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 13B: Test Message Stub
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /channels/setup/test-message-stub ────────────────────────────────
+  // Accepts a fake phone/message but NEVER sends anything.
+  // Returns a preview of what would be sent and sendStatus=STUB_NOT_SENT.
+  app.post<{
+    Body: {
+      toPhone?:    string
+      message?:    string
+      channelType?: string
+    }
+  }>('/test-message-stub', { preHandler: requireAuth }, async (req, reply) => {
+    const { tenantId } = getAuthUser(req)
+    const { toPhone, message, channelType } = req.body ?? {}
+
+    if (!toPhone || !message) {
+      return reply.status(400).send({ error: 'toPhone and message are required for test message stub.' })
+    }
+
+    const draft = await getOrCreateDraft(tenantId)
+    const effectiveChannelType = channelType ?? draft.channelType ?? 'UNKNOWN'
+
+    // Mask phone for response (show only last 4)
+    const phoneMasked = toPhone.trim().length >= 4
+      ? `****${toPhone.trim().slice(-4)}`
+      : '****'
+
+    return {
+      tenantId,
+      sendStatus:       'STUB_NOT_SENT',
+      toPhoneMasked:    phoneMasked,
+      channelType:      effectiveChannelType,
+      messagePreview:   message.trim().slice(0, 200),  // truncated preview only
+      wouldSendLength:  message.trim().length,
+      realSent:         false,
+      metaApiCalled:    false,
+      waSessionUsed:    false,
+      blockedReason:    'Real sending disabled by default. Set OMNI_ENABLE_REAL_META_SEND=true or OMNI_ALLOW_WA_SESSION=true to enable.',
+      channelReady:     draft.setupStatus === 'ACTIVE',
+      note: 'Safe stub. No WhatsApp message was sent. Raw phone number is not stored or returned.',
     }
   })
 }

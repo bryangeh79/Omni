@@ -236,12 +236,14 @@ export default function ChannelSetupPage() {
               </div>
             </div>
           </div>
-          <nav className="flex items-center gap-3 text-xs">
+          <nav className="flex items-center gap-3 text-xs flex-wrap">
             <a href="/onboarding" className="text-green-600 hover:text-green-800">← Onboarding</a>
             <span className="text-gray-200">|</span>
-            <a href="/knowledge" className="text-gray-400 hover:text-gray-600">Knowledge Base</a>
+            <a href="/channels/setup/meta-webhook" className="text-blue-500 hover:text-blue-700">Meta Webhook</a>
             <span className="text-gray-200">|</span>
-            <a href="/boss" className="text-gray-400 hover:text-gray-600">Dashboard</a>
+            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">🚀 Launch Checklist</a>
+            <span className="text-gray-200">|</span>
+            <a href="/knowledge" className="text-gray-400 hover:text-gray-600">Knowledge</a>
           </nav>
         </div>
       </header>
@@ -390,9 +392,23 @@ export default function ChannelSetupPage() {
           </div>
         )}
 
+        {/* Meta webhook setup link */}
+        {isMetaType && (
+          <a href="/channels/setup/meta-webhook" className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl p-4 hover:bg-blue-100 transition-all">
+            <span className="text-2xl">🔗</span>
+            <div>
+              <p className="text-sm font-bold text-blue-800">Meta Webhook Setup Wizard</p>
+              <p className="text-xs text-blue-600">Configure webhook URL, verify token, and complete Meta App setup steps →</p>
+            </div>
+          </a>
+        )}
+
         {/* Activation readiness checklist */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <h3 className="text-sm font-bold text-gray-800">Activation Readiness</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-800">Activation Readiness</h3>
+            <a href="/launch-checklist" className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Full Checklist 🚀</a>
+          </div>
           <div className="space-y-1.5">
             {checklist.filter(c => c.applicable !== false).map((c, i) => (
               <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${c.done ? 'bg-emerald-50' : 'bg-gray-50'}`}>

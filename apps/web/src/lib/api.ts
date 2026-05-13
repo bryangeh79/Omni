@@ -632,6 +632,93 @@ export async function confirmActivation(): Promise<ActivationResult & { realSess
   return apiFetch('/channels/setup/confirm-activation', { method: 'POST' })
 }
 
+// ── Meta Webhook Setup (Phase 13B) ────────────────────────────────────────────
+export interface MetaWebhookStatus {
+  tenantId:            string
+  channelType:         string | null
+  credentialStatus:    string
+  webhookSubscribed:   boolean
+  verifyTokenSet:      boolean
+  verifyTokenLast4:    string | null
+  stepCompleted:       number
+  webhookCallbackNote: string
+  realMetaSendEnabled: boolean
+  note:                string
+}
+
+export async function fetchMetaWebhookStatus(): Promise<MetaWebhookStatus> {
+  return apiFetch<MetaWebhookStatus>('/channels/setup/meta-webhook/status')
+}
+
+export async function saveMetaWebhookDraft(data: {
+  webhookSubscribed?: boolean
+  verifyTokenHint?:   string
+  stepCompleted?:     number
+  wabaId?:            string
+  phoneNumberId?:     string
+}): Promise<{ saved: boolean; stepCompleted: number; webhookSubscribed: boolean; verifyTokenSet: boolean; verifyTokenLast4: string | null; note: string }> {
+  return apiFetch('/channels/setup/meta-webhook/save-draft', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function testMetaWebhookStub(): Promise<{ testResult: string; metaApiCalled: boolean; webhookVerified: boolean; note: string }> {
+  return apiFetch('/channels/setup/meta-webhook/test-stub', { method: 'POST' })
+}
+
+// ── Launch Checklist (Phase 13B) ──────────────────────────────────────────────
+export interface ChecklistItem {
+  key:    string
+  label:  string
+  status: 'DONE' | 'PENDING' | 'WARN' | 'BLOCKED' | 'SKIP'
+  action: string | null
+  detail: string
+}
+
+export interface LaunchChecklist {
+  tenantId:    string
+  launchStatus: 'NOT_READY' | 'READY_FOR_STAGING' | 'READY_FOR_PRODUCTION_REVIEW'
+  launchNote:  string
+  items:       ChecklistItem[]
+  summary:     { done: number; pending: number; warn: number; blocked: number; skip: number }
+  safety: {
+    realWaSessionEnabled: boolean
+    realMetaSendEnabled:  boolean
+    aiProviderEnabled:    boolean
+    realSendActive:       boolean
+  }
+}
+
+export async function fetchLaunchChecklist(): Promise<LaunchChecklist> {
+  return apiFetch<LaunchChecklist>('/channels/setup/launch-checklist')
+}
+
+// ── Test Message Stub (Phase 13B) ─────────────────────────────────────────────
+export async function testMessageStub(data: {
+  toPhone:     string
+  message:     string
+  channelType?: string
+}): Promise<{
+  tenantId:        string
+  sendStatus:      'STUB_NOT_SENT'
+  toPhoneMasked:   string
+  channelType:     string
+  messagePreview:  string
+  wouldSendLength: number
+  realSent:        boolean
+  metaApiCalled:   boolean
+  waSessionUsed:   boolean
+  blockedReason:   string
+  channelReady:    boolean
+  note:            string
+}> {
+  return apiFetch('/channels/setup/test-message-stub', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────
 export interface CostEstimate {
   ai:             { totalReplies: number; totalAiCostUsd: number; totalAiCostRm: number }

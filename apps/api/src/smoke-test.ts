@@ -2683,6 +2683,104 @@ async function smoke() {
   check('credentials status reset',                         typeof cs13DelCredBody.credentialStatus === 'string')
   check('credentials delete without auth → 401',            (await del('/channels/setup/credentials')).status === 401)
 
+  // ── Phase 13B: Meta Webhook + Launch Checklist + Test Message Stub ───────
+
+  console.log('\n123. Phase 13B: /channels/setup/meta-webhook/status (auth-required, no secrets)')
+  check('GET /channels/setup/meta-webhook/status without auth → 401', (await get('/channels/setup/meta-webhook/status')).status === 401)
+
+  const mwhStatusRes  = await get('/channels/setup/meta-webhook/status', accessToken)
+  const mwhStatusBody = await mwhStatusRes.json() as Record<string, unknown>
+  check('GET /channels/setup/meta-webhook/status → 200',          mwhStatusRes.status === 200)
+  check('meta-webhook status has tenantId',                        typeof mwhStatusBody.tenantId === 'string')
+  check('meta-webhook status has webhookSubscribed (bool)',        typeof mwhStatusBody.webhookSubscribed === 'boolean')
+  check('meta-webhook status has verifyTokenSet (bool)',           typeof mwhStatusBody.verifyTokenSet === 'boolean')
+  check('meta-webhook status realMetaSendEnabled=false',           mwhStatusBody.realMetaSendEnabled === false)
+  check('meta-webhook status no raw secrets',                      !JSON.stringify(mwhStatusBody).includes('JWT_SECRET'))
+
+  console.log('\n124. Phase 13B: /channels/setup/meta-webhook/save-draft')
+  check('POST /channels/setup/meta-webhook/save-draft without auth → 401', (await post('/channels/setup/meta-webhook/save-draft', {})).status === 401)
+
+  const mwhSaveRes  = await post('/channels/setup/meta-webhook/save-draft', {
+    webhookSubscribed: true,
+    verifyTokenHint:   'omni-verify-smoke-1234',  // safe fake token — last4: 1234
+    stepCompleted:     3,
+    wabaId:            'smoke-waba-id',
+  }, accessToken)
+  const mwhSaveBody = await mwhSaveRes.json() as Record<string, unknown>
+  check('POST /channels/setup/meta-webhook/save-draft → 200',     mwhSaveRes.status === 200)
+  check('meta-webhook save-draft saved=true',                      mwhSaveBody.saved === true)
+  check('meta-webhook save-draft has stepCompleted',               typeof mwhSaveBody.stepCompleted === 'number')
+  check('meta-webhook save-draft has webhookSubscribed (bool)',    typeof mwhSaveBody.webhookSubscribed === 'boolean')
+  check('meta-webhook save-draft has verifyTokenSet (bool)',       typeof mwhSaveBody.verifyTokenSet === 'boolean')
+  // Critical: raw verify token must NOT appear in response
+  check('meta-webhook save-draft no raw verifyTokenHint',         !JSON.stringify(mwhSaveBody).includes('omni-verify-smoke-1234'))
+  check('meta-webhook save-draft no raw wabaId in response',      !JSON.stringify(mwhSaveBody).includes('smoke-waba-id'))
+
+  console.log('\n125. Phase 13B: /channels/setup/meta-webhook/test-stub (no real Meta API call)')
+  check('POST /channels/setup/meta-webhook/test-stub without auth → 401', (await post('/channels/setup/meta-webhook/test-stub', {})).status === 401)
+
+  const mwhTestRes  = await post('/channels/setup/meta-webhook/test-stub', {}, accessToken)
+  const mwhTestBody = await mwhTestRes.json() as Record<string, unknown>
+  check('POST /channels/setup/meta-webhook/test-stub → 200',      mwhTestRes.status === 200)
+  check('meta-webhook test-stub testResult=STUB',                  mwhTestBody.testResult === 'STUB')
+  check('meta-webhook test-stub metaApiCalled=false',              mwhTestBody.metaApiCalled === false)
+  check('meta-webhook test-stub webhookVerified=false',            mwhTestBody.webhookVerified === false)
+  check('meta-webhook test-stub realMetaSendEnabled=false',        mwhTestBody.realMetaSendEnabled === false)
+  check('meta-webhook test-stub no secrets',                       !JSON.stringify(mwhTestBody).includes('JWT_SECRET'))
+
+  console.log('\n126. Phase 13B: /channels/setup/launch-checklist (deterministic, no real calls)')
+  check('GET /channels/setup/launch-checklist without auth → 401', (await get('/channels/setup/launch-checklist')).status === 401)
+
+  const lcRes  = await get('/channels/setup/launch-checklist', accessToken)
+  const lcBody = await lcRes.json() as Record<string, unknown>
+  check('GET /channels/setup/launch-checklist → 200',              lcRes.status === 200)
+  check('launch-checklist has tenantId',                           typeof lcBody.tenantId === 'string')
+  check('launch-checklist has launchStatus',                       typeof lcBody.launchStatus === 'string')
+  check('launch-checklist launchStatus is valid enum',             ['NOT_READY', 'READY_FOR_STAGING', 'READY_FOR_PRODUCTION_REVIEW'].includes(lcBody.launchStatus as string))
+  check('launch-checklist has items array',                        Array.isArray(lcBody.items))
+  check('launch-checklist has summary object',                     typeof lcBody.summary === 'object')
+  check('launch-checklist has safety object',                      typeof lcBody.safety === 'object')
+  const lcSafety = lcBody.safety as Record<string, unknown>
+  check('launch-checklist safety.realWaSessionEnabled=false',      lcSafety.realWaSessionEnabled === false)
+  check('launch-checklist safety.realMetaSendEnabled=false',       lcSafety.realMetaSendEnabled === false)
+  check('launch-checklist safety.realSendActive=false',            lcSafety.realSendActive === false)
+  check('launch-checklist no secrets',                             !JSON.stringify(lcBody).includes('JWT_SECRET'))
+  const lcItems = lcBody.items as Record<string, unknown>[]
+  if (lcItems.length > 0) {
+    const first = lcItems[0]
+    check('launch-checklist item has key',   typeof first.key === 'string')
+    check('launch-checklist item has label', typeof first.label === 'string')
+    check('launch-checklist item has status', typeof first.status === 'string')
+  }
+
+  console.log('\n127. Phase 13B: /channels/setup/test-message-stub (never sends)')
+  check('POST /channels/setup/test-message-stub without auth → 401', (await post('/channels/setup/test-message-stub', { toPhone: '+1', message: 'x' })).status === 401)
+  // Missing fields → 400
+  check('test-message-stub missing fields → 400', (await post('/channels/setup/test-message-stub', {}, accessToken)).status === 400)
+
+  const tmRes  = await post('/channels/setup/test-message-stub', {
+    toPhone:  '+60123456789',
+    message:  'Hello, this is a smoke test message preview',
+    channelType: 'META_WA_BUSINESS',
+  }, accessToken)
+  const tmBody = await tmRes.json() as Record<string, unknown>
+  check('POST /channels/setup/test-message-stub → 200',            tmRes.status === 200)
+  check('test-message-stub sendStatus=STUB_NOT_SENT',              tmBody.sendStatus === 'STUB_NOT_SENT')
+  check('test-message-stub realSent=false',                        tmBody.realSent === false)
+  check('test-message-stub metaApiCalled=false',                   tmBody.metaApiCalled === false)
+  check('test-message-stub waSessionUsed=false',                   tmBody.waSessionUsed === false)
+  // Critical: raw phone number must NOT appear in response
+  check('test-message-stub no raw phone in response',              !JSON.stringify(tmBody).includes('+60123456789'))
+  check('test-message-stub has toPhoneMasked',                     typeof tmBody.toPhoneMasked === 'string')
+  check('test-message-stub has messagePreview (truncated)',        typeof tmBody.messagePreview === 'string')
+  check('test-message-stub has blockedReason',                     typeof tmBody.blockedReason === 'string')
+  check('test-message-stub no secrets',                            !JSON.stringify(tmBody).includes('JWT_SECRET'))
+
+  console.log('\n128. Phase 13B: safety gates still active after all new routes')
+  check('OMNI_ALLOW_WA_SESSION still not enabled',                 process.env.OMNI_ALLOW_WA_SESSION !== 'true')
+  check('OMNI_ENABLE_REAL_META_SEND still not enabled',            process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
+  check('OMNI_ENABLE_ONBOARDING_AI still not enabled',             process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
