@@ -1,10 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  login, clearToken, getToken, fetchBossToday, fetchBossMetrics,
-  type BossToday, type BossMetrics, type ActionItem,
+  login, clearToken, getToken, fetchBossToday, fetchBossMetrics, fetchBossPipeline,
+  createRealtimeConnection,
+  type BossToday, type BossMetrics, type ActionItem, type BossPipeline, type SseTransport,
 } from '@/lib/api'
+
+// SSE event types that should trigger a Boss refresh
+const BOSS_REFRESH_EVENTS = new Set([
+  'conversation.updated', 'conversation.message.created', 'conversation.handoff.updated',
+  'followup.created', 'followup.updated', 'followup.due', 'customer.updated',
+])
+
+const STAGE_COLORS_HEX: Record<string, string> = {
+  NEW: '#6b7280', INTERESTED: '#3b82f6', HIGH_INTENT: '#f97316',
+  QUOTED: '#eab308', BOOKED: '#22c55e', WON: '#10b981', LOST: '#ef4444', AFTER_SALES: '#a855f7',
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -93,33 +105,113 @@ const STAGE_COLOR: Record<string, string> = {
   LOST: 'bg-red-100 text-red-700', AFTER_SALES: 'bg-purple-100 text-purple-700',
 }
 
+// ── Pipeline section ──────────────────────────────────────────────────────────
+function PipelineSection({ pipeline }: { pipeline: BossPipeline }) {
+  const maxCount = Math.max(...pipeline.funnel.map(f => f.count), 1)
+  const VISIBLE = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST']
+  const visible = pipeline.funnel.filter(f => VISIBLE.includes(f.stage))
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Lead Pipeline</h3>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${pipeline.summary.pipelineHealthPct >= 50 ? 'bg-emerald-100 text-emerald-700' : pipeline.summary.pipelineHealthPct >= 20 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+          {pipeline.summary.pipelineHealthPct}% healthy
+        </span>
+      </div>
+
+      {/* Funnel bars */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <div className="space-y-2.5">
+          {visible.map((item) => (
+            <div key={item.stage} className="flex items-center gap-3">
+              <div className="w-24 text-xs font-medium text-gray-600 flex-shrink-0">{item.stage}</div>
+              <div className="flex-1 bg-gray-50 rounded-full h-7 overflow-hidden relative">
+                <div
+                  className="h-full rounded-full flex items-center px-3 transition-all"
+                  style={{
+                    width: `${Math.max(5, (item.count / maxCount) * 100)}%`,
+                    backgroundColor: STAGE_COLORS_HEX[item.stage] ?? '#6b7280',
+                    opacity: 0.85,
+                  }}
+                >
+                  <span className="text-white text-xs font-bold">{item.count > 0 ? item.count : ''}</span>
+                </div>
+              </div>
+              <div className="w-14 text-right text-xs text-gray-500 flex-shrink-0">
+                {item.count}
+                {item.overdueFollowUps > 0 && (
+                  <span className="ml-1 text-red-500 font-bold">↑{item.overdueFollowUps}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-50 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <div><span className="text-gray-400">New ({pipeline.range})</span><br /><span className="font-semibold text-gray-800">{pipeline.summary.newSince}</span></div>
+          <div><span className="text-gray-400">Won ({pipeline.range})</span><br /><span className="font-semibold text-emerald-600">{pipeline.summary.wonSince}</span></div>
+          <div><span className="text-gray-400">Lost ({pipeline.range})</span><br /><span className="font-semibold text-red-600">{pipeline.summary.lostSince}</span></div>
+          <div><span className="text-gray-400">High Intent (no owner)</span><br /><span className={`font-semibold ${pipeline.summary.highIntentNoOwner > 0 ? 'text-orange-600' : 'text-gray-800'}`}>{pipeline.summary.highIntentNoOwner}</span></div>
+        </div>
+
+        <p className="mt-3 text-xs text-gray-400 italic">{pipeline.summary.note}</p>
+        <p className="text-xs text-gray-300 mt-1">↑ red number = overdue follow-ups · Legend: higher bar = more leads at that stage</p>
+      </div>
+    </section>
+  )
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function BossDashboardPage() {
-  const [authed,  setAuthed]  = useState(false)
-  const [today,   setToday]   = useState<BossToday | null>(null)
-  const [metrics, setMetrics] = useState<BossMetrics | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
+  const [authed,    setAuthed]    = useState(false)
+  const [today,     setToday]     = useState<BossToday | null>(null)
+  const [metrics,   setMetrics]   = useState<BossMetrics | null>(null)
+  const [pipeline,  setPipeline]  = useState<BossPipeline | null>(null)
+  const [pipeRange, setPipeRange] = useState<'today' | '7d' | '30d'>('30d')
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const [sseTransport, setSseTransport] = useState<SseTransport>('unknown')
+  const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setAuthed(!!getToken()) }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (currentRange?: string) => {
     if (!getToken()) return
     setError(null)
     try {
-      const [t, m] = await Promise.all([fetchBossToday(), fetchBossMetrics()])
-      setToday(t); setMetrics(m); setLastRefresh(new Date())
+      const range = currentRange ?? pipeRange
+      const [t, m, p] = await Promise.all([fetchBossToday(), fetchBossMetrics(), fetchBossPipeline(range)])
+      setToday(t); setMetrics(m); setPipeline(p); setLastRefresh(new Date())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
-  }, [])
+  }, [pipeRange])
 
   useEffect(() => {
     if (!authed) return
     load()
-    // Refresh every 2 minutes
-    const interval = setInterval(load, 120_000)
+    // Fallback polling every 2 minutes
+    const interval = setInterval(() => load(), 120_000)
     return () => clearInterval(interval)
+  }, [authed, load])
+
+  // SSE realtime refresh
+  useEffect(() => {
+    if (!authed) return
+    const src = createRealtimeConnection(
+      (type) => {
+        if (BOSS_REFRESH_EVENTS.has(type)) {
+          load()
+        }
+      },
+      (transport) => setSseTransport(transport),
+    )
+    if (src) {
+      sseRef.current = src
+      src.onerror = () => setSseTransport('unknown')
+    }
+    return () => { src?.close(); setSseTransport('unknown') }
   }, [authed, load])
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); load() }} />
@@ -146,9 +238,16 @@ export default function BossDashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div
+              className={`w-2 h-2 rounded-full ${sseTransport === 'redis' ? 'bg-green-400' : sseTransport === 'memory' ? 'bg-yellow-400' : 'bg-gray-300'}`}
+              title={sseTransport === 'redis' ? 'Real-time (Redis)' : sseTransport === 'memory' ? 'Real-time (local)' : 'Polling mode'}
+            />
+            <span className="text-xs text-gray-400">{sseTransport !== 'unknown' ? 'Live' : 'Polling'}</span>
+          </div>
           <a href="/inbox" className="text-xs text-blue-500 hover:text-blue-700 font-medium">Inbox →</a>
           <a href="/pwa" className="text-xs text-blue-500 hover:text-blue-700 font-medium">Mobile →</a>
-          <button onClick={() => { clearToken(); setAuthed(false) }} className="text-xs text-gray-400 hover:text-gray-600">Sign out</button>
+          <button onClick={() => { clearToken(); setAuthed(false); sseRef.current?.close() }} className="text-xs text-gray-400 hover:text-gray-600">Sign out</button>
         </div>
       </header>
 
@@ -156,7 +255,7 @@ export default function BossDashboardPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-3 text-sm flex items-center justify-between">
             {error}
-            <button onClick={load} className="font-medium underline">Retry</button>
+            <button onClick={() => { void load() }} className="font-medium underline">Retry</button>
           </div>
         )}
 
@@ -177,7 +276,7 @@ export default function BossDashboardPage() {
                 </h2>
                 <p className="text-sm text-gray-400">Tenant {t.tenantId.slice(0, 12)}…</p>
               </div>
-              <button onClick={load} className="text-sm text-blue-500 hover:text-blue-700 font-medium">↻ Refresh</button>
+              <button onClick={() => { void load() }} className="text-sm text-blue-500 hover:text-blue-700 font-medium">↻ Refresh</button>
             </div>
 
             {/* Urgent actions — if any */}
@@ -269,6 +368,27 @@ export default function BossDashboardPage() {
               </section>
             )}
           </>
+        )}
+
+        {/* Pipeline section */}
+        {pipeline && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Lead Pipeline — Range</h3>
+              <div className="flex gap-1">
+                {(['today', '7d', '30d'] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => { setPipeRange(r); load(r) }}
+                    className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${pipeRange === r ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <PipelineSection pipeline={pipeline} />
+          </section>
         )}
 
         {/* 30-day metrics */}

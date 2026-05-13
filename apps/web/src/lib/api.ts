@@ -1,4 +1,4 @@
-// Omni API client — web dashboard (Phase 8A → 11A)
+// Omni API client — web dashboard (Phase 8A → 11B)
 // Uses localStorage for JWT storage (dev/Phase-8A only; replace with httpOnly cookie in prod)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
@@ -336,6 +336,98 @@ export async function fetchBossToday(): Promise<BossToday> {
 
 export async function fetchBossMetrics(): Promise<BossMetrics> {
   return apiFetch<BossMetrics>('/boss/metrics')
+}
+
+// ── Boss Pipeline + Agents (Phase 11B) ───────────────────────────────────────
+export interface PipelineFunnelItem {
+  stage:            string
+  count:            number
+  overdueFollowUps: number
+  pendingFollowUps: number
+}
+
+export interface BossPipeline {
+  tenantId:  string
+  range:     string
+  asOf:      string
+  funnel:    PipelineFunnelItem[]
+  summary: {
+    totalLeads:         number
+    newSince:           number
+    wonSince:           number
+    lostSince:          number
+    highIntentNoOwner:  number
+    pipelineHealthPct:  number
+    note:               string
+  }
+}
+
+export interface AgentStats {
+  userId:            string
+  name:              string
+  email:             string
+  role:              string
+  openConversations: number
+  closedLast30d:     number
+  handledLast30d:    number
+}
+
+export interface BossAgents {
+  tenantId:   string
+  agents:     AgentStats[]
+  unassigned: number
+}
+
+export async function fetchBossPipeline(range?: string): Promise<BossPipeline> {
+  const q = range ? `?range=${range}` : ''
+  return apiFetch<BossPipeline>(`/boss/pipeline${q}`)
+}
+
+export async function fetchBossAgents(): Promise<BossAgents> {
+  return apiFetch<BossAgents>('/boss/agents')
+}
+
+// ── Onboarding Wizard (Phase 11B) ─────────────────────────────────────────────
+export interface OnboardingStatus {
+  tenantId:       string
+  hasStarted:     boolean
+  status:         string | null
+  completedSteps: number
+  companyName:    string | null
+  industry:       string | null
+  goalsCount:     number
+  hasPreview:     boolean
+  enabledAt:      string | null
+}
+
+export interface OnboardingPreview {
+  aiPersona:         { name: string; tone: string; focus: string; company: string }
+  welcomeMessage:    string
+  faqCategories:     string[]
+  leadStages:        string[]
+  recommendedTags:   string[]
+  followUpScenarios: string[]
+  generationMode:    string
+  note:              string
+}
+
+export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {
+  return apiFetch<OnboardingStatus>('/onboarding/status')
+}
+
+export async function saveOnboardingDraft(data: Record<string, unknown>): Promise<{ saved: boolean }> {
+  return apiFetch<{ saved: boolean }>('/onboarding/draft', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function generateOnboardingPreview(): Promise<{ preview: OnboardingPreview; saved: boolean }> {
+  return apiFetch<{ preview: OnboardingPreview; saved: boolean }>('/onboarding/generate-preview', { method: 'POST' })
+}
+
+export async function enableOnboarding(): Promise<{ enabled: boolean; status: string; note: string }> {
+  return apiFetch<{ enabled: boolean; status: string; note: string }>('/onboarding/enable', { method: 'POST' })
 }
 
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────

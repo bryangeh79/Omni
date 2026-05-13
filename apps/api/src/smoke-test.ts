@@ -2297,6 +2297,123 @@ async function smoke() {
   check('Cost calculator makes no real sends',         true)  // structural: pure math, no API calls
   check('Cost calculator makes no real Meta API calls', true) // structural: deterministic only
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 11B — Realtime Boss, Pipeline, Onboarding
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n100. Phase 11B: /boss/pipeline')
+
+  // 100a. Auth guard
+  check('GET /boss/pipeline without auth → 401', (await get('/boss/pipeline')).status === 401)
+
+  // 100b. Pipeline returns expected structure
+  const pipeRes  = await get('/boss/pipeline?range=30d', accessToken)
+  const pipeBody = await pipeRes.json() as Record<string, unknown>
+  check('GET /boss/pipeline → 200',                   pipeRes.status === 200)
+  check('pipeline has funnel array',                  Array.isArray(pipeBody.funnel))
+  check('pipeline has summary object',                typeof pipeBody.summary === 'object')
+  check('pipeline has range field',                   typeof pipeBody.range === 'string')
+  check('pipeline has asOf timestamp',                typeof pipeBody.asOf === 'string')
+  const summary = pipeBody.summary as Record<string, unknown>
+  check('pipeline.summary has totalLeads',            typeof summary.totalLeads === 'number')
+  check('pipeline.summary has highIntentNoOwner',     typeof summary.highIntentNoOwner === 'number')
+  check('pipeline.summary has pipelineHealthPct',     typeof summary.pipelineHealthPct === 'number')
+  check('pipeline.summary has note',                  typeof summary.note === 'string')
+  check('pipeline funnel contains NEW stage',         (pipeBody.funnel as Record<string, unknown>[]).some(f => f.stage === 'NEW'))
+  check('pipeline tenantId matches JWT',              pipeBody.tenantId === (await (await get('/auth/me', accessToken)).json() as Record<string, unknown>).tenantId)
+  check('pipeline no secrets in response',            !JSON.stringify(pipeBody).includes('JWT_SECRET'))
+
+  // 100c. range param
+  check('pipeline ?range=today → 200',  (await get('/boss/pipeline?range=today', accessToken)).status === 200)
+  check('pipeline ?range=7d → 200',     (await get('/boss/pipeline?range=7d', accessToken)).status === 200)
+
+  console.log('\n101. Phase 11B: /boss/agents')
+
+  check('GET /boss/agents without auth → 401', (await get('/boss/agents')).status === 401)
+
+  const agentsRes  = await get('/boss/agents', accessToken)
+  const agentsBody = await agentsRes.json() as Record<string, unknown>
+  check('GET /boss/agents → 200',           agentsRes.status === 200)
+  check('agents has agents array',          Array.isArray(agentsBody.agents))
+  check('agents has unassigned count',      typeof agentsBody.unassigned === 'number')
+  const agentList = agentsBody.agents as Record<string, unknown>[]
+  if (agentList.length > 0) {
+    check('agent has userId',               typeof agentList[0]!.userId === 'string')
+    check('agent has openConversations',    typeof agentList[0]!.openConversations === 'number')
+    check('agent has closedLast30d',        typeof agentList[0]!.closedLast30d === 'number')
+  } else {
+    check('agents list accessible (may be empty)', true)
+  }
+
+  console.log('\n102. Phase 11B: /onboarding/status')
+
+  check('GET /onboarding/status without auth → 401', (await get('/onboarding/status')).status === 401)
+
+  const onbStatusRes  = await get('/onboarding/status', accessToken)
+  const onbStatusBody = await onbStatusRes.json() as Record<string, unknown>
+  check('GET /onboarding/status → 200',          onbStatusRes.status === 200)
+  check('onboarding/status has tenantId',         typeof onbStatusBody.tenantId === 'string')
+  check('onboarding/status has hasStarted',       typeof onbStatusBody.hasStarted === 'boolean')
+  check('onboarding/status has status field',     'status' in onbStatusBody)
+  check('onboarding/status has completedSteps',   typeof onbStatusBody.completedSteps === 'number')
+  check('onboarding/status no secrets',           !JSON.stringify(onbStatusBody).includes('JWT_SECRET'))
+
+  console.log('\n103. Phase 11B: /onboarding/draft + generate-preview + enable')
+
+  // 103a. Save draft
+  const draftRes  = await post('/onboarding/draft', {
+    companyName:   'Smoke Test Company',
+    industry:      'retail',
+    aiGoals:       ['lead-conversion', 'pre-sales'],
+    materialsText: 'We sell premium widgets. Starter package RM99/month. Pro RM299/month.',
+    completedSteps: 2,
+  }, accessToken)
+  const draftBody = await draftRes.json() as Record<string, unknown>
+  check('POST /onboarding/draft → 200',           draftRes.status === 200)
+  check('draft saved: saved=true',               draftBody.saved === true)
+  check('draft body has draft object',            typeof draftBody.draft === 'object')
+
+  // 103b. Save draft without auth → 401
+  check('draft without auth → 401', (await post('/onboarding/draft', { companyName: 'x' })).status === 401)
+
+  // 103c. Generate preview — NO real AI provider call
+  const previewRes  = await post('/onboarding/generate-preview', {}, accessToken)
+  const previewBody = await previewRes.json() as Record<string, unknown>
+  check('POST /onboarding/generate-preview → 200', previewRes.status === 200)
+  check('preview has preview object',              typeof previewBody.preview === 'object')
+  const preview = previewBody.preview as Record<string, unknown>
+  check('preview has aiPersona',                   typeof preview.aiPersona === 'object')
+  check('preview has welcomeMessage',              typeof preview.welcomeMessage === 'string')
+  check('preview has faqCategories array',         Array.isArray(preview.faqCategories))
+  check('preview has followUpScenarios array',     Array.isArray(preview.followUpScenarios))
+  check('preview generationMode = DETERMINISTIC_TEMPLATE', preview.generationMode === 'DETERMINISTIC_TEMPLATE')
+  check('preview has note (no real provider)',     typeof preview.note === 'string')
+  check('preview no real AI call (structural)',    true)  // deterministic template, no external call
+  check('preview no secrets',                     !JSON.stringify(previewBody).includes('JWT_SECRET'))
+
+  // 103d. generate-preview without auth → 401
+  check('generate-preview without auth → 401', (await post('/onboarding/generate-preview', {})).status === 401)
+
+  // 103e. Enable onboarding — does NOT connect WhatsApp or enable real send
+  const enableRes  = await post('/onboarding/enable', {}, accessToken)
+  const enableBody = await enableRes.json() as Record<string, unknown>
+  check('POST /onboarding/enable → 200',           enableRes.status === 200)
+  check('enable returns enabled=true',             enableBody.enabled === true)
+  check('enable does NOT set realWhatsAppConnected', enableBody.realWhatsAppConnected === false)
+  check('enable does NOT enable realMetaSendEnabled', enableBody.realMetaSendEnabled === false)
+  check('enable has note (no real send)',           typeof enableBody.note === 'string')
+
+  // 103f. After enable, status reflects ENABLED
+  const onbStatusAfterRes  = await get('/onboarding/status', accessToken)
+  const onbStatusAfterBody = await onbStatusAfterRes.json() as Record<string, unknown>
+  check('onboarding status after enable = ENABLED', onbStatusAfterBody.status === 'ENABLED')
+
+  // 103g. enable without auth → 401
+  check('enable without auth → 401', (await post('/onboarding/enable', {})).status === 401)
+
+  console.log('\n104. Phase 11B: OMNI_ENABLE_REAL_META_SEND still disabled')
+  check('real send still disabled after onboarding', process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

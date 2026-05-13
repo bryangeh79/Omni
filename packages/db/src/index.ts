@@ -14,6 +14,7 @@ export {
   KnowledgeItemType,
   ChannelType as PrismaChannelType,
   FollowUpStatus,
+  OnboardingStatus,
 } from '@prisma/client'
 
 export { prisma, connectDb, disconnectDb } from './client'

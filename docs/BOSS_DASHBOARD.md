@@ -101,6 +101,33 @@ Today's actionable snapshot. Requires auth (any role).
 
 ---
 
+## Realtime Refresh (Phase 11B)
+
+The Boss Dashboard connects to `GET /realtime/events` via SSE. When relevant events arrive, Boss data automatically refreshes (no page reload needed):
+
+| Event | Triggers refresh |
+|-------|-----------------|
+| `conversation.updated` | ✅ |
+| `conversation.message.created` | ✅ |
+| `conversation.handoff.updated` | ✅ |
+| `followup.created` | ✅ |
+| `followup.updated` | ✅ |
+| `followup.due` | ✅ |
+| `customer.updated` | ✅ |
+
+A realtime status indicator (green/yellow/grey dot) shows SSE connection state.
+Fallback: polling every 2 minutes if SSE is unavailable.
+
+## Lead Pipeline (Phase 11B)
+
+`GET /boss/pipeline?range=today|7d|30d` — see `docs/LEAD_PIPELINE.md`.
+
+Displays as horizontal funnel bars with stage counts, overdue follow-up overlays, and pipeline health score.
+
+## Per-Agent Performance (Phase 11B)
+
+`GET /boss/agents` — open conversations, closed (30d), handled (30d) per agent. Avg response time: Phase 12.
+
 ## Limitations (Phase 11A)
 
 - Auto-refresh is interval-based (2 min), not SSE-push

@@ -299,4 +299,183 @@ export async function bossRoutes(app: FastifyInstance) {
       },
     }
   })
+
+  // ── GET /boss/pipeline ───────────────────────────────────────────────────────
+  // Lead pipeline analytics — stage distribution + conversion insights.
+  // Supports ?range=today|7d|30d (default: 30d).
+  app.get<{ Querystring: { range?: string } }>(
+    '/pipeline',
+    { preHandler: requireAuth },
+    async (req) => {
+      const { tenantId } = getAuthUser(req)
+      const range  = req.query.range ?? '30d'
+      const since  = range === 'today' ? todayRange().start : daysAgo(range === '7d' ? 7 : 30)
+      const now    = new Date()
+
+      const [
+        stageDistribution,
+        highIntentNoOwner,
+        wonSince,
+        lostSince,
+        newSince,
+        overdueByStage,
+        followUpsByStage,
+      ] = await Promise.all([
+        // All customer stage counts
+        prisma.customer.groupBy({
+          by:    ['stage'],
+          where: { tenantId, isBlacklisted: false },
+          _count: { stage: true },
+        }),
+        // High-intent with no owner assigned
+        prisma.customer.count({
+          where: { tenantId, stage: 'HIGH_INTENT', ownerId: null, isBlacklisted: false },
+        }),
+        // Won in the period
+        prisma.customer.count({
+          where: { tenantId, stage: 'WON', updatedAt: { gte: since } },
+        }),
+        // Lost in the period
+        prisma.customer.count({
+          where: { tenantId, stage: 'LOST', updatedAt: { gte: since } },
+        }),
+        // New leads in the period
+        prisma.customer.count({
+          where: { tenantId, createdAt: { gte: since } },
+        }),
+        // Overdue follow-up tasks grouped by customer stage
+        prisma.followUpTask.findMany({
+          where:   { tenantId, status: 'PENDING', dueAt: { lt: now } },
+          include: { customer: { select: { stage: true } } },
+        }),
+        // Pending follow-up tasks (all) for per-stage count
+        prisma.followUpTask.findMany({
+          where:   { tenantId, status: 'PENDING' },
+          include: { customer: { select: { stage: true } } },
+        }),
+      ])
+
+      // Build stage distribution map
+      const stages: Record<string, number> = {}
+      for (const row of stageDistribution) stages[row.stage] = row._count.stage
+
+      // Build overdue count by stage
+      const overdueCountByStage: Record<string, number> = {}
+      for (const t of overdueByStage) {
+        const s = t.customer.stage
+        overdueCountByStage[s] = (overdueCountByStage[s] ?? 0) + 1
+      }
+
+      // Build pending follow-up count by stage
+      const followUpCountByStage: Record<string, number> = {}
+      for (const t of followUpsByStage) {
+        const s = t.customer.stage
+        followUpCountByStage[s] = (followUpCountByStage[s] ?? 0) + 1
+      }
+
+      // Pipeline health score (simple: % of active leads in INTERESTED or above)
+      const total = Object.values(stages).reduce((a, b) => a + b, 0)
+      const warm  = (stages['INTERESTED'] ?? 0) + (stages['HIGH_INTENT'] ?? 0) +
+                    (stages['QUOTED'] ?? 0)      + (stages['BOOKED'] ?? 0)
+      const pipelineHealthPct = total > 0 ? Math.round((warm / total) * 100) : 0
+
+      // Funnel order for display
+      const FUNNEL = ['NEW', 'INTERESTED', 'HIGH_INTENT', 'QUOTED', 'BOOKED', 'WON', 'LOST', 'AFTER_SALES']
+      const funnel = FUNNEL.map((stage) => ({
+        stage,
+        count:             stages[stage] ?? 0,
+        overdueFollowUps:  overdueCountByStage[stage] ?? 0,
+        pendingFollowUps:  followUpCountByStage[stage] ?? 0,
+      }))
+
+      return {
+        tenantId,
+        range,
+        asOf:              now.toISOString(),
+        funnel,
+        summary: {
+          totalLeads:          total,
+          newSince,
+          wonSince,
+          lostSince,
+          highIntentNoOwner,
+          pipelineHealthPct,
+          note:               pipelineHealthPct >= 50 ? 'Pipeline is healthy' :
+                              pipelineHealthPct >= 20 ? 'Pipeline needs attention' :
+                                                       'Pipeline is stalled — review follow-up strategy',
+        },
+        // TODO Phase 12: price-asked-to-quoted conversion rate (needs message content tagging)
+        priceAskedConversion: {
+          available:  false,
+          note:       'Requires message content tagging — Phase 12',
+        },
+      }
+    },
+  )
+
+  // ── GET /boss/agents ─────────────────────────────────────────────────────────
+  // Per-agent / per-owner performance foundation.
+  // Based on Conversation.assignedUserId (may be null for unassigned).
+  app.get('/agents', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const past30 = daysAgo(30)
+    const now    = new Date()
+
+    const [users, agentWorkload] = await Promise.all([
+      prisma.user.findMany({
+        where:  { tenantId, isActive: true },
+        select: { id: true, name: true, email: true, role: true },
+      }),
+      // All non-closed conversations for this tenant
+      prisma.conversation.findMany({
+        where:   { tenantId, status: { not: 'CLOSED' } },
+        select:  { assignedUserId: true, status: true, lastMessageAt: true },
+      }),
+    ])
+
+    const closedByAgent = await prisma.conversation.groupBy({
+      by:    ['assignedUserId'],
+      where: { tenantId, status: 'CLOSED', updatedAt: { gte: past30 } },
+      _count: { assignedUserId: true },
+    })
+
+    const handoffByAgent = await prisma.conversation.groupBy({
+      by:    ['assignedUserId'],
+      where: { tenantId, status: 'HUMAN_HANDLING', lastMessageAt: { gte: past30 } },
+      _count: { assignedUserId: true },
+    })
+
+    const closedMap: Record<string, number> = {}
+    const handoffMap: Record<string, number> = {}
+    for (const row of closedByAgent)  if (row.assignedUserId) closedMap[row.assignedUserId]  = row._count.assignedUserId
+    for (const row of handoffByAgent) if (row.assignedUserId) handoffMap[row.assignedUserId] = row._count.assignedUserId
+
+    const openByAgent: Record<string, number> = {}
+    for (const conv of agentWorkload) {
+      if (conv.assignedUserId) {
+        openByAgent[conv.assignedUserId] = (openByAgent[conv.assignedUserId] ?? 0) + 1
+      }
+    }
+
+    const agentStats = users.map((u) => ({
+      userId:          u.id,
+      name:            u.name,
+      email:           u.email,
+      role:            u.role,
+      openConversations: openByAgent[u.id] ?? 0,
+      closedLast30d:   closedMap[u.id]  ?? 0,
+      handledLast30d:  handoffMap[u.id] ?? 0,
+    }))
+
+    // Unassigned conversations
+    const unassigned = agentWorkload.filter((c) => !c.assignedUserId).length
+
+    return {
+      tenantId,
+      asOf:        now.toISOString(),
+      agents:      agentStats,
+      unassigned,
+      note:        'Avg response time not yet tracked — Phase 12',
+    }
+  })
 }

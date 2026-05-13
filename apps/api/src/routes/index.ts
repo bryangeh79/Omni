@@ -20,8 +20,9 @@ import { realtimeRoutes }     from './realtime'
 import { followUpRoutes }     from './follow-up'
 import { notificationRoutes } from './notifications'
 import { opsRoutes }          from './ops'
-import { bossRoutes }         from './boss'
+import { bossRoutes }           from './boss'
 import { costCalculatorRoutes } from './cost-calculator'
+import { onboardingRoutes }     from './onboarding'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -50,4 +51,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(bossRoutes,         { prefix: '/boss' })
   // Internal cost/pricing calculator — Phase 11A
   await app.register(costCalculatorRoutes, { prefix: '/admin/cost-calculator' })
+  // Onboarding wizard — Phase 11B
+  await app.register(onboardingRoutes,     { prefix: '/onboarding' })
 }

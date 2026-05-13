@@ -24,15 +24,16 @@ model Tenant {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  users           User[]
-  channels        Channel[]
-  customers       Customer[]
-  conversations   Conversation[]
-  knowledgeItems  KnowledgeItem[]
-  aiConfig        AiConfig?
-  followUpRules   FollowUpRule[]
-  followUpTasks   FollowUpTask[]
-  handoffRules    HandoffRule[]
+  users             User[]
+  channels          Channel[]
+  customers         Customer[]
+  conversations     Conversation[]
+  knowledgeItems    KnowledgeItem[]
+  aiConfig          AiConfig?
+  followUpRules     FollowUpRule[]
+  followUpTasks     FollowUpTask[]
+  handoffRules      HandoffRule[]
+  onboardingDraft   OnboardingDraft?
 }
 
 model User {
@@ -329,6 +330,49 @@ model HandoffRule {
   createdAt DateTime @default(now())
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ONBOARDING WIZARD (Phase 11B)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OnboardingDraft {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique  // one draft per tenant
+  status           OnboardingStatus @default(DRAFT)
+
+  // Step 1: Company basics
+  companyName      String?
+  industry         String?
+  whatsappNumber   String?
+  website          String?
+  serviceArea      String?
+  businessHours    String?  // JSON-serialised or plain text
+
+  // Step 2: AI goals (stored as string array)
+  aiGoals          String[]
+
+  // Step 3: Materials input
+  materialsText    String?  // pasted product/service text
+  materialsUrl     String?  // reference URL placeholder
+
+  // Step 4+: Generated preview (deterministic stub — no real AI provider)
+  generatedPreview Json?    // persona, welcomeMsg, faqCategories, leadStages, etc.
+
+  // Activation metadata
+  enabledAt        DateTime?
+  completedSteps   Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+enum OnboardingStatus {
+  DRAFT
+  PREVIEWED
+  ENABLED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
