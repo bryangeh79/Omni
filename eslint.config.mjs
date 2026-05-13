@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/prisma/generated/**',
       'pnpm-lock.yaml',
       '**/next-env.d.ts',  // Next.js auto-generated; not owned by project
+      '**/scripts/**',     // standalone Node.js utility scripts
     ],
   },
 

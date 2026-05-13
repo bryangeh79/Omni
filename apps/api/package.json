@@ -11,6 +11,7 @@
     "smoke": "tsx src/smoke-test.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.0",
     "@fastify/jwt": "^9.0.0",
     "@omni/ai-core": "workspace:*",
     "@omni/channel-adapters": "workspace:*",

@@ -116,6 +116,8 @@ export interface CustomerDetail {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+
+/** Bearer mode: tokens returned in body, stored in localStorage. */
 export async function login(tenantSlug: string, email: string, password: string): Promise<LoginResult> {
   const result = await apiFetch<LoginResult>('/auth/login', {
     method: 'POST',
@@ -123,6 +125,34 @@ export async function login(tenantSlug: string, email: string, password: string)
   })
   setToken(result.accessToken)
   return result
+}
+
+/**
+ * Cookie mode: httpOnly SameSite=Strict cookies set by server.
+ * No token stored in localStorage; browser sends cookies automatically.
+ * SSE /realtime/events still needs getToken() for ?token= param.
+ */
+export async function loginCookieMode(
+  tenantSlug: string,
+  email: string,
+  password: string,
+): Promise<{ user: LoginResult['user']; cookieMode: true }> {
+  return apiFetch<{ user: LoginResult['user']; cookieMode: true }>(
+    '/auth/login?mode=cookie',
+    {
+      method:      'POST',
+      body:        JSON.stringify({ tenantSlug, email, password }),
+      credentials: 'include',  // send/receive cookies
+    },
+  )
+}
+
+/** Refresh via cookie (no localStorage). */
+export async function refreshCookie(): Promise<{ cookieMode: true }> {
+  return apiFetch<{ cookieMode: true }>('/auth/refresh?mode=cookie', {
+    method:      'POST',
+    credentials: 'include',
+  })
 }
 
 export async function getMe(): Promise<LoginResult['user']> {
@@ -255,6 +285,32 @@ export async function cancelFollowUp(id: string): Promise<{ taskId: string; stat
 // ── Conversation close ────────────────────────────────────────────────────────
 export async function closeConversation(id: string): Promise<{ conversationId: string; status: string }> {
   return apiFetch<{ conversationId: string; status: string }>(`/conversations/${id}/close`, { method: 'POST' })
+}
+
+// ── Push notifications (Phase 10A stubs) ─────────────────────────────────────
+export async function fetchVapidPublicKey(): Promise<{ publicKey: string | null; pushEnabled: boolean }> {
+  return apiFetch<{ publicKey: string | null; pushEnabled: boolean }>('/notifications/vapid-public-key')
+}
+
+export async function subscribePushNotifications(subscription: {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}): Promise<{ subscribed: boolean; pushEnabled: boolean }> {
+  return apiFetch<{ subscribed: boolean; pushEnabled: boolean }>('/notifications/subscribe', {
+    method: 'POST',
+    body:   JSON.stringify(subscription),
+  })
+}
+
+export async function sendTestNotification(title?: string, body?: string): Promise<{ sent: boolean; stub: boolean }> {
+  return apiFetch<{ sent: boolean; stub: boolean }>('/notifications/test', {
+    method: 'POST',
+    body:   JSON.stringify({ title, body }),
+  })
+}
+
+export async function fetchNotificationStatus(): Promise<{ pushEnabled: boolean; activeSubscriptions: number }> {
+  return apiFetch<{ pushEnabled: boolean; activeSubscriptions: number }>('/notifications/status')
 }
 
 // ── SSE transport mode (from connected event) ─────────────────────────────────
