@@ -197,4 +197,53 @@ export async function followUpRoutes(app: FastifyInstance) {
       hasHumanReminder: SCENARIO_STEPS[s]!.some((step) => step.requiresHuman),
     })),
   }))
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // GET /follow-ups/analytics — Boss Dashboard summary counts (Phase 10B)
+  // ──────────────────────────────────────────────────────────────────────────
+  app.get('/analytics', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const now         = new Date()
+    const todayStart  = new Date(now); todayStart.setHours(0, 0, 0, 0)
+    const todayEnd    = new Date(now); todayEnd.setHours(23, 59, 59, 999)
+
+    const [
+      pending,
+      overdue,
+      completedToday,
+      cancelledToday,
+      humanRemindersPending,
+      dueToday,
+    ] = await Promise.all([
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.PENDING },
+      }),
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.PENDING, dueAt: { lt: now } },
+      }),
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.DONE, completedAt: { gte: todayStart, lte: todayEnd } },
+      }),
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.CANCELLED, cancelledAt: { gte: todayStart, lte: todayEnd } },
+      }),
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.PENDING, requiresHuman: true },
+      }),
+      prisma.followUpTask.count({
+        where: { tenantId, status: FollowUpStatus.PENDING, dueAt: { gte: todayStart, lte: todayEnd } },
+      }),
+    ])
+
+    return {
+      tenantId,
+      asOf: now.toISOString(),
+      pending,
+      overdue,
+      completedToday,
+      cancelledToday,
+      humanRemindersPending,
+      dueToday,
+    }
+  })
 }

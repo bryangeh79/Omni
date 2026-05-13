@@ -19,6 +19,7 @@ import { webhookMetaRoutes }  from './webhook-meta'
 import { realtimeRoutes }     from './realtime'
 import { followUpRoutes }     from './follow-up'
 import { notificationRoutes } from './notifications'
+import { opsRoutes }          from './ops'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -41,4 +42,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(followUpRoutes,     { prefix: '/follow-ups' })
   // Push notification stubs — Phase 10A
   await app.register(notificationRoutes, { prefix: '/notifications' })
+  // Ops/health/readiness — Phase 10B
+  await app.register(opsRoutes,          { prefix: '/ops' })
 }

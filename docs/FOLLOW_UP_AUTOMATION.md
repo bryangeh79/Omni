@@ -168,7 +168,32 @@ Payloads contain: taskId, conversationId, scenario, stepIndex, requiresHuman. No
 
 ---
 
-## Not Implemented (Phase 9B)
+## AI Follow-up Auto-trigger (Phase 10B)
+
+After each AI reply, `scenario-mapper.ts` in the worker deterministically maps context to a scenario:
+
+```
+AI reply written → mapToFollowUpScenario() → scenario key or null → scheduleFollowUp()
+```
+
+The mapper is keyword-based (no AI provider calls). See `docs/REAL_DELIVERY_READINESS.md` for scenario mapping rules.
+
+## Follow-up Analytics (Phase 10B)
+
+`GET /follow-ups/analytics` returns Boss Dashboard counts:
+
+```json
+{
+  "pending": 3,
+  "overdue": 1,
+  "completedToday": 5,
+  "cancelledToday": 2,
+  "humanRemindersPending": 1,
+  "dueToday": 2
+}
+```
+
+## Not Implemented (Phase 9B/10B)
 
 - Auto-trigger on AI analysis (e.g., when AI detects "price asked" intent)
 - Snooze/reschedule via UI

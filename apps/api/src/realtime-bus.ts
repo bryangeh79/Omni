@@ -50,8 +50,12 @@ export async function initRealtimeBus(): Promise<void> {
     maxRetriesPerRequest: null as null,
     enableReadyCheck:     false,
     lazyConnect:          true,
-    // Give up after 2 retries so startup doesn't stall if Redis is absent
-    retryStrategy: (times: number) => (times > 2 ? null : Math.min(times * 300, 1000)),
+    // Phase 10B: retry more aggressively for runtime reconnects.
+    // Startup uses a 4 s race() below; this strategy handles post-connect drops.
+    retryStrategy: (times: number) => {
+      if (times > 30) return null  // stop retrying after ~2.5 min
+      return Math.min(times * 500, 5_000)
+    },
   }
 
   try {
@@ -66,8 +70,31 @@ export async function initRealtimeBus(): Promise<void> {
       if (_live) console.warn(`[realtime-bus] Redis sub error: ${err.message}`)
       _live = false
     })
-    _pub.on('ready', () => { /* pub reconnected */ })
-    _sub.on('ready', () => { /* sub reconnected — re-subscribe handled by ioredis */ })
+
+    // Phase 10B: on pub ready (reconnect), update _live flag
+    _pub.on('ready', () => {
+      if (!_live) {
+        console.log('[realtime-bus] Redis pub reconnected')
+        // Re-enable _live only when both pub+sub are ready
+        if (_sub?.status === 'ready') _live = true
+      }
+    })
+
+    // Phase 10B: on sub ready (reconnect), re-psubscribe and restore _live
+    _sub.on('ready', async () => {
+      if (!_live) {
+        console.log('[realtime-bus] Redis sub reconnected — re-subscribing to pattern')
+        try {
+          await _sub!.psubscribe(REALTIME_CHANNEL_PATTERN)
+          if (_pub?.status === 'ready') {
+            _live = true
+            console.log('[realtime-bus] Pattern re-subscribed — realtime restored')
+          }
+        } catch (err) {
+          console.warn(`[realtime-bus] Pattern re-subscribe failed: ${(err as Error).message}`)
+        }
+      }
+    })
 
     // Connect with a 4 s timeout so startup doesn't hang if Redis is absent
     await Promise.race([

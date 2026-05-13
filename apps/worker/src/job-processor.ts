@@ -6,8 +6,9 @@ import { prisma, Direction, SenderType } from '@omni/db'
 import type { InboundMessageJobData } from '@omni/shared'
 import { decryptApiKey, isVaultConfigured, calculateAiCostUsd, REALTIME_EVENT_TYPES } from '@omni/shared'
 import { aiOrchestrator } from '@omni/ai-core'
-import { buildJobContext } from './context-builder'
-import { workerPublishEvent } from './realtime-publisher'
+import { buildJobContext }         from './context-builder'
+import { workerPublishEvent }      from './realtime-publisher'
+import { mapToFollowUpScenario }   from './scenario-mapper'
 
 export async function processInboundMessageJob(
   data: InboundMessageJobData,
@@ -140,6 +141,37 @@ export async function processInboundMessageJob(
 
   console.log(`[worker] Job ${jobId}: reply written for conv=${conversationId}`)
   // NOTE: sendMessage() is NOT called — no real WhatsApp delivery.
+
+  // ── AI follow-up scenario auto-trigger (Phase 10B) ───────────────────────
+  // Deterministic mapping from AI result + message content → follow-up scenario.
+  // No AI provider calls — purely keyword/rule based.
+  // Blocked tags and reply-cancel rules are enforced inside scheduleFollowUp.
+  try {
+    const customer = await prisma.customer.findFirst({
+      where:   { id: customerId, tenantId },
+      include: { tags: { select: { tag: true } } },
+    })
+    const messageContent = messageBody ?? ''
+
+    const scenario = mapToFollowUpScenario({
+      conversationStatus:  conversation.status,
+      customerTags:        customer?.tags.map((t) => t.tag) ?? [],
+      customerStage:       customer?.stage ?? 'NEW',
+      customerScore:       customer?.score ?? 0,
+      recentInboundText:   messageContent,
+      aiResult:            { shouldHandoff: result.shouldHandoff, scoreAdjustment: result.scoreAdjustment },
+    })
+
+    if (scenario) {
+      // Import schedule function lazily (avoids circular dep at startup)
+      const { scheduleFollowUp } = await import('./follow-up-scheduler')
+      await scheduleFollowUp(tenantId, conversationId, customerId, scenario)
+      console.log(`[worker] Job ${jobId}: scheduled follow-up scenario=${scenario} for conv=${conversationId}`)
+    }
+  } catch (err) {
+    // Non-fatal: follow-up scheduling should never block message processing
+    console.warn(`[worker] Job ${jobId}: follow-up auto-trigger failed (non-fatal):`, (err as Error).message)
+  }
 
   // ── Publish realtime events via Redis (Phase 8B) ──────────────────────────
   // Non-fatal: DB writes above have already succeeded.

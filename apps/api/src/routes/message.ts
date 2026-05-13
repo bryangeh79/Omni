@@ -6,6 +6,11 @@ import type { FastifyInstance } from 'fastify'
 import { prisma, Direction, SenderType, PrismaChannelType } from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
 import { publishEvent } from '../realtime-bus'
+import {
+  checkMetaSendGuard,
+  auditSendAttempt,
+  isRealMetaSendEnabled,
+} from '../meta-send-guard'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_SIZE = 50
@@ -98,13 +103,6 @@ export async function messageRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Cannot send to a closed conversation' })
     }
 
-    // Detect channel type to determine send status
-    const channel = await prisma.channel.findUnique({
-      where:  { id: conversation.channelId },
-      select: { type: true },
-    })
-    const isMetaChannel = channel?.type === PrismaChannelType.META_API
-
     // Write message to DB
     const message = await prisma.message.create({
       data: {
@@ -122,10 +120,38 @@ export async function messageRoutes(app: FastifyInstance) {
       data:  { lastMessageAt: new Date() },
     })
 
-    // Real delivery path:
-    // - Meta API channels: real send requires OMNI_ENABLE_REAL_META_SEND=true (default: disabled)
-    // - WhatsApp Web channels: stub only (OMNI_ALLOW_WA_SESSION not enabled by default)
-    const sendStatus = isMetaChannel ? 'META_SEND_DISABLED' as const : 'STUB_NOT_SENT' as const
+    // Real delivery path — evaluated via formal guardrail (Phase 10B)
+    const channel = await prisma.channel.findUnique({
+      where:  { id: conversation.channelId },
+      select: { type: true, metaAccessTokenRef: true },
+    })
+    const reIsMetaChannel = channel?.type === PrismaChannelType.META_API
+
+    const guard = checkMetaSendGuard({
+      tenantId,
+      conversationId,
+      messageId:           message.id,
+      channelId:           conversation.channelId,
+      conversationStatus:  conversation.status,
+      channelType:         channel?.type ?? 'UNKNOWN',
+      hasMetaAccessToken:  !!(channel?.metaAccessTokenRef),
+      isBulk:              false,
+    })
+
+    auditSendAttempt({
+      ts:             new Date().toISOString(),
+      tenantId,
+      conversationId,
+      messageId:      message.id,
+      channelId:      conversation.channelId,
+      provider:       reIsMetaChannel ? 'META' : 'STUB',
+      status:         reIsMetaChannel && isRealMetaSendEnabled() && guard.allowed ? 'SENT' : guard.status,
+      dryRun:         !guard.allowed,
+    })
+
+    // Real Meta send would happen here when guard.allowed is true.
+    // Phase 10B: Actual API call gated by isRealMetaSendEnabled() — still disabled by default.
+    const sendStatus = guard.status
 
     // Publish real-time events for SSE subscribers in this API process
     publishEvent(tenantId, 'conversation.message.created', {
