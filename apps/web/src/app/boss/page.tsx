@@ -449,10 +449,22 @@ export default function BossDashboardPage() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 text-xs">
+            {channelHealth.nextAction && (
+              <p className="text-xs text-gray-500 mb-2 italic">{channelHealth.nextAction}</p>
+            )}
+            <div className="flex gap-2 text-xs flex-wrap">
               <a href="/channels/setup" className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-xl hover:bg-green-100 font-medium">Channel Setup →</a>
               <a href="/launch-checklist" className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl hover:bg-emerald-100 font-medium">🚀 Launch Checklist →</a>
+              {channelHealth.channelType === 'WA_WEB' && (
+                <a href="/channels/setup/wa-web/qr" className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 font-medium">📱 QR Setup →</a>
+              )}
+              {channelHealth.channelType === 'META_WA_BUSINESS' && (
+                <a href="/channels/setup/meta-webhook" className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl hover:bg-indigo-100 font-medium">🔗 Meta Webhook →</a>
+              )}
             </div>
+            {channelHealth.lastCheckedAt && (
+              <p className="text-xs text-gray-400 mt-2">Checked: {new Date(channelHealth.lastCheckedAt).toLocaleTimeString()}</p>
+            )}
           </section>
         )}
 

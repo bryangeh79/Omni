@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getToken, login, fetchLaunchChecklist, type LaunchChecklist, type ChecklistItem } from '@/lib/api'
+import { getToken, login, fetchLaunchChecklist, fetchStagingReadiness, type LaunchChecklist, type ChecklistItem, type StagingReadiness } from '@/lib/api'
 
 // ── Status styles ─────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { icon: string; ring: string; bg: string; text: string; label: string }> = {
@@ -83,6 +83,7 @@ function ItemCard({ item }: { item: ChecklistItem }) {
 export default function LaunchChecklistPage() {
   const [authed,    setAuthed]    = useState(false)
   const [checklist, setChecklist] = useState<LaunchChecklist | null>(null)
+  const [staging,   setStaging]   = useState<StagingReadiness | null>(null)
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState('')
 
@@ -92,7 +93,14 @@ export default function LaunchChecklistPage() {
 
   async function loadChecklist() {
     setLoading(true); setError('')
-    try { setChecklist(await fetchLaunchChecklist()) }
+    try {
+      const [cl, st] = await Promise.all([
+        fetchLaunchChecklist(),
+        fetchStagingReadiness().catch(() => null),
+      ])
+      setChecklist(cl)
+      if (st) setStaging(st)
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
     finally { setLoading(false) }
   }
@@ -241,6 +249,36 @@ export default function LaunchChecklistPage() {
                 </ul>
               </div>
             </div>
+
+            {/* Staging mode section (Phase 14B) */}
+            {staging && (
+              <div className={`rounded-2xl border p-5 ${staging.stagingStatus === 'READY_FOR_MANUAL_ACTIVATION_REVIEW' ? 'bg-emerald-50 border-emerald-200' : staging.stagingStatus === 'PARTIALLY_READY' ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">{staging.stagingStatus === 'READY_FOR_MANUAL_ACTIVATION_REVIEW' ? '🟢' : staging.stagingStatus === 'PARTIALLY_READY' ? '🟡' : '🔴'}</span>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">Staging Mode</p>
+                    <p className="text-xs text-gray-600">{staging.stagingNote}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.entries(staging.stagingMode).map(([key, val]) => (
+                    <div key={key} className={`flex items-center justify-between px-3 py-2 rounded-xl ${val ? 'bg-emerald-100' : 'bg-white'}`}>
+                      <span className="text-xs text-gray-600">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <span className={`text-xs font-bold ${val ? 'text-emerald-700' : 'text-gray-400'}`}>{val ? '✓' : '–'}</span>
+                    </div>
+                  ))}
+                </div>
+                {staging.flags.realSendDisabled && (
+                  <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-xs text-blue-700 font-medium">
+                    🔒 Real Send Disabled — OMNI_ENABLE_REAL_META_SEND and OMNI_ALLOW_WA_SESSION are both OFF
+                  </div>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <a href="/channels/setup/wa-web/qr" className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-xl hover:bg-gray-50">WA Web QR →</a>
+                  <a href="/channels/setup/meta-webhook" className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-xl hover:bg-gray-50">Meta Webhook →</a>
+                </div>
+              </div>
+            )}
 
             {/* Safety defaults */}
             <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500">

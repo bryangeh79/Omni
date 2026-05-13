@@ -211,11 +211,41 @@ Boss page (`/boss`) now loads `/boss/channel-health` in background and shows:
 
 ---
 
-## Limitations (Phase 14A)
+## Phase 14B Additions
 
-- Real WA Web QR scan not yet implemented (request-qr returns `GUARDED_REDIRECT` to real adapter; Phase 14B)
-- Real Meta webhook delivery test not yet implemented (request-live-test blocked by default)
-- `credentialRef` encryption requires `OMNI_API_KEY_ENCRYPTION_SECRET` to be configured
-- One draft per tenant (not per channel) — multi-channel support is Phase 15+
+### WA Web QR Staging Page (`/channels/setup/wa-web/qr`)
+
+New web page for WA Web session staging:
+- Shows blocked state clearly when `OMNI_ALLOW_WA_SESSION` is false (safe default)
+- 5-step operator guide (enable flag → create channel → get QR → scan → verify)
+- "Check QR Readiness" button calls `POST /channels/setup/wa-web/request-qr`
+- Never displays raw QR payload or session content
+- Session status polling via `GET /channels/setup/wa-web/session-status`
+
+### New APIs
+- `GET /channels/setup/wa-web/qr-state` — QR staging state (qrAvailable, qrPending, sessionActive, operatorSteps)
+- `POST /channels/setup/wa-web/start-guarded` — blocked without flag; returns `GUARDED_REDIRECT` when flag set
+- `GET /channels/setup/staging-readiness` — full staging mode summary for launch checklist
+
+### Meta Live Double-Confirm Guard (Phase 14B upgrade)
+
+`POST /channels/setup/meta-webhook/request-live-test` now requires `{ confirmLiveCall: true }` in body:
+- Without `confirmLiveCall`: returns `requiresConfirm=true, blocked=true`
+- With `confirmLiveCall: true` but no flag: still blocked (flag missing)
+- With flag AND credentials AND confirmLiveCall: returns `READY_BUT_NOT_IMPLEMENTED` (Phase 15)
+- `realMetaApiCalled: false` always in default tests
+
+Same double-confirm guard applies to `confirm-live-test`.
+
+### Channel Health Polish
+- `GET /boss/channel-health` now returns `lastCheckedAt`, `nextAction`, and extended `links` (waWebQr, metaWebhook)
+- `/boss` channel health card shows `lastCheckedAt`, `nextAction`, and type-specific quick links
+
+---
+
+## Limitations (Phase 14B)
+
+- Real WA Web QR generation requires `OMNI_ALLOW_WA_SESSION=true` + calling `/channels/whatsapp-web/connect` (existing adapter)
+- Real Meta webhook delivery test returns `READY_BUT_NOT_IMPLEMENTED` (Phase 15)
+- One draft per tenant — multi-channel support is Phase 15+
 - No credential rotation flow yet
-- Meta App Dashboard steps must be done manually (no API automation)

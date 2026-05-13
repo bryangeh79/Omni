@@ -513,18 +513,30 @@ export async function bossRoutes(app: FastifyInstance) {
       healthLevel = 'WARN'; liveStatus = 'PENDING_ACTIVATION'
     }
 
+    const nextAction = healthLevel === 'OK'
+      ? 'Channel active — monitor via /inbox and /boss'
+      : channelType === 'WA_WEB'
+        ? 'Go to /channels/setup/wa-web/qr for QR staging'
+        : channelType === 'META_WA_BUSINESS'
+          ? 'Go to /channels/setup/meta-webhook for webhook setup'
+          : 'Complete channel setup at /channels/setup'
+
     return {
       tenantId,
-      asOf:           now.toISOString(),
+      asOf:             now.toISOString(),
+      lastCheckedAt:    now.toISOString(),
       channelType,
       setupStatus,
       credentialStatus: credStatus,
       healthLevel,
       liveStatus,
-      realSendEnabled: false,   // always false in response
+      realSendEnabled:  false,   // always false in response
+      nextAction,
       links: {
         channelSetup:    '/channels/setup',
         launchChecklist: '/launch-checklist',
+        waWebQr:         '/channels/setup/wa-web/qr',
+        metaWebhook:     '/channels/setup/meta-webhook',
       },
     }
   })

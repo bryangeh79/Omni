@@ -2879,6 +2879,85 @@ async function smoke() {
   check('boss channel-health has links object',            typeof bchBody.links === 'object')
   check('boss channel-health no secrets',                  !JSON.stringify(bchBody).includes('JWT_SECRET'))
 
+  // ── Phase 14B: QR State + Start Guarded + Meta Double-Confirm + Staging ─
+
+  console.log('\n136. Phase 14B: /channels/setup/wa-web/qr-state (safe, blocked by default)')
+  check('GET /channels/setup/wa-web/qr-state without auth → 401', (await get('/channels/setup/wa-web/qr-state')).status === 401)
+
+  const qrStateRes  = await get('/channels/setup/wa-web/qr-state', accessToken)
+  const qrStateBody = await qrStateRes.json() as Record<string, unknown>
+  check('GET /channels/setup/wa-web/qr-state → 200',          qrStateRes.status === 200)
+  check('qr-state has tenantId',                               typeof qrStateBody.tenantId === 'string')
+  check('qr-state qrAvailable=false (default)',                qrStateBody.qrAvailable === false)
+  check('qr-state realSessionStarted=false',                   qrStateBody.realSessionStarted === false)
+  check('qr-state has missingConditions array',                Array.isArray(qrStateBody.missingConditions))
+  check('qr-state has operatorSteps array',                    Array.isArray(qrStateBody.operatorSteps))
+  check('qr-state no session secrets',                         !JSON.stringify(qrStateBody).includes('JWT_SECRET'))
+  check('qr-state OMNI_ALLOW_WA_SESSION still false',          process.env.OMNI_ALLOW_WA_SESSION !== 'true')
+
+  console.log('\n137. Phase 14B: /channels/setup/wa-web/start-guarded (blocked by default)')
+  check('POST /channels/setup/wa-web/start-guarded without auth → 401', (await post('/channels/setup/wa-web/start-guarded', {})).status === 401)
+
+  const startGuardRes  = await post('/channels/setup/wa-web/start-guarded', {}, accessToken)
+  const startGuardBody = await startGuardRes.json() as Record<string, unknown>
+  check('POST /channels/setup/wa-web/start-guarded → 200',       startGuardRes.status === 200)
+  check('start-guarded started=false (flag not set)',             startGuardBody.started === false)
+  check('start-guarded blocked=true (flag not set)',              startGuardBody.blocked === true)
+  check('start-guarded realSessionStarted=false',                 startGuardBody.realSessionStarted === false)
+  check('start-guarded has missingConditions',                    Array.isArray(startGuardBody.missingConditions))
+  check('start-guarded no secrets',                               !JSON.stringify(startGuardBody).includes('JWT_SECRET'))
+
+  console.log('\n138. Phase 14B: meta request-live-test double-confirm guard')
+  // Without confirmLiveCall → blocked with requiresConfirm=true
+  const mlNoConfRes  = await post('/channels/setup/meta-webhook/request-live-test', {}, accessToken)
+  const mlNoConfBody = await mlNoConfRes.json() as Record<string, unknown>
+  check('request-live-test without confirmLiveCall → 200',        mlNoConfRes.status === 200)
+  check('request-live-test requiresConfirm=true (no field)',      mlNoConfBody.requiresConfirm === true)
+  check('request-live-test testInitiated=false',                  mlNoConfBody.testInitiated === false)
+  check('request-live-test blocked=true (no confirm + no flag)',  mlNoConfBody.blocked === true)
+  check('request-live-test realMetaApiCalled=false',              mlNoConfBody.realMetaApiCalled === false)
+
+  // With confirmLiveCall=true but flag not set → still blocked
+  const mlWithConfRes  = await post('/channels/setup/meta-webhook/request-live-test', { confirmLiveCall: true }, accessToken)
+  const mlWithConfBody = await mlWithConfRes.json() as Record<string, unknown>
+  check('request-live-test with confirmLiveCall=true → 200',     mlWithConfRes.status === 200)
+  check('request-live-test still blocked (flag not set)',         mlWithConfBody.blocked === true)
+  check('request-live-test realMetaApiCalled=false (flag off)',   mlWithConfBody.realMetaApiCalled === false)
+  check('OMNI_ENABLE_REAL_META_SEND still false',                 process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
+
+  // confirm-live-test double-confirm guard
+  const mlConfirmRes  = await post('/channels/setup/meta-webhook/confirm-live-test', { confirmLiveCall: true }, accessToken)
+  const mlConfirmBody = await mlConfirmRes.json() as Record<string, unknown>
+  check('confirm-live-test with confirmLiveCall=true → 200',     mlConfirmRes.status === 200)
+  check('confirm-live-test confirmed=false (flag not set)',       mlConfirmBody.confirmed === false)
+  check('confirm-live-test realMetaApiCalled=false',             mlConfirmBody.realMetaApiCalled === false)
+
+  console.log('\n139. Phase 14B: /channels/setup/staging-readiness')
+  check('GET /channels/setup/staging-readiness without auth → 401', (await get('/channels/setup/staging-readiness')).status === 401)
+
+  const stagingRes  = await get('/channels/setup/staging-readiness', accessToken)
+  const stagingBody = await stagingRes.json() as Record<string, unknown>
+  check('GET /channels/setup/staging-readiness → 200',           stagingRes.status === 200)
+  check('staging-readiness has tenantId',                        typeof stagingBody.tenantId === 'string')
+  check('staging-readiness has stagingMode object',              typeof stagingBody.stagingMode === 'object')
+  check('staging-readiness has flags object',                    typeof stagingBody.flags === 'object')
+  check('staging-readiness has stagingStatus',                   typeof stagingBody.stagingStatus === 'string')
+  check('staging-readiness stagingStatus is valid enum',         ['NOT_READY', 'PARTIALLY_READY', 'READY_FOR_MANUAL_ACTIVATION_REVIEW'].includes(stagingBody.stagingStatus as string))
+  const stFlags = stagingBody.flags as Record<string, unknown>
+  check('staging-readiness flags.realSendDisabled=true (both flags off)', stFlags.realSendDisabled === true)
+  check('staging-readiness flags.waSessionAllowed=false',        stFlags.waSessionAllowed === false)
+  check('staging-readiness flags.metaSendAllowed=false',         stFlags.metaSendAllowed === false)
+  check('staging-readiness no secrets',                          !JSON.stringify(stagingBody).includes('JWT_SECRET'))
+
+  console.log('\n140. Phase 14B: boss channel-health has lastCheckedAt and nextAction')
+  const bch2Res  = await get('/boss/channel-health', accessToken)
+  const bch2Body = await bch2Res.json() as Record<string, unknown>
+  check('boss channel-health has lastCheckedAt',                 typeof bch2Body.lastCheckedAt === 'string')
+  check('boss channel-health has nextAction',                    typeof bch2Body.nextAction === 'string')
+  check('boss channel-health links has waWebQr',                 typeof (bch2Body.links as Record<string, unknown>).waWebQr === 'string')
+  check('boss channel-health links has metaWebhook',             typeof (bch2Body.links as Record<string, unknown>).metaWebhook === 'string')
+  check('boss channel-health realSendEnabled=false',             bch2Body.realSendEnabled === false)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

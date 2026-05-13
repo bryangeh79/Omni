@@ -27,6 +27,13 @@
 // POST /channels/setup/meta-webhook/confirm-live-test — guarded live confirm (blocked by default)
 // GET  /channels/setup/health              — channel health summary (no secrets)
 //
+// Phase 14B:
+// GET  /channels/setup/wa-web/qr-state       — QR staging readiness (no QR payload, safe)
+// POST /channels/setup/wa-web/start-guarded  — guarded session start (blocked without env flag)
+// (meta request-live-test upgraded: requires {confirmLiveCall:true} for real path)
+// (meta confirm-live-test upgraded: same double-confirm guard)
+// GET  /channels/setup/staging-readiness     — staging readiness summary for launch checklist
+//
 // Safety rules:
 //   - All endpoints: requireAuth, tenantId from JWT only.
 //   - OMNI_ALLOW_WA_SESSION: never enabled here — activation blocked without it.
@@ -876,46 +883,87 @@ export async function channelSetupRoutes(app: FastifyInstance) {
   })
 
   // ── POST /channels/setup/meta-webhook/request-live-test ──────────────────
-  // Guarded: blocked by default without OMNI_ENABLE_REAL_META_SEND + credentials
-  app.post('/meta-webhook/request-live-test', { preHandler: requireAuth }, async (req) => {
-    const { tenantId } = getAuthUser(req)
-    const draft = await getOrCreateDraft(tenantId)
-    const metaSendAllowed   = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
-    const credentialsSaved  = draft.credentialStatus === 'ENCRYPTED_STORED'
+  // Phase 14B: requires {confirmLiveCall:true} to proceed past safety gate.
+  // Even with the flag, returns READY_BUT_NOT_IMPLEMENTED if no real call is available.
+  app.post<{ Body: { confirmLiveCall?: boolean } }>(
+    '/meta-webhook/request-live-test',
+    { preHandler: requireAuth },
+    async (req) => {
+      const { tenantId }       = getAuthUser(req)
+      const confirmLiveCall    = req.body?.confirmLiveCall === true
+      const draft              = await getOrCreateDraft(tenantId)
+      const metaSendAllowed    = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+      const credentialsSaved   = draft.credentialStatus === 'ENCRYPTED_STORED'
 
-    const missing: string[] = []
-    if (!metaSendAllowed)   missing.push('OMNI_ENABLE_REAL_META_SEND=true not set')
-    if (!credentialsSaved)  missing.push('credentialStatus must be ENCRYPTED_STORED (not DRAFT or NONE)')
+      const missing: string[] = []
+      if (!metaSendAllowed)   missing.push('OMNI_ENABLE_REAL_META_SEND=true not set')
+      if (!credentialsSaved)  missing.push('credentialStatus must be ENCRYPTED_STORED')
+      if (!confirmLiveCall)   missing.push('confirmLiveCall=true not provided in request body (double-confirm required)')
 
-    return {
-      tenantId,
-      testInitiated:      false,
-      blocked:            missing.length > 0,
-      missingConditions:  missing,
-      realMetaApiCalled:  false,
-      note: missing.length > 0
-        ? `Live test blocked. ${missing.join('; ')}`
-        : 'Conditions met — real Meta API live test would initiate here. NOT_IMPLEMENTED_GUARDED: real webhook delivery test requires Phase 14B implementation.',
+      if (missing.length > 0) {
+        return {
+          tenantId,
+          testInitiated:     false,
+          blocked:           true,
+          requiresConfirm:   !confirmLiveCall,
+          missingConditions: missing,
+          realMetaApiCalled: false,
+          note: `Live test blocked. ${missing.join('; ')}`,
+        }
+      }
+
+      // All conditions met — but real delivery is not yet implemented
+      return {
+        tenantId,
+        testInitiated:             false,
+        blocked:                   false,
+        requiresConfirm:           false,
+        implementationStatus:      'READY_BUT_NOT_IMPLEMENTED',
+        realMetaApiCalled:         false,
+        note: 'All conditions met and confirmLiveCall=true received. Real Meta webhook delivery test is not yet implemented (Phase 15). No API call was made.',
+      }
     }
-  })
+  )
 
   // ── POST /channels/setup/meta-webhook/confirm-live-test ──────────────────
-  // Final live test confirmation — safe by default
-  app.post('/meta-webhook/confirm-live-test', { preHandler: requireAuth }, async (req) => {
-    const { tenantId } = getAuthUser(req)
-    const metaSendAllowed = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+  // Phase 14B: double-confirm guard — requires {confirmLiveCall:true}
+  app.post<{ Body: { confirmLiveCall?: boolean } }>(
+    '/meta-webhook/confirm-live-test',
+    { preHandler: requireAuth },
+    async (req) => {
+      const { tenantId }     = getAuthUser(req)
+      const confirmLiveCall  = req.body?.confirmLiveCall === true
+      const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
 
-    return {
-      tenantId,
-      confirmed:         false,
-      blocked:           !metaSendAllowed,
-      realMetaApiCalled: false,
-      realSendEnabled:   metaSendAllowed,
-      note: metaSendAllowed
-        ? 'OMNI_ENABLE_REAL_META_SEND is set. Real confirmation not yet implemented (Phase 14B).'
-        : 'Live test confirm blocked. OMNI_ENABLE_REAL_META_SEND=true required.',
+      const blockers: string[] = []
+      if (!metaSendAllowed)  blockers.push('OMNI_ENABLE_REAL_META_SEND=true not set')
+      if (!confirmLiveCall)  blockers.push('confirmLiveCall=true not provided (double-confirm required)')
+
+      if (blockers.length > 0) {
+        return {
+          tenantId,
+          confirmed:         false,
+          blocked:           true,
+          requiresConfirm:   !confirmLiveCall,
+          blockers,
+          realMetaApiCalled: false,
+          realSendEnabled:   false,
+          note: `Confirm blocked. ${blockers.join('; ')}`,
+        }
+      }
+
+      return {
+        tenantId,
+        confirmed:              false,
+        blocked:                false,
+        requiresConfirm:        false,
+        implementationStatus:   'READY_BUT_NOT_IMPLEMENTED',
+        realMetaApiCalled:      false,
+        realSendEnabled:        false,
+        note: 'Double-confirm gate passed and OMNI_ENABLE_REAL_META_SEND is set. Real Meta API call is not yet implemented (Phase 15). No API call was made.',
+      }
     }
-  })
+  )
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 14A: Channel Health Summary
@@ -994,6 +1042,137 @@ export async function channelSetupRoutes(app: FastifyInstance) {
       recommendedAction,
       waSessionAllowed,
       metaSendAllowed,
+      lastCheckedAt:       new Date().toISOString(),
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 14B: WA Web QR Staging + Staging Readiness
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/wa-web/qr-state ───────────────────────────────────
+  // Safe QR staging readiness — no QR payload, no session data
+  app.get('/wa-web/qr-state', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+    const draft = await getOrCreateDraft(tenantId)
+
+    const channel = await prisma.channel.findFirst({
+      where:  { tenantId, type: 'WHATSAPP_WEB' },
+      select: { id: true, isActive: true },
+    })
+
+    const missingConditions: string[] = []
+    if (!waSessionAllowed) missingConditions.push('OMNI_ALLOW_WA_SESSION=true not set')
+    if (!channel)          missingConditions.push('No WA Web channel created — use POST /channels/whatsapp-web/connect first')
+
+    return {
+      tenantId,
+      qrAvailable:       false,    // QR payload is never returned from setup routes
+      qrPending:         false,    // would be true only if adapter is connected and QR is being generated
+      sessionActive:     channel?.isActive ?? false,
+      waSessionAllowed,
+      channelType:       draft.channelType,
+      setupStatus:       draft.setupStatus,
+      missingConditions,
+      realSessionStarted: false,
+      note: waSessionAllowed && channel
+        ? 'Session flag and channel exist. Poll GET /channels/whatsapp-web/:channelId/qr for QR image when adapter is running.'
+        : `QR staging blocked. ${missingConditions.join('; ')}`,
+      operatorSteps: [
+        '1. Set OMNI_ALLOW_WA_SESSION=true in .env and restart API',
+        '2. POST /channels/whatsapp-web/connect to create a session',
+        '3. GET /channels/whatsapp-web/:channelId/qr to get QR image',
+        '4. Scan QR with WhatsApp mobile app',
+      ],
+    }
+  })
+
+  // ── POST /channels/setup/wa-web/start-guarded ─────────────────────────────
+  // Guarded session start — blocked without OMNI_ALLOW_WA_SESSION
+  app.post('/wa-web/start-guarded', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+
+    if (!waSessionAllowed) {
+      return {
+        tenantId,
+        started:           false,
+        blocked:           true,
+        missingConditions: ['OMNI_ALLOW_WA_SESSION=true not set — operator must enable this flag'],
+        realSessionStarted: false,
+        note: 'Session start blocked. Set OMNI_ALLOW_WA_SESSION=true in .env and restart the API.',
+      }
+    }
+
+    // Flag is set — provide operator path without starting a session from this route
+    return {
+      tenantId,
+      started:              false,
+      blocked:              false,
+      implementationStatus: 'GUARDED_REDIRECT',
+      realSessionStarted:   false,
+      note: 'OMNI_ALLOW_WA_SESSION is set. Use POST /channels/whatsapp-web/connect to start a real session. This setup route does not start sessions directly.',
+      nextStep: 'POST /channels/whatsapp-web/connect',
+    }
+  })
+
+  // ── GET /channels/setup/staging-readiness ─────────────────────────────────
+  // Staging readiness summary for launch checklist — no secrets, no external calls
+  app.get('/staging-readiness', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    const [draft, onboarding, kbCount] = await Promise.all([
+      prisma.channelSetupDraft.findUnique({ where: { tenantId } }),
+      prisma.onboardingDraft.findUnique({ where: { tenantId } }),
+      prisma.knowledgeItem.count({ where: { tenantId, isActive: true } }),
+    ])
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    const onboardingDone     = onboarding?.status === 'ENABLED'
+    const kbReady            = kbCount > 0
+    const channelTypeSaved   = !!draft?.channelType
+    const credentialsSaved   = draft?.credentialStatus === 'ENCRYPTED_STORED' || draft?.credentialStatus === 'DRAFT'
+    const stubTestDone       = !!draft?.lastTestAt
+    const activationReady    = draft?.setupStatus === 'ACTIVATION_PENDING' || draft?.setupStatus === 'ACTIVE'
+
+    // Determine staging readiness
+    const waWebQrReady    = channelTypeSaved && draft?.channelType === 'WA_WEB'
+    const metaLiveReady   = channelTypeSaved && draft?.channelType === 'META_WA_BUSINESS' && credentialsSaved
+
+    const configComplete = onboardingDone && kbReady && channelTypeSaved && stubTestDone
+    const readyForManualActivationReview = configComplete && activationReady && !waSessionAllowed && !metaSendAllowed
+
+    return {
+      tenantId,
+      stagingMode: {
+        waWebQrReady,
+        metaLiveTestReady:           metaLiveReady,
+        readyForManualActivationReview,
+        onboardingComplete:          onboardingDone,
+        knowledgeBaseReady:          kbReady,
+        channelConfigured:           channelTypeSaved,
+        credentialsSaved,
+        stubTestCompleted:           stubTestDone,
+        activationRequested:         activationReady,
+      },
+      flags: {
+        realSendDisabled:    !waSessionAllowed && !metaSendAllowed,
+        waSessionAllowed,
+        metaSendAllowed,
+      },
+      stagingStatus: readyForManualActivationReview
+        ? 'READY_FOR_MANUAL_ACTIVATION_REVIEW'
+        : configComplete
+          ? 'PARTIALLY_READY'
+          : 'NOT_READY',
+      stagingNote: readyForManualActivationReview
+        ? 'All configuration is complete. Real sending is disabled by default. Operator must enable flags to go live.'
+        : configComplete
+          ? 'Basic config done. Complete activation steps and operator flag review before going live.'
+          : 'Complete onboarding, knowledge base, and channel setup before staging review.',
     }
   })
 }

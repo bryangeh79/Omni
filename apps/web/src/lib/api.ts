@@ -818,17 +818,77 @@ export async function confirmMetaLiveTest(): Promise<{
 export interface ChannelHealth {
   tenantId:         string
   asOf:             string
+  lastCheckedAt:    string
   channelType:      string | null
   setupStatus:      string
   credentialStatus: string
   healthLevel:      'OK' | 'WARN' | 'BLOCKED' | 'UNKNOWN'
   liveStatus:       string
   realSendEnabled:  boolean
-  links:            { channelSetup: string; launchChecklist: string }
+  nextAction?:      string
+  links:            { channelSetup: string; launchChecklist: string; waWebQr: string; metaWebhook: string }
 }
 
 export async function fetchChannelHealth(): Promise<ChannelHealth> {
   return apiFetch<ChannelHealth>('/boss/channel-health')
+}
+
+// ── Phase 14B: QR State + Start Guarded + Staging Readiness ──────────────────
+export interface WaWebQrState {
+  tenantId:          string
+  qrAvailable:       boolean
+  qrPending:         boolean
+  sessionActive:     boolean
+  waSessionAllowed:  boolean
+  channelType:       string | null
+  setupStatus:       string
+  missingConditions: string[]
+  realSessionStarted:boolean
+  note:              string
+  operatorSteps:     string[]
+}
+
+export async function fetchWaWebQrState(): Promise<WaWebQrState> {
+  return apiFetch<WaWebQrState>('/channels/setup/wa-web/qr-state')
+}
+
+export async function startWaWebGuarded(): Promise<{
+  tenantId:             string
+  started:              boolean
+  blocked:              boolean
+  missingConditions?:   string[]
+  implementationStatus?: string
+  realSessionStarted:   boolean
+  note:                 string
+  nextStep?:            string
+}> {
+  return apiFetch('/channels/setup/wa-web/start-guarded', { method: 'POST' })
+}
+
+export interface StagingReadiness {
+  tenantId:    string
+  stagingMode: {
+    waWebQrReady:                boolean
+    metaLiveTestReady:           boolean
+    readyForManualActivationReview: boolean
+    onboardingComplete:          boolean
+    knowledgeBaseReady:          boolean
+    channelConfigured:           boolean
+    credentialsSaved:            boolean
+    stubTestCompleted:           boolean
+    activationRequested:         boolean
+  }
+  flags: {
+    realSendDisabled:  boolean
+    waSessionAllowed:  boolean
+    metaSendAllowed:   boolean
+  }
+  stagingStatus: 'NOT_READY' | 'PARTIALLY_READY' | 'READY_FOR_MANUAL_ACTIVATION_REVIEW'
+  stagingNote:   string
+}
+
+export async function fetchStagingReadiness(): Promise<StagingReadiness> {
+  return apiFetch<StagingReadiness>('/channels/setup/staging-readiness')
 }
 
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────
