@@ -719,6 +719,118 @@ export async function testMessageStub(data: {
   })
 }
 
+// ── Phase 14A: WA Web Guarded Activation ─────────────────────────────────────
+export interface WaWebStatus {
+  tenantId:            string
+  channelType:         string | null
+  setupStatus:         string
+  waSessionAllowed:    boolean
+  sessionStatus:       string
+  channelExists:       boolean
+  channelIsActive:     boolean
+  qrAvailable:         boolean
+  missingConditions:   string[]
+  realSessionStarted:  boolean
+  note:                string
+}
+
+export async function fetchWaWebStatus(): Promise<WaWebStatus> {
+  return apiFetch<WaWebStatus>('/channels/setup/wa-web/status')
+}
+
+export async function requestWaWebQr(): Promise<{
+  tenantId:             string
+  qrIssued:             boolean
+  blocked:              boolean
+  missingConditions?:   string[]
+  implementationStatus?: string
+  realSessionStarted:   boolean
+  note:                 string
+  nextStep?:            string
+}> {
+  return apiFetch('/channels/setup/wa-web/request-qr', { method: 'POST' })
+}
+
+export async function fetchWaWebSessionStatus(): Promise<{
+  tenantId:         string
+  waSessionAllowed: boolean
+  channelExists:    boolean
+  channelIsActive:  boolean
+  hasSessionRef:    boolean
+  sessionStatus:    string
+  lastUpdatedAt:    string | null
+  realSessionData:  boolean
+  note:             string
+}> {
+  return apiFetch('/channels/setup/wa-web/session-status')
+}
+
+export async function disconnectWaWeb(): Promise<{
+  tenantId:      string
+  disconnected:  boolean
+  channelFound?: boolean
+  channelId?:    string
+  note:          string
+}> {
+  return apiFetch('/channels/setup/wa-web/disconnect', { method: 'POST' })
+}
+
+// ── Phase 14A: Meta Live Webhook Guardrails ───────────────────────────────────
+export interface MetaLiveStatus {
+  tenantId:           string
+  liveStatus:         string
+  metaSendAllowed:    boolean
+  credentialStatus:   string
+  webhookSubscribed:  boolean
+  verifyTokenSet:     boolean
+  missingConditions:  string[]
+  realMetaApiCalled:  boolean
+  note:               string
+}
+
+export async function fetchMetaLiveStatus(): Promise<MetaLiveStatus> {
+  return apiFetch<MetaLiveStatus>('/channels/setup/meta-webhook/live-status')
+}
+
+export async function requestMetaLiveTest(): Promise<{
+  tenantId:          string
+  testInitiated:     boolean
+  blocked:           boolean
+  missingConditions: string[]
+  realMetaApiCalled: boolean
+  note:              string
+}> {
+  return apiFetch('/channels/setup/meta-webhook/request-live-test', { method: 'POST' })
+}
+
+export async function confirmMetaLiveTest(): Promise<{
+  tenantId:          string
+  confirmed:         boolean
+  blocked:           boolean
+  realMetaApiCalled: boolean
+  realSendEnabled:   boolean
+  note:              string
+}> {
+  return apiFetch('/channels/setup/meta-webhook/confirm-live-test', { method: 'POST' })
+}
+
+// ── Phase 14A: Channel Health ─────────────────────────────────────────────────
+export interface ChannelHealth {
+  tenantId:         string
+  asOf:             string
+  channelType:      string | null
+  setupStatus:      string
+  credentialStatus: string
+  healthLevel:      'OK' | 'WARN' | 'BLOCKED' | 'UNKNOWN'
+  liveStatus:       string
+  realSendEnabled:  boolean
+  links:            { channelSetup: string; launchChecklist: string }
+}
+
+export async function fetchChannelHealth(): Promise<ChannelHealth> {
+  return apiFetch<ChannelHealth>('/boss/channel-health')
+}
+
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────
 export interface CostEstimate {
   ai:             { totalReplies: number; totalAiCostUsd: number; totalAiCostRm: number }

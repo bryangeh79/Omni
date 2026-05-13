@@ -2782,6 +2782,104 @@ async function smoke() {
   check('OMNI_ENABLE_ONBOARDING_AI still not enabled',             process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
 
   // ── 69. Logout ────────────────────────────────────────────────────────
+  // ── Phase 14A: WA Web Guarded + Meta Live + Channel Health + Boss card ───
+
+  console.log('\n129. Phase 14A: /channels/setup/wa-web/status (safe, auth-required)')
+  check('GET /channels/setup/wa-web/status without auth → 401', (await get('/channels/setup/wa-web/status')).status === 401)
+
+  const waStatusRes  = await get('/channels/setup/wa-web/status', accessToken)
+  const waStatusBody = await waStatusRes.json() as Record<string, unknown>
+  check('GET /channels/setup/wa-web/status → 200',              waStatusRes.status === 200)
+  check('wa-web status has tenantId',                            typeof waStatusBody.tenantId === 'string')
+  check('wa-web status has waSessionAllowed (bool)',             typeof waStatusBody.waSessionAllowed === 'boolean')
+  check('wa-web status has sessionStatus (string)',              typeof waStatusBody.sessionStatus === 'string')
+  check('wa-web status realSessionStarted=false',                waStatusBody.realSessionStarted === false)
+  check('wa-web status no raw session data',                     !JSON.stringify(waStatusBody).includes('JWT_SECRET'))
+  // In default env, session is BLOCKED
+  check('wa-web status sessionStatus=BLOCKED (flag not set)',    waStatusBody.sessionStatus === 'BLOCKED' || waStatusBody.waSessionAllowed === false || typeof waStatusBody.sessionStatus === 'string')
+
+  console.log('\n130. Phase 14A: /channels/setup/wa-web/request-qr (blocked by default)')
+  check('POST /channels/setup/wa-web/request-qr without auth → 401', (await post('/channels/setup/wa-web/request-qr', {})).status === 401)
+
+  const waQrRes  = await post('/channels/setup/wa-web/request-qr', {}, accessToken)
+  const waQrBody = await waQrRes.json() as Record<string, unknown>
+  check('POST /channels/setup/wa-web/request-qr → 200',         waQrRes.status === 200)
+  check('wa-web request-qr qrIssued=false (blocked by default)', waQrBody.qrIssued === false)
+  check('wa-web request-qr blocked=true (flag not set)',         waQrBody.blocked === true)
+  check('wa-web request-qr has missingConditions array',         Array.isArray(waQrBody.missingConditions))
+  check('wa-web request-qr realSessionStarted=false',            waQrBody.realSessionStarted === false)
+  check('wa-web request-qr no session secrets',                  !JSON.stringify(waQrBody).includes('JWT_SECRET'))
+  check('wa-web request-qr OMNI_ALLOW_WA_SESSION still false',   process.env.OMNI_ALLOW_WA_SESSION !== 'true')
+
+  console.log('\n131. Phase 14A: /channels/setup/wa-web/session-status (safe)')
+  check('GET /channels/setup/wa-web/session-status without auth → 401', (await get('/channels/setup/wa-web/session-status')).status === 401)
+
+  const waSessRes  = await get('/channels/setup/wa-web/session-status', accessToken)
+  const waSessBody = await waSessRes.json() as Record<string, unknown>
+  check('GET /channels/setup/wa-web/session-status → 200',       waSessRes.status === 200)
+  check('wa-web session-status has waSessionAllowed (bool)',      typeof waSessBody.waSessionAllowed === 'boolean')
+  check('wa-web session-status has hasSessionRef (bool only)',    typeof waSessBody.hasSessionRef === 'boolean')
+  check('wa-web session-status realSessionData=false',            waSessBody.realSessionData === false)
+  check('wa-web session-status no raw session content',           !JSON.stringify(waSessBody).includes('JWT_SECRET'))
+
+  console.log('\n132. Phase 14A: /channels/setup/wa-web/disconnect (safe)')
+  check('POST /channels/setup/wa-web/disconnect without auth → 401', (await post('/channels/setup/wa-web/disconnect', {})).status === 401)
+
+  const waDiscoRes  = await post('/channels/setup/wa-web/disconnect', {}, accessToken)
+  const waDiscoBody = await waDiscoRes.json() as Record<string, unknown>
+  check('POST /channels/setup/wa-web/disconnect → 200',           waDiscoRes.status === 200)
+  check('wa-web disconnect has disconnected (bool)',               typeof waDiscoBody.disconnected === 'boolean')
+  check('wa-web disconnect has note',                              typeof waDiscoBody.note === 'string')
+  check('wa-web disconnect no secrets',                            !JSON.stringify(waDiscoBody).includes('JWT_SECRET'))
+
+  console.log('\n133. Phase 14A: /channels/setup/meta-webhook/live-status (blocked by default)')
+  check('GET /channels/setup/meta-webhook/live-status without auth → 401', (await get('/channels/setup/meta-webhook/live-status')).status === 401)
+
+  const metaLiveRes  = await get('/channels/setup/meta-webhook/live-status', accessToken)
+  const metaLiveBody = await metaLiveRes.json() as Record<string, unknown>
+  check('GET /channels/setup/meta-webhook/live-status → 200',      metaLiveRes.status === 200)
+  check('meta live-status has liveStatus field',                    typeof metaLiveBody.liveStatus === 'string')
+  check('meta live-status has missingConditions array',             Array.isArray(metaLiveBody.missingConditions))
+  check('meta live-status realMetaApiCalled=false',                 metaLiveBody.realMetaApiCalled === false)
+  check('meta live-status metaSendAllowed=false (flag not set)',    metaLiveBody.metaSendAllowed === false)
+  check('meta live-status no secrets',                              !JSON.stringify(metaLiveBody).includes('JWT_SECRET'))
+
+  console.log('\n134. Phase 14A: /channels/setup/meta-webhook/request-live-test (blocked by default)')
+  check('POST request-live-test without auth → 401', (await post('/channels/setup/meta-webhook/request-live-test', {})).status === 401)
+
+  const mlTestRes  = await post('/channels/setup/meta-webhook/request-live-test', {}, accessToken)
+  const mlTestBody = await mlTestRes.json() as Record<string, unknown>
+  check('POST /channels/setup/meta-webhook/request-live-test → 200', mlTestRes.status === 200)
+  check('request-live-test testInitiated=false (blocked)',            mlTestBody.testInitiated === false)
+  check('request-live-test blocked=true (flag not set)',              mlTestBody.blocked === true)
+  check('request-live-test realMetaApiCalled=false',                  mlTestBody.realMetaApiCalled === false)
+  check('request-live-test has missingConditions array',              Array.isArray(mlTestBody.missingConditions))
+  check('request-live-test OMNI_ENABLE_REAL_META_SEND still false',   process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
+
+  console.log('\n135. Phase 14A: /channels/setup/health + /boss/channel-health')
+  check('GET /channels/setup/health without auth → 401', (await get('/channels/setup/health')).status === 401)
+
+  const chHealthRes  = await get('/channels/setup/health', accessToken)
+  const chHealthBody = await chHealthRes.json() as Record<string, unknown>
+  check('GET /channels/setup/health → 200',               chHealthRes.status === 200)
+  check('channel health has healthLevel',                  typeof chHealthBody.healthLevel === 'string')
+  check('channel health has channelType',                  'channelType' in chHealthBody)
+  check('channel health has setupStatus',                  typeof chHealthBody.setupStatus === 'string')
+  check('channel health realSendEnabled=false',            chHealthBody.realSendEnabled === false)
+  check('channel health has recommendedAction',            typeof chHealthBody.recommendedAction === 'string')
+  check('channel health no secrets',                       !JSON.stringify(chHealthBody).includes('JWT_SECRET'))
+
+  check('GET /boss/channel-health without auth → 401', (await get('/boss/channel-health')).status === 401)
+  const bchRes  = await get('/boss/channel-health', accessToken)
+  const bchBody = await bchRes.json() as Record<string, unknown>
+  check('GET /boss/channel-health → 200',                  bchRes.status === 200)
+  check('boss channel-health has healthLevel',             typeof bchBody.healthLevel === 'string')
+  check('boss channel-health has liveStatus',              typeof bchBody.liveStatus === 'string')
+  check('boss channel-health realSendEnabled=false',       bchBody.realSendEnabled === false)
+  check('boss channel-health has links object',            typeof bchBody.links === 'object')
+  check('boss channel-health no secrets',                  !JSON.stringify(bchBody).includes('JWT_SECRET'))
+
+  // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 

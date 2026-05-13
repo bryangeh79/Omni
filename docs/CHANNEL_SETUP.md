@@ -180,11 +180,42 @@ Deterministic readiness checklist with 9 items, 3 launch status values, and safe
 
 ---
 
-## Limitations (Phase 13B)
+## Phase 14A Additions
 
-- Real WA Web QR scan not implemented (Phase 14)
-- Real webhook delivery verification not implemented (Phase 14)
+### WA Web Guarded Activation Foundation
+
+New endpoints under `/channels/setup/wa-web/`:
+- `GET /wa-web/status` — activation readiness; `sessionStatus=BLOCKED` when flag not set
+- `POST /wa-web/request-qr` — blocked without `OMNI_ALLOW_WA_SESSION=true`; returns `GUARDED_REDIRECT` if allowed (real QR is via `/channels/whatsapp-web/connect`)
+- `GET /wa-web/session-status` — `hasSessionRef` boolean only; no raw session data
+- `POST /wa-web/disconnect` — marks channel inactive (no broad process kill)
+
+### Meta Live Webhook Verification Guardrails
+
+New endpoints under `/channels/setup/meta-webhook/`:
+- `GET /meta-webhook/live-status` — lists missing conditions (flag, credentials, webhook subscription)
+- `POST /meta-webhook/request-live-test` — blocked without flag + `ENCRYPTED_STORED` credentials
+- `POST /meta-webhook/confirm-live-test` — blocked without flag
+
+### Channel Health
+
+- `GET /channels/setup/health` — deterministic: `waWebSessionStatus`, `metaWebhookStatus`, `healthLevel` (OK/WARN/BLOCKED), `recommendedAction`
+- `GET /boss/channel-health` — compact health summary for Boss Dashboard card
+
+### Boss Dashboard Channel Health Card
+
+Boss page (`/boss`) now loads `/boss/channel-health` in background and shows:
+- Health level badge (OK/WARN/BLOCKED)
+- Channel type, setup status, live status, real send flag (always OFF by default)
+- Links to `/channels/setup` and `/launch-checklist`
+
+---
+
+## Limitations (Phase 14A)
+
+- Real WA Web QR scan not yet implemented (request-qr returns `GUARDED_REDIRECT` to real adapter; Phase 14B)
+- Real Meta webhook delivery test not yet implemented (request-live-test blocked by default)
 - `credentialRef` encryption requires `OMNI_API_KEY_ENCRYPTION_SECRET` to be configured
-- One draft per tenant (not per channel) — multi-channel support is Phase 14+
+- One draft per tenant (not per channel) — multi-channel support is Phase 15+
 - No credential rotation flow yet
 - Meta App Dashboard steps must be done manually (no API automation)

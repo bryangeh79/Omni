@@ -1,4 +1,4 @@
-// Channel Setup Wizard API — Phase 13A + 13B
+// Channel Setup Wizard API — Phase 13A + 13B + 14A
 //
 // Phase 13A:
 // GET  /channels/setup/status           — persisted draft state (no secrets)
@@ -16,6 +16,16 @@
 // POST /channels/setup/meta-webhook/test-stub  — stub webhook test (no Meta API call)
 // GET  /channels/setup/launch-checklist       — deterministic launch readiness checklist
 // POST /channels/setup/test-message-stub      — stub send preview (never sends)
+//
+// Phase 14A:
+// GET  /channels/setup/wa-web/status         — WA Web activation readiness (no session secrets)
+// POST /channels/setup/wa-web/request-qr     — guarded QR request (blocked without env flag)
+// GET  /channels/setup/wa-web/session-status — safe session status summary
+// POST /channels/setup/wa-web/disconnect     — safe disconnect (guarded)
+// GET  /channels/setup/meta-webhook/live-status    — Meta live verification readiness
+// POST /channels/setup/meta-webhook/request-live-test — guarded live test (blocked by default)
+// POST /channels/setup/meta-webhook/confirm-live-test — guarded live confirm (blocked by default)
+// GET  /channels/setup/health              — channel health summary (no secrets)
 //
 // Safety rules:
 //   - All endpoints: requireAuth, tenantId from JWT only.
@@ -679,6 +689,311 @@ export async function channelSetupRoutes(app: FastifyInstance) {
       blockedReason:    'Real sending disabled by default. Set OMNI_ENABLE_REAL_META_SEND=true or OMNI_ALLOW_WA_SESSION=true to enable.',
       channelReady:     draft.setupStatus === 'ACTIVE',
       note: 'Safe stub. No WhatsApp message was sent. Raw phone number is not stored or returned.',
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 14A: WA Web Guarded Activation Foundation
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/wa-web/status ────────────────────────────────────
+  // Safe WA Web activation readiness — no session data, no secrets
+  app.get('/wa-web/status', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const draft = await getOrCreateDraft(tenantId)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+
+    // Check if a real channel exists for this tenant (WA_WEB type)
+    const existingChannel = await prisma.channel.findFirst({
+      where: { tenantId, type: 'WHATSAPP_WEB' },
+      select: { id: true, isActive: true, createdAt: true },
+    })
+
+    return {
+      tenantId,
+      channelType:         draft.channelType,
+      setupStatus:         draft.setupStatus,
+      waSessionAllowed,
+      sessionStatus:       waSessionAllowed ? (existingChannel ? (existingChannel.isActive ? 'CONNECTED' : 'NOT_CONNECTED') : 'NOT_STARTED') : 'BLOCKED',
+      channelExists:       !!existingChannel,
+      channelIsActive:     existingChannel?.isActive ?? false,
+      qrAvailable:         false,         // QR is only via /channels/whatsapp-web/:id/qr
+      missingConditions:   waSessionAllowed ? [] : ['OMNI_ALLOW_WA_SESSION=true not set — operator must enable before WA Web activation'],
+      realSessionStarted:  false,         // Phase 14A never starts a real session from setup routes
+      note: waSessionAllowed
+        ? 'WA Web session flag is enabled. Use POST /channels/setup/wa-web/request-qr to initiate (if further conditions met).'
+        : 'WA Web session is blocked by default. OMNI_ALLOW_WA_SESSION must be set to true by operator.',
+    }
+  })
+
+  // ── POST /channels/setup/wa-web/request-qr ───────────────────────────────
+  // Guarded QR request — blocked unless OMNI_ALLOW_WA_SESSION=true
+  // Even when allowed, returns NOT_IMPLEMENTED_GUARDED (real QR is via /channels/whatsapp-web)
+  app.post('/wa-web/request-qr', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+
+    if (!waSessionAllowed) {
+      return {
+        tenantId,
+        qrIssued:          false,
+        blocked:           true,
+        missingConditions: ['OMNI_ALLOW_WA_SESSION=true not set — operator must set this env var to allow WA Web session start'],
+        realSessionStarted: false,
+        note: 'QR request blocked. OMNI_ALLOW_WA_SESSION must be true before a WA Web session can start.',
+      }
+    }
+
+    // Flag is set — delegate to real session adapter via safe reference
+    // Real QR generation is implemented at POST /channels/whatsapp-web/connect
+    return {
+      tenantId,
+      qrIssued:          false,
+      blocked:           false,
+      implementationStatus: 'GUARDED_REDIRECT',
+      realSessionStarted:   false,
+      note: 'OMNI_ALLOW_WA_SESSION is set. Use POST /channels/whatsapp-web/connect to start a session and poll GET /channels/whatsapp-web/:id/qr for the QR code.',
+      nextStep: 'POST /channels/whatsapp-web/connect',
+    }
+  })
+
+  // ── GET /channels/setup/wa-web/session-status ─────────────────────────────
+  // Safe session status — no QR payload, no raw session data
+  app.get('/wa-web/session-status', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+
+    const channel = await prisma.channel.findFirst({
+      where: { tenantId, type: 'WHATSAPP_WEB' },
+      select: { id: true, isActive: true, waWebSessionRef: true, createdAt: true, updatedAt: true },
+    })
+
+    return {
+      tenantId,
+      waSessionAllowed,
+      channelExists:      !!channel,
+      channelIsActive:    channel?.isActive ?? false,
+      hasSessionRef:      !!channel?.waWebSessionRef,  // boolean only — never the ref
+      sessionStatus:      !waSessionAllowed ? 'BLOCKED' : !channel ? 'NOT_STARTED' : channel.isActive ? 'CONNECTED' : 'NOT_CONNECTED',
+      lastUpdatedAt:      channel?.updatedAt ?? null,
+      realSessionData:    false,   // raw session data never returned
+      note: 'Session status summary only. No raw session data returned.',
+    }
+  })
+
+  // ── POST /channels/setup/wa-web/disconnect ────────────────────────────────
+  // Safe disconnect — removes channel record if it exists, no broad kills
+  app.post('/wa-web/disconnect', { preHandler: requireAuth }, async (req, _reply) => {
+    const { tenantId } = getAuthUser(req)
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION === 'true'
+
+    if (!waSessionAllowed) {
+      return {
+        tenantId,
+        disconnected:      false,
+        blocked:           true,
+        note: 'WA Web session is not active (OMNI_ALLOW_WA_SESSION not set). Nothing to disconnect.',
+      }
+    }
+
+    const channel = await prisma.channel.findFirst({
+      where:  { tenantId, type: 'WHATSAPP_WEB' },
+      select: { id: true },
+    })
+
+    if (!channel) {
+      return {
+        tenantId,
+        disconnected: false,
+        channelFound: false,
+        note: 'No WA Web channel found for this tenant.',
+      }
+    }
+
+    // Mark channel inactive (do not delete — preserves conversation history)
+    await prisma.channel.update({
+      where: { id: channel.id },
+      data:  { isActive: false },
+    })
+
+    return {
+      tenantId,
+      disconnected:  true,
+      channelId:     channel.id,
+      channelActive: false,
+      note: 'Channel marked inactive. Session adapter cleanup requires a process restart or explicit adapter disconnect via /channels/whatsapp-web/:id/disconnect.',
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 14A: Meta Live Webhook Verification Guardrails
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/meta-webhook/live-status ──────────────────────────
+  app.get('/meta-webhook/live-status', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const draft = await getOrCreateDraft(tenantId)
+    const metaSendAllowed = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    // Parse webhook progress from activationNotes
+    let webhookProgress: Record<string, unknown> = {}
+    try {
+      if (draft.activationNotes) {
+        const parsed = JSON.parse(draft.activationNotes) as Record<string, unknown>
+        if (parsed.webhookWizard) webhookProgress = parsed.webhookWizard as Record<string, unknown>
+      }
+    } catch { /* ignore */ }
+
+    const credentialsSaved    = draft.credentialStatus === 'ENCRYPTED_STORED' || draft.credentialStatus === 'DRAFT'
+    const webhookSubscribed   = !!(webhookProgress.webhookSubscribed)
+    const verifyTokenSet      = !!(webhookProgress.verifyTokenSet)
+
+    const missingConditions: string[] = []
+    if (!metaSendAllowed)      missingConditions.push('OMNI_ENABLE_REAL_META_SEND=true not set')
+    if (!credentialsSaved)     missingConditions.push('credentials not saved (run /channels/setup/credentials-draft)')
+    if (!webhookSubscribed)    missingConditions.push('webhook not subscribed in Meta App Dashboard')
+    if (!verifyTokenSet)       missingConditions.push('verify token not saved')
+
+    let liveStatus: string
+    if (!metaSendAllowed)           liveStatus = 'BLOCKED_FLAG'
+    else if (!credentialsSaved)     liveStatus = 'BLOCKED_NO_CREDENTIALS'
+    else if (!webhookSubscribed)    liveStatus = 'BLOCKED_NO_WEBHOOK'
+    else                            liveStatus = 'READY_FOR_LIVE_TEST'
+
+    return {
+      tenantId,
+      liveStatus,
+      metaSendAllowed,
+      credentialStatus:   draft.credentialStatus,
+      webhookSubscribed,
+      verifyTokenSet,
+      missingConditions,
+      realMetaApiCalled:  false,
+      note: missingConditions.length === 0
+        ? 'All conditions met. Use request-live-test to initiate (operator-gated).'
+        : `Live verification blocked. Missing: ${missingConditions.join('; ')}`,
+    }
+  })
+
+  // ── POST /channels/setup/meta-webhook/request-live-test ──────────────────
+  // Guarded: blocked by default without OMNI_ENABLE_REAL_META_SEND + credentials
+  app.post('/meta-webhook/request-live-test', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const draft = await getOrCreateDraft(tenantId)
+    const metaSendAllowed   = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+    const credentialsSaved  = draft.credentialStatus === 'ENCRYPTED_STORED'
+
+    const missing: string[] = []
+    if (!metaSendAllowed)   missing.push('OMNI_ENABLE_REAL_META_SEND=true not set')
+    if (!credentialsSaved)  missing.push('credentialStatus must be ENCRYPTED_STORED (not DRAFT or NONE)')
+
+    return {
+      tenantId,
+      testInitiated:      false,
+      blocked:            missing.length > 0,
+      missingConditions:  missing,
+      realMetaApiCalled:  false,
+      note: missing.length > 0
+        ? `Live test blocked. ${missing.join('; ')}`
+        : 'Conditions met — real Meta API live test would initiate here. NOT_IMPLEMENTED_GUARDED: real webhook delivery test requires Phase 14B implementation.',
+    }
+  })
+
+  // ── POST /channels/setup/meta-webhook/confirm-live-test ──────────────────
+  // Final live test confirmation — safe by default
+  app.post('/meta-webhook/confirm-live-test', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const metaSendAllowed = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    return {
+      tenantId,
+      confirmed:         false,
+      blocked:           !metaSendAllowed,
+      realMetaApiCalled: false,
+      realSendEnabled:   metaSendAllowed,
+      note: metaSendAllowed
+        ? 'OMNI_ENABLE_REAL_META_SEND is set. Real confirmation not yet implemented (Phase 14B).'
+        : 'Live test confirm blocked. OMNI_ENABLE_REAL_META_SEND=true required.',
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 14A: Channel Health Summary
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /channels/setup/health ────────────────────────────────────────────
+  // Deterministic channel health — no secrets, no external calls
+  app.get('/health', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const draft = await getOrCreateDraft(tenantId)
+    const waSessionAllowed  = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed   = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    // Check real channels
+    const waChannel = await prisma.channel.findFirst({
+      where:  { tenantId, type: 'WHATSAPP_WEB' },
+      select: { id: true, isActive: true, updatedAt: true },
+    })
+    const metaChannel = await prisma.channel.findFirst({
+      where:  { tenantId, type: 'META_API' },
+      select: { id: true, isActive: true, lastWebhookAt: true, updatedAt: true },
+    })
+
+    // Determine WA Web session status
+    let waWebSessionStatus: string
+    if (!waSessionAllowed)             waWebSessionStatus = 'BLOCKED'
+    else if (!waChannel)               waWebSessionStatus = 'NOT_CONNECTED'
+    else if (waChannel.isActive)       waWebSessionStatus = 'CONNECTED'
+    else                               waWebSessionStatus = 'NOT_CONNECTED'
+
+    // Determine Meta webhook status
+    let metaWebhookStatus: string
+    if (!draft.channelType)                                       metaWebhookStatus = 'NOT_CONFIGURED'
+    else if (draft.channelType !== 'META_WA_BUSINESS')           metaWebhookStatus = 'NOT_APPLICABLE'
+    else if (!metaSendAllowed)                                   metaWebhookStatus = 'BLOCKED'
+    else if (metaChannel?.isActive && metaChannel.lastWebhookAt) metaWebhookStatus = 'LIVE_VERIFIED'
+    else if (draft.setupStatus === 'ACTIVATION_PENDING')         metaWebhookStatus = 'LIVE_PENDING'
+    else if (draft.setupStatus === 'TESTED_STUB')                metaWebhookStatus = 'STUB_TESTED'
+    else                                                         metaWebhookStatus = 'NOT_CONFIGURED'
+
+    // Determine health level
+    const channelType = draft.channelType
+    let healthLevel: string
+    let recommendedAction: string
+
+    if (!channelType) {
+      healthLevel       = 'BLOCKED'
+      recommendedAction = 'Choose a channel type at /channels/setup'
+    } else if (channelType === 'WA_WEB' && waWebSessionStatus === 'CONNECTED') {
+      healthLevel       = 'OK'
+      recommendedAction = 'Channel is connected. Monitor via /inbox and /boss.'
+    } else if (channelType === 'META_WA_BUSINESS' && metaWebhookStatus === 'LIVE_VERIFIED') {
+      healthLevel       = 'OK'
+      recommendedAction = 'Meta channel live. Monitor via /inbox and /boss.'
+    } else if (draft.setupStatus === 'DRAFT') {
+      healthLevel       = 'BLOCKED'
+      recommendedAction = 'Complete channel setup at /channels/setup'
+    } else if (!waSessionAllowed && !metaSendAllowed) {
+      healthLevel       = 'WARN'
+      recommendedAction = 'Configuration saved. Operator must enable real send flags to go live.'
+    } else {
+      healthLevel       = 'WARN'
+      recommendedAction = 'Channel configured but not yet live. Complete activation steps.'
+    }
+
+    return {
+      tenantId,
+      channelType,
+      setupStatus:         draft.setupStatus,
+      credentialStatus:    draft.credentialStatus,
+      lastTestAt:          draft.lastTestAt,
+      waWebSessionStatus,
+      metaWebhookStatus,
+      realSendEnabled:     false,   // always false in response — safety
+      healthLevel,
+      recommendedAction,
+      waSessionAllowed,
+      metaSendAllowed,
     }
   })
 }

@@ -478,4 +478,54 @@ export async function bossRoutes(app: FastifyInstance) {
       note:        'Avg response time not yet tracked — Phase 12',
     }
   })
+
+  // ── GET /boss/channel-health ────────────────────────────────────────────────
+  // Channel health summary for Boss Dashboard card — no secrets, no external calls
+  app.get('/channel-health', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const now = new Date()
+
+    const [draft, waChannel, metaChannel] = await Promise.all([
+      prisma.channelSetupDraft.findUnique({ where: { tenantId } }),
+      prisma.channel.findFirst({ where: { tenantId, type: 'WHATSAPP_WEB' }, select: { isActive: true, updatedAt: true } }),
+      prisma.channel.findFirst({ where: { tenantId, type: 'META_API' }, select: { isActive: true, lastWebhookAt: true } }),
+    ])
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    const channelType  = draft?.channelType ?? null
+    const setupStatus  = draft?.setupStatus ?? 'NOT_STARTED'
+    const credStatus   = draft?.credentialStatus ?? 'NONE'
+
+    let healthLevel: string
+    let liveStatus:  string
+
+    if (!channelType) {
+      healthLevel = 'BLOCKED'; liveStatus = 'NOT_CONFIGURED'
+    } else if (channelType === 'WA_WEB' && waChannel?.isActive) {
+      healthLevel = 'OK'; liveStatus = 'CONNECTED'
+    } else if (channelType === 'META_WA_BUSINESS' && metaChannel?.isActive) {
+      healthLevel = 'OK'; liveStatus = 'LIVE'
+    } else if (!waSessionAllowed && !metaSendAllowed) {
+      healthLevel = 'WARN'; liveStatus = 'FLAGS_DISABLED'
+    } else {
+      healthLevel = 'WARN'; liveStatus = 'PENDING_ACTIVATION'
+    }
+
+    return {
+      tenantId,
+      asOf:           now.toISOString(),
+      channelType,
+      setupStatus,
+      credentialStatus: credStatus,
+      healthLevel,
+      liveStatus,
+      realSendEnabled: false,   // always false in response
+      links: {
+        channelSetup:    '/channels/setup',
+        launchChecklist: '/launch-checklist',
+      },
+    }
+  })
 }

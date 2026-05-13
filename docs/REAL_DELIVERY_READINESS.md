@@ -138,3 +138,35 @@ All channel credentials (Meta access tokens, app secrets) are encrypted before s
 | META_WA_BUSINESS | `OMNI_ENABLE_REAL_META_SEND=true` | false |
 
 Both `request-activation` and `confirm-activation` return `activated=false, blocked=true` unless the correct env flag is set by the operator.
+
+---
+
+## Phase 14A: Live Activation Foundation
+
+### WA Web Guarded QR Activation
+
+| Endpoint | Behavior when flag OFF | Behavior when flag ON |
+|---------|----------------------|----------------------|
+| `GET /channels/setup/wa-web/status` | `sessionStatus=BLOCKED`, missing conditions listed | Returns actual channel state |
+| `POST /channels/setup/wa-web/request-qr` | `blocked=true`, `qrIssued=false` | `GUARDED_REDIRECT` → use `/channels/whatsapp-web/connect` |
+| `GET /channels/setup/wa-web/session-status` | `hasSessionRef=false`, safe summary | Returns bool flags only; no raw session data |
+| `POST /channels/setup/wa-web/disconnect` | Returns blocked note | Marks channel inactive; no broad process kill |
+
+### Meta Live Webhook Verification
+
+| Endpoint | Default (blocked) |
+|---------|-----------------|
+| `GET /channels/setup/meta-webhook/live-status` | Lists all missing conditions |
+| `POST /channels/setup/meta-webhook/request-live-test` | `blocked=true`, `testInitiated=false` |
+| `POST /channels/setup/meta-webhook/confirm-live-test` | `confirmed=false`, `realMetaApiCalled=false` |
+
+### Channel Health
+
+`GET /channels/setup/health` — deterministic health without external calls:
+- `healthLevel`: OK / WARN / BLOCKED
+- `waWebSessionStatus`: BLOCKED / NOT_CONNECTED / CONNECTED
+- `metaWebhookStatus`: NOT_CONFIGURED / STUB_TESTED / LIVE_PENDING / LIVE_VERIFIED / BLOCKED
+- `realSendEnabled`: always `false` in response
+- `recommendedAction`: human-readable next step
+
+`GET /boss/channel-health` — compact version for Boss Dashboard card.

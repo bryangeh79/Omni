@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   login, clearToken, getToken, fetchBossToday, fetchBossMetrics, fetchBossPipeline,
-  createRealtimeConnection,
+  fetchChannelHealth, createRealtimeConnection,
   type BossToday, type BossMetrics, type ActionItem, type BossPipeline, type SseTransport,
+  type ChannelHealth,
 } from '@/lib/api'
 
 // SSE event types that should trigger a Boss refresh
@@ -172,7 +173,8 @@ export default function BossDashboardPage() {
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-  const [sseTransport, setSseTransport] = useState<SseTransport>('unknown')
+  const [sseTransport,   setSseTransport]   = useState<SseTransport>('unknown')
+  const [channelHealth,  setChannelHealth]  = useState<ChannelHealth | null>(null)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setAuthed(!!getToken()) }, [])
@@ -184,6 +186,8 @@ export default function BossDashboardPage() {
       const range = currentRange ?? pipeRange
       const [t, m, p] = await Promise.all([fetchBossToday(), fetchBossMetrics(), fetchBossPipeline(range)])
       setToday(t); setMetrics(m); setPipeline(p); setLastRefresh(new Date())
+      // Load channel health in background (non-blocking)
+      fetchChannelHealth().then(setChannelHealth).catch(() => null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
   }, [pipeRange])
@@ -415,6 +419,40 @@ export default function BossDashboardPage() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Channel Health Card (Phase 14A) */}
+        {channelHealth && (
+          <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Channel Health</h3>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                channelHealth.healthLevel === 'OK'      ? 'bg-emerald-50 text-emerald-700' :
+                channelHealth.healthLevel === 'WARN'    ? 'bg-amber-50 text-amber-700' :
+                channelHealth.healthLevel === 'BLOCKED' ? 'bg-red-50 text-red-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>
+                {channelHealth.healthLevel === 'OK' ? '● OK' : channelHealth.healthLevel === 'WARN' ? '● WARN' : '● BLOCKED'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              {[
+                { label: 'Channel',    value: channelHealth.channelType ?? '—' },
+                { label: 'Status',     value: channelHealth.setupStatus },
+                { label: 'Live',       value: channelHealth.liveStatus.replace(/_/g, ' ') },
+                { label: 'Real Send',  value: channelHealth.realSendEnabled ? 'ON' : 'OFF' },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
+                  <p className="text-xs text-gray-400">{label}</p>
+                  <p className={`text-sm font-semibold mt-0.5 ${value === 'ON' ? 'text-red-600' : 'text-gray-700'}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 text-xs">
+              <a href="/channels/setup" className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-xl hover:bg-green-100 font-medium">Channel Setup →</a>
+              <a href="/launch-checklist" className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl hover:bg-emerald-100 font-medium">🚀 Launch Checklist →</a>
+            </div>
           </section>
         )}
 

@@ -121,9 +121,35 @@ Requires auth. Returns deterministic checklist from DB + env flags.
 
 ---
 
-## Limitations (Phase 13B)
+## Phase 14A Additions
+
+### Channel Health Integration
+
+The Boss Dashboard (`/boss`) now shows a Channel Health card derived from `GET /boss/channel-health`:
+- `healthLevel`: OK / WARN / BLOCKED
+- `liveStatus`: NOT_CONFIGURED / FLAGS_DISABLED / CONNECTED / LIVE / PENDING_ACTIVATION
+- Links to `/channels/setup` and `/launch-checklist`
+
+### WA Web Activation Status
+
+`GET /channels/setup/wa-web/status` feeds into the launch checklist flow:
+- When `OMNI_ALLOW_WA_SESSION=false`: checklist shows `BLOCKED` for WA Web activation
+- When `OMNI_ALLOW_WA_SESSION=true` and channel connected: shows `OK`
+
+### Meta Live Webhook Status
+
+`GET /channels/setup/meta-webhook/live-status` provides detailed readiness:
+- `BLOCKED_FLAG` → missing `OMNI_ENABLE_REAL_META_SEND`
+- `BLOCKED_NO_CREDENTIALS` → credentials not saved
+- `BLOCKED_NO_WEBHOOK` → webhook not subscribed in Meta App
+- `READY_FOR_LIVE_TEST` → all conditions met
+
+---
+
+## Limitations (Phase 14A)
 
 - Checklist is snapshot-based — does not poll live channel health
-- No actual webhook delivery verification (Phase 14)
+- Real WA Web QR activation requires `OMNI_ALLOW_WA_SESSION=true` (operator action) + Phase 14B implementation
+- Real Meta live webhook test not yet implemented (guarded foundation only)
 - `follow_up_rules` uses rule count as proxy — does not validate rule content
 - No per-channel breakdown (only most recent `ChannelSetupDraft` per tenant)

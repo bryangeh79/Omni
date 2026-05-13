@@ -6,8 +6,11 @@ import {
   fetchChannelSetupStatus, saveChannelSetupDraft, testChannelSetup,
   saveCredentialsDraft, fetchCredentialsStatus, clearCredentials,
   requestActivation, confirmActivation,
+  fetchWaWebStatus, requestWaWebQr,
+  fetchMetaLiveStatus, requestMetaLiveTest,
   type ChannelSetupStatus, type ChannelSetupTestResult,
   type CredentialsStatus, type ActivationResult,
+  type WaWebStatus, type MetaLiveStatus,
 } from '@/lib/api'
 
 // ── Status badge helpers ──────────────────────────────────────────────────────
@@ -127,6 +130,13 @@ export default function ChannelSetupPage() {
   const [activationResult, setActivationResult] = useState<ActivationResult | null>(null)
   const [requestingAct, setRequestingAct] = useState(false)
   const [confirmingAct, setConfirmingAct] = useState(false)
+  // Phase 14A — live activation readiness
+  const [waWebStatus,     setWaWebStatus]     = useState<WaWebStatus | null>(null)
+  const [metaLiveStatus,  setMetaLiveStatus]  = useState<MetaLiveStatus | null>(null)
+  const [requestingQr,    setRequestingQr]    = useState(false)
+  const [qrResult,        setQrResult]        = useState<{ blocked: boolean; note: string } | null>(null)
+  const [requestingLive,  setRequestingLive]  = useState(false)
+  const [liveTestResult,  setLiveTestResult]  = useState<{ blocked: boolean; note: string } | null>(null)
 
   useEffect(() => {
     if (getToken()) {
@@ -140,9 +150,32 @@ export default function ChannelSetupPage() {
       const [s, c] = await Promise.all([fetchChannelSetupStatus(), fetchCredentialsStatus().catch(() => null)])
       setStatus(s)
       if (c) setCredStatus(c)
-      if (s.channelType) setSelected(s.channelType)
+      if (s.channelType) {
+        setSelected(s.channelType)
+        // Load live status based on channel type
+        void fetchWaWebStatus().then(setWaWebStatus).catch(() => null)
+        void fetchMetaLiveStatus().then(setMetaLiveStatus).catch(() => null)
+      }
       if (s.displayName) setDisplayName(s.displayName)
     } catch { /* ignore */ }
+  }
+
+  async function handleRequestQr() {
+    setRequestingQr(true); setError('')
+    try {
+      const r = await requestWaWebQr()
+      setQrResult({ blocked: r.blocked, note: r.note })
+    } catch (e) { setError(e instanceof Error ? e.message : 'QR request failed') }
+    finally { setRequestingQr(false) }
+  }
+
+  async function handleRequestLiveTest() {
+    setRequestingLive(true); setError('')
+    try {
+      const r = await requestMetaLiveTest()
+      setLiveTestResult({ blocked: r.blocked, note: r.note })
+    } catch (e) { setError(e instanceof Error ? e.message : 'Live test request failed') }
+    finally { setRequestingLive(false) }
   }
 
   function notify(msg: string) { setNotice(msg); setTimeout(() => setNotice(''), 4000) }
@@ -462,6 +495,79 @@ export default function ChannelSetupPage() {
           </div>
         )}
 
+        {/* Phase 14A: WA Web Guarded Live Activation */}
+        {selected === 'WA_WEB' && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">WA Web Live Activation</h3>
+              {waWebStatus && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${waWebStatus.waSessionAllowed ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {waWebStatus.sessionStatus}
+                </span>
+              )}
+            </div>
+            {waWebStatus?.missingConditions && waWebStatus.missingConditions.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                <p className="font-bold mb-1">Missing Conditions</p>
+                {waWebStatus.missingConditions.map((c, i) => <p key={i}>• {c}</p>)}
+              </div>
+            )}
+            <p className="text-xs text-gray-500">{waWebStatus?.note ?? 'Loading…'}</p>
+            <button
+              onClick={() => { void handleRequestQr() }}
+              disabled={requestingQr}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+            >
+              {requestingQr ? 'Requesting…' : 'Request QR Code (Guarded)'}
+            </button>
+            {qrResult && (
+              <div className={`rounded-xl border px-4 py-3 text-xs ${qrResult.blocked ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+                <p className="font-bold mb-1">{qrResult.blocked ? '🔒 Blocked' : 'ℹ️ Response'}</p>
+                <p>{qrResult.note}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Phase 14A: Meta Live Webhook Verification */}
+        {selected === 'META_WA_BUSINESS' && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">Meta Live Webhook Verification</h3>
+              {metaLiveStatus && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${metaLiveStatus.liveStatus === 'READY_FOR_LIVE_TEST' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {metaLiveStatus.liveStatus.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+            {metaLiveStatus?.missingConditions && metaLiveStatus.missingConditions.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                <p className="font-bold mb-1">Missing Conditions</p>
+                {metaLiveStatus.missingConditions.map((c, i) => <p key={i}>• {c}</p>)}
+              </div>
+            )}
+            <p className="text-xs text-gray-500">{metaLiveStatus?.note ?? 'Loading…'}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { void handleRequestLiveTest() }}
+                disabled={requestingLive}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+              >
+                {requestingLive ? 'Requesting…' : 'Request Live Test (Guarded)'}
+              </button>
+              <a href="/channels/setup/meta-webhook" className="px-4 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-medium">
+                Webhook Wizard
+              </a>
+            </div>
+            {liveTestResult && (
+              <div className={`rounded-xl border px-4 py-3 text-xs ${liveTestResult.blocked ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+                <p className="font-bold mb-1">{liveTestResult.blocked ? '🔒 Blocked' : 'ℹ️ Response'}</p>
+                <p>{liveTestResult.note}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Safety reminder */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
           <p className="font-bold text-gray-600">Safety defaults:</p>
@@ -469,6 +575,7 @@ export default function ChannelSetupPage() {
           <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> — Meta API never called by default</p>
           <p>• Credentials are AES-256-GCM encrypted before storage; never returned in responses</p>
           <p>• Real channel activation requires explicit operator-set env flags</p>
+          <p>• <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">View full launch checklist →</a></p>
         </div>
       </main>
     </div>
