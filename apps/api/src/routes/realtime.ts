@@ -1,24 +1,36 @@
-// Real-time SSE endpoint — Phase 8A
+// Real-time SSE endpoint — Phase 8B: Redis pub/sub
 //
 // GET /realtime/events?token=<jwt>
+//   Subscribes to Redis tenant channel; streams SSE to client.
+//   Falls back to in-process EventEmitter if Redis is unavailable.
 //
-// Accepts the JWT access token via:
-//   - ?token= query param  (required for browser EventSource which cannot set headers)
-//   - Authorization: Bearer <token> header  (for non-browser clients / curl)
+// GET /realtime/status
+//   Returns Redis pub/sub health (no auth required — safe, no secrets).
 //
-// Events are tenant-scoped via the JWT tenantId claim.
-// The underlying bus is process-scoped (in-memory EventEmitter).
-// Worker-process AI reply events are NOT delivered here — see docs/REALTIME_EVENTS.md.
+// JWT accepted via:
+//   - ?token= query param  (required for browser EventSource)
+//   - Authorization: Bearer <token> header  (non-browser clients)
 
 import type { FastifyInstance } from 'fastify'
-import { subscribeToTenant } from '../realtime-bus'
+import { subscribeToTenant, isRealtimeRedisLive } from '../realtime-bus'
 import type { JwtTokenPayload } from '../auth/types'
 
 export async function realtimeRoutes(app: FastifyInstance) {
+
+  // ── GET /realtime/status — Redis health (public, no secrets) ──────────────
+  app.get('/status', async () => ({
+    redisLive:  isRealtimeRedisLive(),
+    mode:       isRealtimeRedisLive() ? 'redis-pubsub' : 'in-memory-fallback',
+    limitation: isRealtimeRedisLive()
+      ? null
+      : 'Redis unavailable: events are in-process only; worker AI reply events not delivered',
+  }))
+
+  // ── GET /realtime/events — SSE stream ─────────────────────────────────────
   app.get<{ Querystring: { token?: string } }>(
     '/events',
     async (req, reply) => {
-      // -- Auth: accept token from query param or Authorization header --
+      // Auth: ?token= for browser EventSource (cannot set headers); Bearer for others
       const rawToken =
         (req.query as { token?: string }).token ??
         req.headers.authorization?.replace(/^Bearer\s+/i, '')
@@ -41,34 +53,35 @@ export async function realtimeRoutes(app: FastifyInstance) {
 
       const { tenantId } = payload
 
-      // -- Hijack the raw socket; Fastify will not touch the response lifecycle --
+      // Hijack raw socket — Fastify will not manage this response lifecycle
       reply.hijack()
       const raw = reply.raw
       raw.writeHead(200, {
         'Content-Type':      'text/event-stream',
         'Cache-Control':     'no-cache, no-transform',
         'Connection':        'keep-alive',
-        'X-Accel-Buffering': 'no',  // nginx proxy: disable buffering
+        'X-Accel-Buffering': 'no',  // disable nginx proxy buffering
       })
 
       let seq = 0
       const write = (eventType: string, data: Record<string, unknown>) => {
         if (!raw.writableEnded) {
-          raw.write(
-            `id: ${seq++}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`,
-          )
+          raw.write(`id: ${seq++}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`)
         }
       }
 
-      // Confirm connection
-      write('connected', { tenantId })
+      // Confirm connection and expose transport mode (no secrets)
+      write('connected', {
+        tenantId,
+        transport: isRealtimeRedisLive() ? 'redis' : 'memory',
+      })
 
-      // Subscribe to in-process tenant events
+      // Subscribe: localBus receives events from Redis PMESSAGE or in-process publishEvent()
       const unsub = subscribeToTenant(tenantId, (event) => {
         write(event.type, { ...event.data, ts: event.ts })
       })
 
-      // Keepalive comment every 30 s (prevents proxy/browser timeouts)
+      // Keepalive comment every 30 s (prevents proxy / browser timeout)
       const heartbeat = setInterval(() => {
         if (raw.writableEnded) { clearInterval(heartbeat); return }
         raw.write(':heartbeat\n\n')
@@ -81,7 +94,7 @@ export async function realtimeRoutes(app: FastifyInstance) {
         if (!raw.writableEnded) raw.end()
       })
 
-      // Hold the handler open until the client disconnects
+      // Hold handler open until client disconnects
       await new Promise<void>((resolve) => {
         req.raw.on('close', resolve)
         req.raw.on('error', resolve)

@@ -160,6 +160,18 @@ No real WhatsApp messages are sent from the dashboard in Phase 8A.
 
 ---
 
+## Real-Time Transport (Phase 8B)
+
+| Scenario | Behavior |
+|----------|----------|
+| Redis available | SSE backed by Redis pub/sub; worker AI replies delivered |
+| Redis unavailable | In-memory fallback; worker events not delivered; DB writes unaffected |
+| Transport indicator | Green dot = Redis; Yellow dot = memory; Grey = disconnected |
+
+Check transport mode: `GET /realtime/status`
+
+See `docs/REALTIME_EVENTS.md` for full detail.
+
 ## Safety Notes
 
 - All API endpoints are JWT-protected and tenant-scoped.

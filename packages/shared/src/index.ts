@@ -51,6 +51,16 @@ export type { KeyProvider } from './api-key-vault'
 // ── AI types ──────────────────────────────────────────────────────────────────
 export { AI_PROVIDERS, isValidProviderModel, getModelsForProvider } from './ai-types'
 
+// ── Realtime event contract (Phase 8B) ───────────────────────────────────────
+export {
+  REALTIME_CHANNEL_PREFIX,
+  REALTIME_CHANNEL_PATTERN,
+  REALTIME_EVENT_TYPES,
+  getTenantChannel,
+  tenantFromChannel,
+} from './realtime-events'
+export type { RealtimeEventType, RealtimeEvent } from './realtime-events'
+
 // ── AI pricing + cost calculation ─────────────────────────────────────────────
 export { AI_MODEL_PRICING, getModelPricing, calculateAiCostUsd } from './ai-pricing'
 export type { AiModelPricing } from './ai-pricing'

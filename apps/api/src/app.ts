@@ -4,7 +4,8 @@ import './auth/types' // activate FastifyJWT type augmentation
 import Fastify      from 'fastify'
 import fastifyJwt   from '@fastify/jwt'
 
-import { registerRoutes } from './routes'
+import { registerRoutes }                  from './routes'
+import { initRealtimeBus, closeRealtimeBus } from './realtime-bus'
 
 export async function buildApp() {
   const app = Fastify({ logger: true })
@@ -18,6 +19,10 @@ export async function buildApp() {
 
   // ── Public routes (no auth required) ──────────────────────────────────────
   app.get('/health', async () => ({ status: 'ok', service: 'omni-api' }))
+
+  // ── Realtime bus (Redis pub/sub; falls back to in-memory if Redis absent) ─────
+  await initRealtimeBus()
+  app.addHook('onClose', async () => { await closeRealtimeBus() })
 
   // ── All application routes ─────────────────────────────────────────────────
   await registerRoutes(app)

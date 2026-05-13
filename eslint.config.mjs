@@ -12,6 +12,7 @@ export default tseslint.config(
       '**/.turbo/**',
       '**/prisma/generated/**',
       'pnpm-lock.yaml',
+      '**/next-env.d.ts',  // Next.js auto-generated; not owned by project
     ],
   },
 

@@ -5,7 +5,8 @@ import dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
-import { createInboundWorker } from './consumer'
+import { createInboundWorker }   from './consumer'
+import { closeWorkerPublisher } from './realtime-publisher'
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:43114'
 
@@ -23,6 +24,7 @@ async function startWorker(): Promise<void> {
   const shutdown = async (signal: string) => {
     console.log(`[omni-worker] Received ${signal}, shutting down gracefully...`)
     await worker.close()
+    await closeWorkerPublisher()
     console.log('[omni-worker] Shutdown complete')
     process.exit(0)
   }

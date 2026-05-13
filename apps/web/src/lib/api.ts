@@ -149,20 +149,34 @@ export async function sendMessage(conversationId: string, body: string): Promise
   })
 }
 
+// ── SSE transport mode (from connected event) ─────────────────────────────────
+export type SseTransport = 'redis' | 'memory' | 'unknown'
+
 // ── SSE connection factory ────────────────────────────────────────────────────
 export function createRealtimeConnection(
   onEvent: (type: string, data: Record<string, unknown>) => void,
-  onConnect?: () => void,
+  onConnect?: (transport: SseTransport) => void,
 ): EventSource | null {
   const token = getToken()
   if (!token || typeof EventSource === 'undefined') return null
   const src = new EventSource(`${API_BASE}/realtime/events?token=${encodeURIComponent(token)}`)
-  src.addEventListener('connected', () => onConnect?.())
+
+  src.addEventListener('connected', (e: MessageEvent) => {
+    try {
+      const payload = JSON.parse(e.data) as { transport?: string }
+      onConnect?.((payload.transport as SseTransport) ?? 'unknown')
+    } catch {
+      onConnect?.('unknown')
+    }
+  })
+
   const eventTypes = [
     'conversation.message.created',
     'conversation.updated',
     'conversation.handoff.updated',
     'customer.updated',
+    'ai.reply.created',      // Phase 8B: worker AI reply events
+    'worker.job.failed',     // Phase 8B: worker failure notification
   ]
   eventTypes.forEach((type) => {
     src.addEventListener(type, (e: MessageEvent) => {

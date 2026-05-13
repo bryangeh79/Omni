@@ -1503,6 +1503,158 @@ async function smoke() {
     check('SSE connection timeout/error (API may not be running streaming)', false)
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 8B — Redis Pub/Sub + Worker SSE Events
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n74. Phase 8B: /realtime/status endpoint')
+
+  // 74a. Status endpoint returns Redis health (no auth required)
+  const rtStatusRes  = await get('/realtime/status')
+  const rtStatusBody = await rtStatusRes.json() as Record<string, unknown>
+  check('GET /realtime/status → 200',      rtStatusRes.status === 200)
+  check('status has redisLive field',      typeof rtStatusBody.redisLive === 'boolean')
+  check('status has mode field',           typeof rtStatusBody.mode === 'string')
+  check('mode is redis-pubsub or in-memory-fallback',
+    rtStatusBody.mode === 'redis-pubsub' || rtStatusBody.mode === 'in-memory-fallback')
+
+  const phase8bRedisLive = rtStatusBody.redisLive === true
+  if (phase8bRedisLive) {
+    console.log('  ℹ️  Redis is LIVE — testing Redis-backed pub/sub event delivery')
+  } else {
+    console.log('  ℹ️  Redis not available — in-memory fallback mode (worker events skipped)')
+  }
+
+  console.log('\n75. Phase 8B: SSE auth gate regression')
+
+  // 75a. No auth → 401 (regression from Phase 8A)
+  check('GET /realtime/events no token → 401',     (await get('/realtime/events')).status === 401)
+  check('GET /realtime/events invalid token → 401', (await get('/realtime/events?token=bad')).status === 401)
+
+  // 75b. Valid token → 200 + text/event-stream (no regression)
+  try {
+    const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, {
+      signal: AbortSignal.timeout(3000),
+    })
+    check('GET /realtime/events valid token → 200',               sseRes.status === 200)
+    check('GET /realtime/events Content-Type: text/event-stream', (sseRes.headers.get('content-type') ?? '').startsWith('text/event-stream'))
+    sseRes.body?.cancel().catch(() => null)
+  } catch {
+    check('SSE connection (valid token)', false)
+  }
+
+  console.log('\n76. Phase 8B: SSE connected event carries transport field')
+
+  // 76a. Open SSE, read until 'connected' event, verify transport field present
+  let sseConnectedEvent: Record<string, unknown> | null = null
+  try {
+    const ctrl   = new AbortController()
+    const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, {
+      signal: ctrl.signal,
+    })
+
+    if (sseRes.ok && sseRes.body) {
+      const reader  = sseRes.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      const deadline = Date.now() + 3000
+      try {
+        while (Date.now() < deadline) {
+          const readResult = await Promise.race([
+            reader.read() as Promise<{ done: boolean; value: Uint8Array | undefined }>,
+            new Promise<{ done: true; value: undefined }>((_, r) =>
+              setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now()),
+            ),
+          ])
+          if (readResult.done) break
+          if (readResult.value) buf += decoder.decode(readResult.value, { stream: true })
+          // Parse SSE: look for connected event data line
+          const match = buf.match(/event: connected\r?\ndata: ({[^}]+})/s)
+          if (match) {
+            try { sseConnectedEvent = JSON.parse(match[1]) as Record<string, unknown> }
+            catch { /* ignore */ }
+            break
+          }
+        }
+      } finally { reader.cancel().catch(() => null) }
+    }
+    ctrl.abort()
+  } catch { /* timeout or abort */ }
+
+  check('SSE connected event received',            sseConnectedEvent !== null)
+  check('SSE connected event has transport field', typeof sseConnectedEvent?.transport === 'string')
+  check('SSE transport matches /realtime/status',
+    sseConnectedEvent?.transport === (phase8bRedisLive ? 'redis' : 'memory'))
+
+  console.log('\n77. Phase 8B: Redis-backed event delivery (publish → SSE)')
+
+  // Setup fresh conversation for Redis event test (convId is CLOSED from test 26)
+  let rtConvId = ''
+  if (channelId && createdId) {
+    const { convId: rtCid } = await prismaSetupConversation(channelId, createdId)
+    rtConvId = rtCid
+  }
+
+  if (phase8bRedisLive && rtConvId) {
+    let receivedEventType: string | null = null
+    try {
+      const ctrl   = new AbortController()
+      const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, {
+        signal: ctrl.signal,
+      })
+
+      if (sseRes.ok && sseRes.body) {
+        const reader  = sseRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        // Helper: read until pattern found or deadline
+        const readUntil = async (pattern: RegExp, maxMs: number): Promise<RegExpMatchArray | null> => {
+          const deadline = Date.now() + maxMs
+          while (Date.now() < deadline) {
+            const rr = await Promise.race([
+              reader.read() as Promise<{ done: boolean; value: Uint8Array | undefined }>,
+              new Promise<{ done: true; value: undefined }>((_, r) =>
+                setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now()),
+              ),
+            ])
+            if (rr.done) return null
+            if (rr.value) buf += decoder.decode(rr.value, { stream: true })
+            const m = buf.match(pattern)
+            if (m) return m
+          }
+          return null
+        }
+
+        // Wait for 'connected' event first to confirm SSE + Redis sub are established
+        await readUntil(/event: connected/, 3000)
+
+        // Now trigger a publish via takeover (fresh conv is in AI_HANDLING)
+        await post(`/conversations/${rtConvId}/takeover`, {}, accessToken)
+
+        // Read for conversation or handoff event (up to 3s)
+        const eventMatch = await readUntil(/event: (conversation\.\S+|ai\.reply\S*)/, 3000)
+        if (eventMatch) receivedEventType = eventMatch[1]
+
+        reader.cancel().catch(() => null)
+        ctrl.abort()
+      }
+    } catch { /* timeout or abort */ }
+
+    check('Phase 8B: Redis-backed SSE received event after takeover publish', receivedEventType !== null)
+    if (receivedEventType) {
+      console.log(`  ℹ️  Received SSE event type: ${receivedEventType}`)
+    }
+    await prismaCleanupConversation(rtConvId)
+  } else if (!phase8bRedisLive) {
+    check('Phase 8B: Redis not available — event delivery test skipped (documented fallback)', true)
+    console.log('  ℹ️  Redis pub/sub not available: in-memory fallback active; worker events require Redis')
+    if (rtConvId) await prismaCleanupConversation(rtConvId)
+  } else {
+    check('Phase 8B: Redis event delivery test skipped (no channel/customer)', true)
+    if (rtConvId) await prismaCleanupConversation(rtConvId)
+  }
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

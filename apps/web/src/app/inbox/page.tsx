@@ -7,6 +7,7 @@ import {
   takeoverConversation, releaseAi, sendMessage,
   createRealtimeConnection,
   type ConversationSummary, type ConversationDetail, type Message, type ConversationFilter,
+  type SseTransport,
 } from '@/lib/api'
 
 // ── Login Form ────────────────────────────────────────────────────────────────
@@ -216,6 +217,7 @@ export default function InboxPage() {
   const [sending,       setSending]       = useState(false)
   const [actionBusy,    setActionBusy]    = useState(false)
   const [sseStatus,     setSseStatus]     = useState<'disconnected' | 'connected'>('disconnected')
+  const [sseTransport,  setSseTransport]  = useState<SseTransport>('unknown')
   const [listError,     setListError]     = useState<string | null>(null)
   const [threadError,   setThreadError]   = useState<string | null>(null)
 
@@ -274,15 +276,17 @@ export default function InboxPage() {
     const src = createRealtimeConnection(
       (type, data) => {
         const convId = (data as { conversationId?: string }).conversationId
-        if (!convId) return
-        // Refresh list on any conversation event
+        // Refresh list on any conversation-level event
         loadList()
-        // Refresh thread if it's the open conversation
-        if (convId === selectedId) {
+        // Refresh thread if it's the currently open conversation
+        if (convId && convId === selectedId) {
           loadThread(convId)
         }
       },
-      () => setSseStatus('connected'),
+      (transport) => {
+        setSseStatus('connected')
+        setSseTransport(transport)
+      },
     )
     if (src) {
       sseRef.current = src
@@ -363,8 +367,14 @@ export default function InboxPage() {
             <span className="font-semibold text-gray-700">Inbox</span>
             <div className="flex items-center gap-2">
               <span
-                className={`w-2 h-2 rounded-full ${sseStatus === 'connected' ? 'bg-green-400' : 'bg-gray-300'}`}
-                title={sseStatus === 'connected' ? 'Real-time connected' : 'Polling mode'}
+                className={`w-2 h-2 rounded-full ${sseStatus === 'connected' ? (sseTransport === 'redis' ? 'bg-green-400' : 'bg-yellow-400') : 'bg-gray-300'}`}
+                title={
+                  sseStatus === 'connected'
+                    ? sseTransport === 'redis'
+                      ? 'Live (Redis pub/sub)'
+                      : 'Live (in-memory — worker events may not appear)'
+                    : 'Disconnected'
+                }
               />
               <button
                 onClick={handleLogout}

@@ -4,9 +4,10 @@
 
 import { prisma, Direction, SenderType } from '@omni/db'
 import type { InboundMessageJobData } from '@omni/shared'
-import { decryptApiKey, isVaultConfigured, calculateAiCostUsd } from '@omni/shared'
+import { decryptApiKey, isVaultConfigured, calculateAiCostUsd, REALTIME_EVENT_TYPES } from '@omni/shared'
 import { aiOrchestrator } from '@omni/ai-core'
 import { buildJobContext } from './context-builder'
+import { workerPublishEvent } from './realtime-publisher'
 
 export async function processInboundMessageJob(
   data: InboundMessageJobData,
@@ -139,4 +140,32 @@ export async function processInboundMessageJob(
 
   console.log(`[worker] Job ${jobId}: reply written for conv=${conversationId}`)
   // NOTE: sendMessage() is NOT called — no real WhatsApp delivery.
+
+  // ── Publish realtime events via Redis (Phase 8B) ──────────────────────────
+  // Non-fatal: DB writes above have already succeeded.
+  // These events allow API SSE clients to see AI replies without polling.
+  const finalConv = await prisma.conversation.findFirst({
+    where:  { id: conversationId, tenantId },
+    select: { status: true },
+  })
+
+  await workerPublishEvent(tenantId, REALTIME_EVENT_TYPES.AI_REPLY_CREATED, {
+    conversationId,
+    messageId:  undefined,  // message id not tracked separately here
+    senderType: 'AI',
+    direction:  'OUTBOUND',
+  })
+
+  await workerPublishEvent(tenantId, REALTIME_EVENT_TYPES.CONVERSATION_UPDATED, {
+    conversationId,
+    status:        finalConv?.status ?? 'AI_HANDLING',
+    lastMessageAt: new Date().toISOString(),
+  })
+
+  if (result.shouldHandoff) {
+    await workerPublishEvent(tenantId, REALTIME_EVENT_TYPES.HANDOFF_UPDATED, {
+      conversationId,
+      status: finalConv?.status ?? 'PENDING_HANDOFF',
+    })
+  }
 }
