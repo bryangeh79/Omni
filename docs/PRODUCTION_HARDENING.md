@@ -172,3 +172,24 @@ New pages:
 - `/ops/runbook` — production monitoring/backup runbook (all roles)
 
 Production QA checklist now includes audit readiness, backup runbook review, and monitoring runbook review items. See `docs/OPS_RUNBOOK.md` for the full runbook.
+
+## Phase 15D: SaaS v1 Polish + Navigation + Demo + Release Checklist
+
+Final SaaS v1 polish layer. See `docs/RELEASE_CHECKLIST.md` and `docs/DEMO_FLOW.md`.
+
+New pages:
+- `/demo-flow` — Guided 9-step sales demo and internal QA walkthrough
+- `/release-checklist` — SaaS v1 release readiness status (static + live API checks)
+
+New API:
+- `GET /release-checklist/status` — aggregated v1 release readiness with dynamic tenant checks
+
+App shell:
+- `AppNav` sidebar component added to root layout — all 15+ routes navigable from sidebar
+- Mobile: hamburger toggle with slide-in drawer
+- Desktop: fixed left sidebar (220px) with dark indigo theme
+
+Copy updates:
+- Title: "Omni — WhatsApp AI 客服 · CRM · Follow-up"
+- Description: positions as AI customer service + CRM + follow-up conversion, not ads/broadcast
+- Meta fee pass-through and WA stability boundary documented in billing/channel pages

@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import AppNav from '@/components/AppNav'
 
 export const metadata: Metadata = {
-  title:       'Omni Ai Chatbot — Web Admin',
-  description: 'WhatsApp AI Customer Service CRM System',
+  title:       'Omni — WhatsApp AI 客服 · CRM · Follow-up',
+  description: 'Omni: WhatsApp AI customer service, CRM, automated follow-up, and lead conversion for SMBs. Not a broadcast or ads platform.',
   manifest:    '/manifest.webmanifest',
   appleWebApp: {
     capable:              true,
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor:    '#2563eb',
+  themeColor:    '#6366f1',
   width:         'device-width',
   initialScale:  1,
   maximumScale:  1,
@@ -23,7 +24,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh">
-      <body>{children}</body>
+      <body style={{ margin: 0, display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        <AppNav />
+        <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+          {children}
+        </main>
+      </body>
     </html>
   )
 }

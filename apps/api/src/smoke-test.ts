@@ -3225,6 +3225,52 @@ async function smoke() {
   check('checklist has backup_runbook item',               pqaItems.some(i => i.id === 'backup_runbook'))
   check('checklist has monitoring_runbook item',           pqaItems.some(i => i.id === 'monitoring_runbook'))
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 15D — SaaS v1 Polish: Navigation, Demo Flow, Release Checklist
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n158. Phase 15D: /release-checklist/status — auth + shape')
+  check('GET /release-checklist/status without auth → 401', (await get('/release-checklist/status')).status === 401)
+
+  const rcRes  = await get('/release-checklist/status', accessToken)
+  const rcBody = await rcRes.json() as Record<string, unknown>
+  check('GET /release-checklist/status → 200',          rcRes.status === 200)
+  check('release-checklist has tenantId',               typeof rcBody.tenantId === 'string')
+  check('release-checklist has overallStatus',          typeof rcBody.overallStatus === 'string')
+  check('release-checklist has saasV1Ready (bool)',     typeof rcBody.saasV1Ready === 'boolean')
+  check('release-checklist has summary object',         typeof rcBody.summary === 'object')
+  check('release-checklist has v1Gates array',          Array.isArray(rcBody.v1Gates))
+  check('release-checklist has dynamicItems array',     Array.isArray(rcBody.dynamicItems))
+  check('release-checklist has safetyFlags',            typeof rcBody.safetyFlags === 'object')
+  check('release-checklist no secrets',                 !JSON.stringify(rcBody).includes('JWT_SECRET'))
+
+  console.log('\n159. Phase 15D: release-checklist safety flags confirmed off')
+  const sf = (rcBody.safetyFlags ?? {}) as Record<string, unknown>
+  check('safetyFlags.realWaSessionEnabled=false',       sf.realWaSessionEnabled === false)
+  check('safetyFlags.realMetaSendEnabled=false',        sf.realMetaSendEnabled  === false)
+  check('safetyFlags.realSendDisabled=true',            sf.realSendDisabled     === true)
+
+  console.log('\n160. Phase 15D: release-checklist v1Gates include expected gates')
+  const v1Gates = (rcBody.v1Gates ?? []) as Record<string, unknown>[]
+  check('v1Gates has product_complete gate',            v1Gates.some(g => g.key === 'product_complete'))
+  check('v1Gates has no_broadcast gate',               v1Gates.some(g => g.key === 'no_broadcast'))
+  check('v1Gates product_complete=PASS',               v1Gates.find(g => g.key === 'product_complete')?.status === 'PASS')
+  check('v1Gates no_broadcast=PASS',                   v1Gates.find(g => g.key === 'no_broadcast')?.status === 'PASS')
+  check('v1Gates real_send_default_off=PASS',          v1Gates.find(g => g.key === 'real_send_default_off')?.status === 'PASS')
+
+  console.log('\n161. Phase 15D: release-checklist dynamicItems have expected structure')
+  const dynItems = (rcBody.dynamicItems ?? []) as Record<string, unknown>[]
+  check('dynamicItems has safety_flags item',          dynItems.some(d => d.key === 'safety_flags'))
+  check('dynamicItems has audit_active item',          dynItems.some(d => d.key === 'audit_active'))
+  check('safety_flags item status=PASS (real send off)', dynItems.find(d => d.key === 'safety_flags')?.status === 'PASS')
+  check('audit_active item status=PASS',               dynItems.find(d => d.key === 'audit_active')?.status === 'PASS')
+
+  console.log('\n162. Phase 15D: summary no FAIL items (safety invariant)')
+  const rc15dSummary = (rcBody.summary ?? {}) as Record<string, unknown>
+  check('release-checklist summary has passed count',  typeof rc15dSummary.passed === 'number')
+  check('release-checklist summary failed=0',          rc15dSummary.failed === 0)
+  check('saasV1Ready=true (no failures, real send off)', rcBody.saasV1Ready === true)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

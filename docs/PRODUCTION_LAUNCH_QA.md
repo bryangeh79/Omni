@@ -121,3 +121,14 @@ All items confirm that Omni is a 1:1 AI customer service product. The `no_broadc
 - Manual items cannot be auto-resolved
 - No historical pass/fail tracking
 - No CI/CD integration
+
+---
+
+## Phase 15C/15D Additions
+
+**Phase 15C:** Added `audit_log_ready` (PASS), `backup_runbook` (MANUAL), `monitoring_runbook` (MANUAL) items.
+
+**Phase 15D:** Related pages:
+- `/release-checklist` — SaaS v1 release status view using `GET /release-checklist/status`
+- `/demo-flow` — Guided 9-step demo walkthrough
+- See `docs/RELEASE_CHECKLIST.md` and `docs/DEMO_FLOW.md` for full documentation.
