@@ -276,7 +276,7 @@ export default function ReleaseChecklistPage() {
       </div>
 
       <footer style={{ marginTop: '1.5rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Omni SaaS v1 — Phase 15D · <a href="/demo-flow" style={{ color: '#6366f1' }}>Demo Flow</a> · <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> · <a href="/ops/runbook" style={{ color: '#6366f1' }}>Ops Runbook</a>
+        Omni SaaS v1 · <a href="/demo-flow" style={{ color: '#6366f1' }}>Demo Flow</a> · <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> · <a href="/ops/runbook" style={{ color: '#6366f1' }}>Ops Runbook</a> · <a href="/activation-guide" style={{ color: '#6366f1' }}>Activation Guide</a>
       </footer>
     </main>
   )

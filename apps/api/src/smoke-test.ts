@@ -3271,6 +3271,100 @@ async function smoke() {
   check('release-checklist summary failed=0',          rc15dSummary.failed === 0)
   check('saasV1Ready=true (no failures, real send off)', rcBody.saasV1Ready === true)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 16A — Production Activation Operator Guide + Pre-flight + Health
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n163. Phase 16A: /activation/preflight — auth + shape')
+  check('GET /activation/preflight without auth → 401', (await get('/activation/preflight')).status === 401)
+
+  const pfRes  = await get('/activation/preflight', accessToken)
+  const pfBody = await pfRes.json() as Record<string, unknown>
+  check('GET /activation/preflight → 200',           pfRes.status === 200)
+  check('preflight has tenantId',                    typeof pfBody.tenantId === 'string')
+  check('preflight has readiness field',             typeof pfBody.readiness === 'string')
+  check('preflight has summary object',              typeof pfBody.summary === 'object')
+  check('preflight has checks array',                Array.isArray(pfBody.checks))
+  check('preflight has currentFlags',                typeof pfBody.currentFlags === 'object')
+  check('preflight has channelSummary',              typeof pfBody.channelSummary === 'object')
+  check('preflight has nextAction',                  typeof pfBody.nextAction === 'string')
+  check('preflight has activationGuide link',        pfBody.activationGuide === '/activation-guide')
+  check('preflight no secrets',                      !JSON.stringify(pfBody).includes('JWT_SECRET'))
+
+  console.log('\n164. Phase 16A: preflight safety flags + critical check')
+  const pf16aFlags = (pfBody.currentFlags ?? {}) as Record<string, unknown>
+  check('preflight realWaSessionEnabled=false',      pf16aFlags.realWaSessionEnabled === false)
+  check('preflight realMetaSendEnabled=false',       pf16aFlags.realMetaSendEnabled  === false)
+  check('preflight realSendCurrentlyOff=true',       pf16aFlags.realSendCurrentlyOff === true)
+  const pf16aSummary = (pfBody.summary ?? {}) as Record<string, unknown>
+  check('preflight summary has passed count',        typeof pf16aSummary.passed === 'number')
+  check('preflight summary has critical count',      typeof pf16aSummary.critical === 'number')
+  check('preflight checks have key + passed + required', Array.isArray(pfBody.checks) &&
+    (pfBody.checks as Record<string, unknown>[]).every(c => 'key' in c && 'passed' in c && 'required' in c))
+
+  console.log('\n165. Phase 16A: /activation/preflight checks include expected keys')
+  const pf16aChecks = (pfBody.checks ?? []) as Record<string, unknown>[]
+  check('preflight has onboarding_enabled check',    pf16aChecks.some(c => c.key === 'onboarding_enabled'))
+  check('preflight has admin_user_exists check',     pf16aChecks.some(c => c.key === 'admin_user_exists'))
+  check('preflight has real_send_flags check',       pf16aChecks.some(c => c.key === 'real_send_flags'))
+  check('preflight has audit_active check',          pf16aChecks.some(c => c.key === 'audit_active'))
+  check('real_send_flags check passed=true (flags off)', pf16aChecks.find(c => c.key === 'real_send_flags')?.passed === true)
+
+  console.log('\n166. Phase 16A: /activation/dry-run — validation + no real send')
+  check('POST /activation/dry-run without auth → 401', (await post('/activation/dry-run', { channelType: 'META_WA_BUSINESS', intendedMode: 'STAGING' })).status === 401)
+  check('POST /activation/dry-run missing fields → 400', (await post('/activation/dry-run', {}, accessToken)).status === 400)
+  check('POST /activation/dry-run invalid channelType → 400', (await post('/activation/dry-run', { channelType: 'INVALID', intendedMode: 'STAGING' }, accessToken)).status === 400)
+  check('POST /activation/dry-run invalid intendedMode → 400', (await post('/activation/dry-run', { channelType: 'WA_WEB', intendedMode: 'REAL_LIVE' }, accessToken)).status === 400)
+
+  const drRes  = await post('/activation/dry-run', { channelType: 'META_WA_BUSINESS', intendedMode: 'STAGING' }, accessToken)
+  const drBody = await drRes.json() as Record<string, unknown>
+  check('POST /activation/dry-run (META/STAGING) → 200', drRes.status === 200)
+  check('dry-run dryRun=true',                       drBody.dryRun    === true)
+  check('dry-run realSendEnabled=false',             drBody.realSendEnabled === false)
+  check('dry-run has dryRunStatus',                  typeof drBody.dryRunStatus === 'string')
+  check('dry-run has channelType=META_WA_BUSINESS',  drBody.channelType === 'META_WA_BUSINESS')
+  check('dry-run has intendedMode=STAGING',          drBody.intendedMode === 'STAGING')
+  check('dry-run has blockedReasons array',          Array.isArray(drBody.blockedReasons))
+  check('dry-run has stepsIfProceeding array',       Array.isArray(drBody.stepsIfProceeding))
+  check('dry-run has safetyNote',                    typeof drBody.safetyNote === 'string')
+  check('dry-run no secrets in response',            !JSON.stringify(drBody).includes('JWT_SECRET'))
+
+  console.log('\n167. Phase 16A: /activation/dry-run WA_WEB path')
+  const drWaRes  = await post('/activation/dry-run', { channelType: 'WA_WEB', intendedMode: 'LIVE_REVIEW' }, accessToken)
+  const drWaBody = await drWaRes.json() as Record<string, unknown>
+  check('POST /activation/dry-run (WA_WEB/LIVE_REVIEW) → 200', drWaRes.status === 200)
+  check('WA dry-run dryRun=true',                    drWaBody.dryRun === true)
+  check('WA dry-run realSendEnabled=false',          drWaBody.realSendEnabled === false)
+  // When LIVE_REVIEW + flag is off → blocked
+  check('WA LIVE_REVIEW without flag → blockedReasons has item', (drWaBody.blockedReasons as string[]).length > 0)
+  check('WA dry-run no real WA session created',     typeof drWaBody.dryRun === 'boolean')
+
+  console.log('\n168. Phase 16A: ACTIVATION_DRY_RUN audit event created')
+  await new Promise(r => setTimeout(r, 200))
+  const drAuditRes  = await get('/audit/logs?action=ACTIVATION_DRY_RUN', accessToken)
+  const drAuditBody = await drAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs?action=ACTIVATION_DRY_RUN → 200', drAuditRes.status === 200)
+  const drAuditLogs = (drAuditBody.logs ?? []) as Record<string, unknown>[]
+  check('ACTIVATION_DRY_RUN audit event created',    drAuditLogs.some(l => l.action === 'ACTIVATION_DRY_RUN'))
+
+  console.log('\n169. Phase 16A: /activation/health — safe local health')
+  check('GET /activation/health without auth → 401', (await get('/activation/health')).status === 401)
+
+  const ahRes  = await get('/activation/health', accessToken)
+  const ahBody = await ahRes.json() as Record<string, unknown>
+  check('GET /activation/health → 200',              ahRes.status === 200)
+  check('activation/health has tenantId',            typeof ahBody.tenantId === 'string')
+  check('activation/health has overallHealthLevel',  typeof ahBody.overallHealthLevel === 'string')
+  check('activation/health has safetyFlags',         typeof ahBody.safetyFlags === 'object')
+  check('activation/health has channelHealth array', Array.isArray(ahBody.channelHealth))
+  check('activation/health has recommendedAction',   typeof ahBody.recommendedAction === 'string')
+  check('activation/health has activationGuide link', ahBody.activationGuide === '/activation-guide')
+  const ah16aFlags = (ahBody.safetyFlags ?? {}) as Record<string, unknown>
+  check('activation/health realWaSessionEnabled=false', ah16aFlags.realWaSessionEnabled === false)
+  check('activation/health realMetaSendEnabled=false',  ah16aFlags.realMetaSendEnabled  === false)
+  check('activation/health realSendCurrentlyOff=true',  ah16aFlags.realSendCurrentlyOff === true)
+  check('activation/health no secrets',               !JSON.stringify(ahBody).includes('JWT_SECRET'))
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -3538,7 +3632,7 @@ async function prismaCleanupAuditLogs(): Promise<void> {
     const { PrismaClient } = await import('@omni/db')
     const p = new PrismaClient()
     const deleted = await p.auditLog.deleteMany({
-      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE'] } },
+      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACTIVATION_DRY_RUN'] } },
     })
     await p.$disconnect()
     console.log(`  🗑️  ${deleted.count} audit log records deleted`)

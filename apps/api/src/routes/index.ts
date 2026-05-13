@@ -29,6 +29,7 @@ import { productionQaRoutes }   from './production-qa'
 import { teamRoutes }            from './team'
 import { auditRoutes }             from './audit'
 import { releaseChecklistRoutes }   from './release-checklist'
+import { activationRoutes }         from './activation'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -73,4 +74,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(auditRoutes,           { prefix: '/audit' })
   // Release checklist — Phase 15D
   await app.register(releaseChecklistRoutes, { prefix: '/release-checklist' })
+  // Production activation guide API — Phase 16A
+  await app.register(activationRoutes,       { prefix: '/activation' })
 }

@@ -34,8 +34,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/production-qa',    label: 'Production QA',   icon: '✅', group: 'Ops' },
   { href: '/ops/runbook',      label: 'Ops Runbook',     icon: '📋', group: 'Ops' },
   // Demo / Release
-  { href: '/demo-flow',        label: 'Demo Flow',       icon: '🎯', group: 'Release' },
-  { href: '/release-checklist',label: 'Release Checklist',icon: '📦', group: 'Release' },
+  { href: '/demo-flow',          label: 'Demo Flow',         icon: '🎯', group: 'Release' },
+  { href: '/release-checklist',  label: 'Release Checklist', icon: '📦', group: 'Release' },
+  { href: '/activation-guide',   label: 'Activation Guide',  icon: '🚦', group: 'Release' },
 ]
 
 const SIDEBAR_W  = 220

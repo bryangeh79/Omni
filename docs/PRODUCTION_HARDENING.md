@@ -193,3 +193,16 @@ Copy updates:
 - Title: "Omni — WhatsApp AI 客服 · CRM · Follow-up"
 - Description: positions as AI customer service + CRM + follow-up conversion, not ads/broadcast
 - Meta fee pass-through and WA stability boundary documented in billing/channel pages
+
+## Phase 16A: Production Activation Operator Guide
+
+Added operator-safe activation workflow. Real send remains disabled until operator manually changes env flags.
+
+New API:
+- `GET /activation/preflight` — pre-flight readiness checks
+- `POST /activation/dry-run` — simulate activation (never enables real send)
+- `GET /activation/health` — post-activation health monitoring
+
+New page: `/activation-guide` — step-by-step guide for WA Web and Meta activation paths, rollback plan, post-activation monitoring.
+
+See `docs/ACTIVATION_GUIDE.md` for full documentation.

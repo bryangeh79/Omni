@@ -228,7 +228,8 @@ export default function RunbookPage() {
       <footer style={{ marginTop: '2.5rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
         Omni AI Chatbot — Phase 15C Production Ops Runbook &nbsp;|&nbsp;
         <a href="/audit" style={{ color: '#6366f1' }}>Audit Logs</a> &nbsp;|&nbsp;
-        <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a>
+        <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> &nbsp;|&nbsp;
+        <a href="/activation-guide" style={{ color: '#6366f1' }}>Activation Guide</a>
       </footer>
     </main>
   )

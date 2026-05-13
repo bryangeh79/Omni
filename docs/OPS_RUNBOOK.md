@@ -94,3 +94,7 @@ Admin activity is recorded in the `AuditLog` table and visible at `/audit`. See 
 - `/production-qa` — full launch readiness checklist
 - `/audit` — admin activity timeline
 - `/ops/runbook` — this runbook (web UI version)
+- `/activation-guide` — step-by-step production activation guide (Phase 16A)
+- `/activation/preflight` — API: pre-flight readiness checks
+- `/activation/dry-run` — API: simulate activation without enabling real send
+- `/activation/health` — API: post-activation safety flags + channel health

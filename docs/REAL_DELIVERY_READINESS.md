@@ -170,3 +170,16 @@ Both `request-activation` and `confirm-activation` return `activated=false, bloc
 - `recommendedAction`: human-readable next step
 
 `GET /boss/channel-health` — compact version for Boss Dashboard card.
+
+
+## Phase 16A: Production Activation API
+
+New endpoints added for operator-guided activation workflow:
+
+- `GET /activation/preflight` — readiness checks (BLOCKED / READY_FOR_OPERATOR_REVIEW / READY_FOR_STAGING / READY_FOR_LIVE_REVIEW)
+- `POST /activation/dry-run` — simulate activation without enabling real send; logs ACTIVATION_DRY_RUN audit event
+- `GET /activation/health` — post-activation safety flags + channel health + recent audit activity
+
+Web UI at `/activation-guide` with step-by-step guide for WA Web and Meta WhatsApp Business Platform paths.
+
+See `docs/ACTIVATION_GUIDE.md` for full documentation.
