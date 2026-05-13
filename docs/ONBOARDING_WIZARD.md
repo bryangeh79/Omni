@@ -94,11 +94,41 @@ Returns explicit safety flags: `realWhatsAppConnected: false`, `realMetaSendEnab
 | Quotation | PRICE_ASKED_NO_REPLY, CONSIDERING |
 | Transfer human | HIGH_INTENT_UNHANDLED |
 
-## Limitations (Phase 11B)
+### POST /onboarding/ingest-materials (Phase 12A)
 
-- Generated preview uses template engine only — no AI personalisation
-- Materials text is stored but not processed into knowledge base automatically (Phase 12)
+Parse `materialsText` into `KnowledgeItem` records. Idempotent — returns `alreadyDone: true` if already ingested. No AI provider calls. No WhatsApp sends.
+
+## Phase 12A Additions
+
+### Step 3: Preview — Enriched Output
+
+The preview response now includes:
+- `globalSystemPrompt` — full AI system prompt generated from persona + goals
+- `faqSamples` — 3-5 industry-specific sample Q&A pairs for preview
+- `scoringRules` — lead scoring triggers and adjustments
+- `missingInfoWarnings` — list of missing fields that reduce AI quality
+- `handoffTriggers` — conditions that escalate to human
+- `replyLanguagePolicy` — language/tone policy string
+- `generationMode` — `DETERMINISTIC_TEMPLATE` | `AI_GENERATED` | `AI_FALLBACK`
+- `ingestedAt` / `ingestedKbCount` — set after materials ingestion
+
+### Materials Ingestion Button (Step 2)
+
+Step 2 now shows an "Ingest Materials" button that calls `POST /onboarding/ingest-materials`. This parses materialsText into FAQ and knowledge items stored in the knowledge base (`/knowledge` page).
+
+## Generation Mode
+
+| Mode | When | Description |
+|------|------|-------------|
+| `DETERMINISTIC_TEMPLATE` | Default | Template-based, no AI provider call |
+| `AI_GENERATED` | `?mode=ai` + env flag + API key | Real AI provider personalisation |
+| `AI_FALLBACK` | `?mode=ai` but AI unavailable | AI was requested but fell back to template |
+
+## Limitations (Phase 12A)
+
+- AI personalisation requires `OMNI_ENABLE_ONBOARDING_AI=true` + configured AiConfig
+- Materials parsing is deterministic (paragraph splitting, Q&A detection) — no AI-powered embedding
 - PDF/file upload not implemented
-- AI knowledge base is NOT automatically populated from wizard (Phase 12)
 - WhatsApp channel must be separately configured under Settings
 - Real-time WhatsApp testing during wizard not available
+- Max 20 KB items per ingestion run

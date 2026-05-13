@@ -387,28 +387,42 @@ export async function fetchBossAgents(): Promise<BossAgents> {
   return apiFetch<BossAgents>('/boss/agents')
 }
 
-// ── Onboarding Wizard (Phase 11B) ─────────────────────────────────────────────
+// ── Onboarding Wizard (Phase 11B → 12A) ──────────────────────────────────────
 export interface OnboardingStatus {
-  tenantId:       string
-  hasStarted:     boolean
-  status:         string | null
-  completedSteps: number
-  companyName:    string | null
-  industry:       string | null
-  goalsCount:     number
-  hasPreview:     boolean
-  enabledAt:      string | null
+  tenantId:        string
+  hasStarted:      boolean
+  status:          string | null
+  completedSteps:  number
+  companyName:     string | null
+  industry:        string | null
+  goalsCount:      number
+  hasPreview:      boolean
+  enabledAt:       string | null
+  generationMode:  string | null
+  ingestedKbCount: number
 }
 
+export interface FaqSample { question: string; answer: string }
+export interface ScoringRule { trigger: string; adjustment: number; description: string }
+
 export interface OnboardingPreview {
-  aiPersona:         { name: string; tone: string; focus: string; company: string }
-  welcomeMessage:    string
-  faqCategories:     string[]
-  leadStages:        string[]
-  recommendedTags:   string[]
-  followUpScenarios: string[]
-  generationMode:    string
-  note:              string
+  aiPersona:           { name: string; tone: string; focus: string; company: string }
+  globalSystemPrompt:  string
+  welcomeMessage:      string
+  faqCategories:       string[]
+  faqSamples:          FaqSample[]
+  leadStages:          string[]
+  recommendedTags:     string[]
+  followUpScenarios:   string[]
+  handoffTriggers:     string[]
+  scoringRules:        ScoringRule[]
+  missingInfoWarnings: string[]
+  replyLanguagePolicy: string
+  generatedAt:         string
+  generationMode:      'DETERMINISTIC_TEMPLATE' | 'AI_GENERATED' | 'AI_FALLBACK'
+  note:                string
+  ingestedAt?:         string
+  ingestedKbCount?:    number
 }
 
 export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {
@@ -422,12 +436,59 @@ export async function saveOnboardingDraft(data: Record<string, unknown>): Promis
   })
 }
 
-export async function generateOnboardingPreview(): Promise<{ preview: OnboardingPreview; saved: boolean }> {
-  return apiFetch<{ preview: OnboardingPreview; saved: boolean }>('/onboarding/generate-preview', { method: 'POST' })
+export async function generateOnboardingPreview(
+  mode?: 'deterministic' | 'ai',
+): Promise<{ preview: OnboardingPreview; saved: boolean }> {
+  const q = mode ? `?mode=${mode}` : ''
+  return apiFetch<{ preview: OnboardingPreview; saved: boolean }>(
+    `/onboarding/generate-preview${q}`,
+    { method: 'POST' },
+  )
+}
+
+export async function ingestOnboardingMaterials(): Promise<{
+  ingested:    boolean
+  alreadyDone: boolean
+  count:       number
+  tenantId:    string
+}> {
+  return apiFetch('/onboarding/ingest-materials', { method: 'POST' })
 }
 
 export async function enableOnboarding(): Promise<{ enabled: boolean; status: string; note: string }> {
   return apiFetch<{ enabled: boolean; status: string; note: string }>('/onboarding/enable', { method: 'POST' })
+}
+
+// ── Knowledge Base (Phase 12A) ────────────────────────────────────────────────
+export interface KnowledgeItem {
+  id:        string
+  tenantId:  string
+  type:      'GLOBAL_FAQ' | 'PRODUCT_FAQ' | 'KNOWLEDGE_CHUNK'
+  question:  string | null
+  answer:    string
+  language:  string
+  isActive:  boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeListResponse {
+  data:       KnowledgeItem[]
+  pagination: { page: number; pageSize: number; total: number; totalPages: number }
+}
+
+export async function fetchKnowledgeItems(params?: {
+  type?:   string
+  page?:   number
+}): Promise<KnowledgeListResponse> {
+  const p = new URLSearchParams({ pageSize: '50' })
+  if (params?.type) p.set('type', params.type)
+  if (params?.page) p.set('page', String(params.page))
+  return apiFetch<KnowledgeListResponse>(`/knowledge?${p}`)
+}
+
+export async function deleteKnowledgeItem(id: string): Promise<{ deleted: boolean }> {
+  return apiFetch<{ deleted: boolean }>(`/knowledge/${id}`, { method: 'DELETE' })
 }
 
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────

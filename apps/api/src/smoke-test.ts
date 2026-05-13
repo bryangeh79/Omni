@@ -2414,6 +2414,81 @@ async function smoke() {
   console.log('\n104. Phase 11B: OMNI_ENABLE_REAL_META_SEND still disabled')
   check('real send still disabled after onboarding', process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
 
+  // ── Phase 12A: Knowledge Base + Enriched Preview ──────────────────────
+
+  console.log('\n105. Phase 12A: /onboarding/ingest-materials (idempotent)')
+
+  // Re-save draft with fresh materialsText (not yet ingested for this smoke run)
+  await post('/onboarding/draft', {
+    companyName:   'Smoke Test Company',
+    industry:      'retail',
+    aiGoals:       ['lead-conversion', 'product-qa'],
+    materialsText: 'Q: What do you sell?\nA: Premium widgets and accessories.\n\nQ: What is the price?\nA: Starter plan RM99/month, Pro plan RM299/month.\n\nWe offer 30-day free returns on all products.',
+    completedSteps: 2,
+  }, accessToken)
+
+  const ingestRes  = await post('/onboarding/ingest-materials', {}, accessToken)
+  const ingestBody = await ingestRes.json() as Record<string, unknown>
+  // 201 on first ingest, 200 on idempotent repeat
+  check('POST /onboarding/ingest-materials → 200 or 201', ingestRes.status === 200 || ingestRes.status === 201)
+  check('ingest has ingested field (bool)',                typeof ingestBody.ingested === 'boolean')
+  check('ingest has kbItemCount (number)',                 typeof ingestBody.kbItemCount === 'number')
+
+  // Idempotent: calling again returns alreadyDone=true
+  const ingest2Res  = await post('/onboarding/ingest-materials', {}, accessToken)
+  const ingest2Body = await ingest2Res.json() as Record<string, unknown>
+  check('POST /onboarding/ingest-materials 2nd call → 200', ingest2Res.status === 200)
+  check('2nd ingest is idempotent (alreadyDone=true)',       ingest2Body.alreadyDone === true)
+
+  // Auth guard
+  check('ingest-materials without auth → 401', (await post('/onboarding/ingest-materials', {})).status === 401)
+
+  console.log('\n106. Phase 12A: /knowledge list (KB items from ingest)')
+
+  const kb12ListRes  = await get('/knowledge', accessToken)
+  const kb12ListBody = await kb12ListRes.json() as Record<string, unknown>
+  check('GET /knowledge → 200',                     kb12ListRes.status === 200)
+  check('knowledge list has data array',             Array.isArray(kb12ListBody.data))
+  check('knowledge list has pagination',             typeof kb12ListBody.pagination === 'object')
+  const kb12List = kb12ListBody.data as Record<string, unknown>[]
+  if (kb12List.length > 0) {
+    const first = kb12List[0]
+    check('KB item has id',      typeof first.id === 'string')
+    check('KB item has type',    typeof first.type === 'string')
+    check('KB item has answer',  typeof first.answer === 'string')
+    check('KB item has isActive', typeof first.isActive === 'boolean')
+    // Track ingested items for cleanup
+    kb12List.forEach(it => { if (it.id && !kbIds.includes(it.id as string)) kbIds.push(it.id as string) })
+  }
+  check('GET /knowledge without auth → 401', (await get('/knowledge')).status === 401)
+
+  console.log('\n107. Phase 12A: enriched generate-preview fields')
+
+  // Re-run generate-preview (uses saved draft)
+  const enrichedPreviewRes  = await post('/onboarding/generate-preview', {}, accessToken)
+  const enrichedPreviewBody = await enrichedPreviewRes.json() as Record<string, unknown>
+  check('POST /onboarding/generate-preview (enriched) → 200', enrichedPreviewRes.status === 200)
+  const ep = enrichedPreviewBody.preview as Record<string, unknown>
+  check('enriched preview has globalSystemPrompt',    typeof ep.globalSystemPrompt === 'string')
+  check('enriched preview has faqSamples array',      Array.isArray(ep.faqSamples))
+  check('enriched preview has scoringRules array',    Array.isArray(ep.scoringRules))
+  check('enriched preview has missingInfoWarnings',   Array.isArray(ep.missingInfoWarnings))
+  check('enriched preview has handoffTriggers array', Array.isArray(ep.handoffTriggers))
+  check('enriched preview has replyLanguagePolicy',   typeof ep.replyLanguagePolicy === 'string')
+  check('enriched preview has generatedAt',           typeof ep.generatedAt === 'string')
+  check('enriched preview generationMode = DETERMINISTIC_TEMPLATE', ep.generationMode === 'DETERMINISTIC_TEMPLATE')
+  check('enriched preview no secrets',                !JSON.stringify(ep).includes('JWT_SECRET'))
+
+  console.log('\n108. Phase 12A: AI mode safety (no real provider call in default env)')
+  // OMNI_ENABLE_ONBOARDING_AI is not set to "true" in smoke env → AI mode falls back to deterministic
+  const aiModeRes  = await post('/onboarding/generate-preview?mode=ai', {}, accessToken)
+  const aiModeBody = await aiModeRes.json() as Record<string, unknown>
+  check('POST /onboarding/generate-preview?mode=ai → 200', aiModeRes.status === 200)
+  const aiModePreview = aiModeBody.preview as Record<string, unknown>
+  // Without OMNI_ENABLE_ONBOARDING_AI=true, must fall back to deterministic or AI_FALLBACK — never a real call
+  check('ai mode without env flag → deterministic or fallback', aiModePreview.generationMode === 'DETERMINISTIC_TEMPLATE' || aiModePreview.generationMode === 'AI_FALLBACK')
+  check('ai mode no real provider call (env not set)', process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import {
-  getToken, login, saveOnboardingDraft, generateOnboardingPreview, enableOnboarding,
-  fetchOnboardingStatus,
+  getToken, login, saveOnboardingDraft, generateOnboardingPreview,
+  ingestOnboardingMaterials, enableOnboarding, fetchOnboardingStatus,
   type OnboardingPreview,
 } from '@/lib/api'
 
@@ -32,6 +32,22 @@ const AI_GOALS = [
 ]
 
 const STEPS = ['Company Basics', 'AI Goals', 'Materials', 'Preview', 'Enable']
+
+// ── Generation mode badge ──────────────────────────────────────────────────────
+function ModeBadge({ mode }: { mode: string }) {
+  const cfg = {
+    DETERMINISTIC_TEMPLATE: { label: 'Template', bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+    AI_GENERATED:           { label: 'AI Generated', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    AI_FALLBACK:            { label: 'AI Fallback → Template', bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
+  }[mode] ?? { label: mode, bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' }
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  )
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -76,6 +92,8 @@ export default function OnboardingPage() {
   const [error,    setError]    = useState('')
   const [preview,  setPreview]  = useState<OnboardingPreview | null>(null)
   const [enabled,  setEnabled]  = useState(false)
+  const [ingested, setIngested] = useState(false)
+  const [ingestMsg, setIngestMsg] = useState('')
 
   // Form state
   const [companyName,    setCompanyName]    = useState('')
@@ -92,11 +110,11 @@ export default function OnboardingPage() {
     const token = getToken()
     if (!token) return
     setAuthed(true)
-    // Load existing draft if any
     fetchOnboardingStatus().then((s) => {
       if (s.hasStarted) {
         setCompanyName(s.companyName ?? '')
         setIndustry(s.industry ?? '')
+        if (s.ingestedKbCount > 0) setIngested(true)
         if (s.hasPreview) setStep(3)
         else if (s.status) setStep(1)
       }
@@ -128,6 +146,23 @@ export default function OnboardingPage() {
     setError('')
     await saveDraft(step + 1)
     if (step < 3) setStep(s => s + 1)
+  }
+
+  async function handleIngestMaterials() {
+    setBusy(true); setError(''); setIngestMsg('')
+    try {
+      await saveDraft(2)
+      const result = await ingestOnboardingMaterials()
+      if (result.alreadyDone) {
+        setIngestMsg(`Already ingested (${result.count} items in knowledge base)`)
+      } else if (result.ingested) {
+        setIngested(true)
+        setIngestMsg(`Ingested ${result.count} knowledge item${result.count !== 1 ? 's' : ''} from materials`)
+      } else {
+        setIngestMsg('No materials text to ingest — add content above first')
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Ingest failed') }
+    finally { setBusy(false) }
   }
 
   async function handleGeneratePreview() {
@@ -179,7 +214,7 @@ export default function OnboardingPage() {
           </div>
           <div className="flex gap-3">
             <a href="/boss" className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold text-center hover:bg-blue-700">Boss Dashboard →</a>
-            <a href="/inbox" className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-3 text-sm font-semibold text-center hover:bg-gray-200">Inbox →</a>
+            <a href="/knowledge" className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-3 text-sm font-semibold text-center hover:bg-gray-200">Knowledge Base →</a>
           </div>
         </div>
       </div>
@@ -298,6 +333,28 @@ export default function OnboardingPage() {
                 <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="https://your-website.com/products" value={materialsUrl} onChange={e => setMaterialsUrl(e.target.value)} />
                 <p className="text-xs text-gray-400 mt-1">PDF/file upload coming soon. For now, paste your content above.</p>
               </div>
+
+              {/* Ingestion button */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-indigo-800">Build Knowledge Base</p>
+                    <p className="text-xs text-indigo-600 mt-0.5">Parse your materials into searchable FAQ and knowledge items</p>
+                  </div>
+                  <button
+                    onClick={() => { void handleIngestMaterials() }}
+                    disabled={busy || !materialsText.trim()}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 ${ingested ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                  >
+                    {busy ? 'Ingesting…' : ingested ? '✓ Ingested' : '⚡ Ingest Materials'}
+                  </button>
+                </div>
+                {ingestMsg && (
+                  <p className={`text-xs font-medium ${ingested ? 'text-emerald-700' : 'text-indigo-600'}`}>
+                    {ingested ? '✓ ' : ''}{ingestMsg}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(1)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-200">← Back</button>
@@ -312,11 +369,30 @@ export default function OnboardingPage() {
         {step === 3 && (
           <div className="space-y-4">
             <div className="bg-white rounded-3xl shadow-sm p-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">AI Configuration Preview</h2>
-              <p className="text-sm text-gray-400 mb-5">Generated from your inputs using deterministic templates. No real AI provider was called.</p>
+              <div className="flex items-start justify-between mb-1">
+                <h2 className="text-xl font-bold text-gray-900">AI Configuration Preview</h2>
+                {preview && <ModeBadge mode={preview.generationMode} />}
+              </div>
+              <p className="text-sm text-gray-400 mb-5">
+                {preview?.generationMode === 'AI_GENERATED'
+                  ? 'Generated using your AI provider. Personalised to your business.'
+                  : 'Generated from your inputs using deterministic templates. No real AI provider was called.'}
+              </p>
 
               {preview ? (
                 <div className="space-y-5">
+                  {/* Missing info warnings */}
+                  {preview.missingInfoWarnings.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                      <p className="text-xs font-bold text-amber-700 mb-2">⚠ Missing Information</p>
+                      <ul className="space-y-1">
+                        {preview.missingInfoWarnings.map((w, i) => (
+                          <li key={i} className="text-xs text-amber-700">• {w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   {/* AI Persona */}
                   <div className="bg-blue-50 rounded-2xl p-5">
                     <h3 className="text-sm font-bold text-blue-800 mb-2">🤖 AI Persona</h3>
@@ -329,6 +405,21 @@ export default function OnboardingPage() {
                     <h3 className="text-sm font-bold text-gray-700 mb-2">👋 Welcome Message</h3>
                     <p className="text-sm text-gray-800 leading-relaxed">{preview.welcomeMessage}</p>
                   </div>
+
+                  {/* FAQ Samples */}
+                  {preview.faqSamples.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Sample FAQ Replies</h3>
+                      <div className="space-y-2">
+                        {preview.faqSamples.slice(0, 3).map((faq, i) => (
+                          <div key={i} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <p className="text-xs font-semibold text-gray-600 mb-1">{faq.question}</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{faq.answer}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     {/* FAQ Categories */}
@@ -354,6 +445,23 @@ export default function OnboardingPage() {
                       {preview.recommendedTags.map((t, i) => <span key={i} className="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full">#{t}</span>)}
                     </div>
                   </div>
+
+                  {/* System Prompt Preview */}
+                  {preview.globalSystemPrompt && (
+                    <details className="bg-gray-50 rounded-2xl border border-gray-200">
+                      <summary className="px-4 py-3 text-xs font-bold text-gray-500 uppercase cursor-pointer">System Prompt Preview</summary>
+                      <pre className="px-4 pb-4 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed overflow-auto max-h-40">{preview.globalSystemPrompt}</pre>
+                    </details>
+                  )}
+
+                  {/* Ingestion status */}
+                  {preview.ingestedKbCount !== undefined && preview.ingestedKbCount > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+                      <span>✓</span>
+                      <span>{preview.ingestedKbCount} knowledge item{preview.ingestedKbCount !== 1 ? 's' : ''} ingested from materials</span>
+                      <a href="/knowledge" className="ml-auto text-emerald-600 hover:text-emerald-800 font-medium">View →</a>
+                    </div>
+                  )}
 
                   <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">
                     <strong>Note:</strong> {preview.note}
