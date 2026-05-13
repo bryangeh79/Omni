@@ -2958,6 +2958,99 @@ async function smoke() {
   check('boss channel-health links has metaWebhook',             typeof (bch2Body.links as Record<string, unknown>).metaWebhook === 'string')
   check('boss channel-health realSendEnabled=false',             bch2Body.realSendEnabled === false)
 
+  // ── Phase 15A: Settings + Billing + Production QA ────────────────────────
+
+  console.log('\n141. Phase 15A: /settings/overview (auth-required, no secrets)')
+  check('GET /settings/overview without auth → 401', (await get('/settings/overview')).status === 401)
+
+  const s15SettingsRes  = await get('/settings/overview', accessToken)
+  const s15SettingsBody = await s15SettingsRes.json() as Record<string, unknown>
+  check('GET /settings/overview → 200',              s15SettingsRes.status === 200)
+  check('settings has tenantId',                     typeof s15SettingsBody.tenantId === 'string')
+  check('settings has company object',               typeof s15SettingsBody.company === 'object')
+  check('settings has safety object',                typeof s15SettingsBody.safety === 'object')
+  check('settings has links object',                 typeof s15SettingsBody.links === 'object')
+  const settSafety = s15SettingsBody.safety as Record<string, unknown>
+  check('settings safety.realSendEnabled=false',     settSafety.realSendEnabled === false)
+  check('settings no secrets',                       !JSON.stringify(s15SettingsBody).includes('JWT_SECRET'))
+
+  console.log('\n142. Phase 15A: PATCH /settings/company-profile')
+  check('PATCH /settings/company-profile without auth → 401', (await patch('/settings/company-profile', { companyName: 'x' })).status === 401)
+
+  const s15PatchRes  = await patch('/settings/company-profile', {
+    companyName:   'Smoke Test Company 15A',
+    businessHours: 'Mon-Fri 9-18',
+  }, accessToken)
+  const s15PatchBody = await s15PatchRes.json() as Record<string, unknown>
+  check('PATCH /settings/company-profile → 200',    s15PatchRes.status === 200)
+  check('settings patch saved=true',                 s15PatchBody.saved === true)
+  check('settings patch no secrets',                 !JSON.stringify(s15PatchBody).includes('JWT_SECRET'))
+
+  console.log('\n143. Phase 15A: /billing/plans (RM199/499/999+ with boundary text)')
+  check('GET /billing/plans without auth → 401', (await get('/billing/plans')).status === 401)
+
+  const billingRes  = await get('/billing/plans', accessToken)
+  const billingBody = await billingRes.json() as Record<string, unknown>
+  check('GET /billing/plans → 200',                  billingRes.status === 200)
+  check('billing has plans array',                   Array.isArray(billingBody.plans))
+  check('billing has paymentGateway field',          typeof billingBody.paymentGateway === 'string')
+  check('billing paymentGateway NOT_CONFIGURED',     billingBody.paymentGateway === 'NOT_CONFIGURED')
+  const bPlans = billingBody.plans as Record<string, unknown>[]
+  check('billing has 3 plans',                       bPlans.length === 3)
+  const starterPlan = bPlans.find(p => p.id === 'starter')
+  const proPlan     = bPlans.find(p => p.id === 'pro')
+  const bizPlan     = bPlans.find(p => p.id === 'business')
+  check('billing starter plan exists at RM199',      starterPlan?.priceRm === 199)
+  check('billing pro plan exists at RM499',          proPlan?.priceRm === 499)
+  check('billing business plan exists at RM999',     bizPlan?.priceRm === 999)
+  check('billing starter has Meta fee note',         typeof starterPlan?.metaApiFeeNote === 'string')
+  check('billing starter meta fee not bundled',      (starterPlan?.metaApiFeeNote as string).includes('NOT included'))
+  check('billing starter no broadcast',              (starterPlan?.noBroadcastNote as string).includes('not supported'))
+  check('billing has boundary object',               typeof billingBody.boundary === 'object')
+  check('billing no secrets',                        !JSON.stringify(billingBody).includes('JWT_SECRET'))
+
+  console.log('\n144. Phase 15A: /billing/usage-summary')
+  const usageRes  = await get('/billing/usage-summary', accessToken)
+  const usageBody = await usageRes.json() as Record<string, unknown>
+  check('GET /billing/usage-summary → 200',          usageRes.status === 200)
+  check('usage has period',                          typeof usageBody.period === 'string')
+  check('usage has usage object',                    typeof usageBody.usage === 'object')
+  check('usage has metaFeeNote',                     typeof usageBody.metaFeeNote === 'string')
+  check('usage metaFeeNote mentions pass-through',   (usageBody.metaFeeNote as string).includes('pass-through') || (usageBody.metaFeeNote as string).includes('separately'))
+  check('usage without auth → 401',                  (await get('/billing/usage-summary')).status === 401)
+
+  console.log('\n145. Phase 15A: /billing/select-plan-draft (no real charge)')
+  const planDraftRes  = await post('/billing/select-plan-draft', { planId: 'pro' }, accessToken)
+  const planDraftBody = await planDraftRes.json() as Record<string, unknown>
+  check('POST /billing/select-plan-draft → 200',     planDraftRes.status === 200)
+  check('select-plan-draft saved=true',              planDraftBody.saved === true)
+  check('select-plan-draft charged=false',           planDraftBody.charged === false)
+  check('select-plan-draft paymentGateway NOT_CONFIGURED', planDraftBody.paymentGateway === 'NOT_CONFIGURED')
+  check('select-plan-draft no secrets',              !JSON.stringify(planDraftBody).includes('JWT_SECRET'))
+  check('select-plan-draft invalid plan → 400',      (await post('/billing/select-plan-draft', { planId: 'enterprise-ultra' }, accessToken)).status === 400)
+  check('select-plan-draft without auth → 401',      (await post('/billing/select-plan-draft', { planId: 'pro' })).status === 401)
+
+  console.log('\n146. Phase 15A: /production-qa/checklist')
+  check('GET /production-qa/checklist without auth → 401', (await get('/production-qa/checklist')).status === 401)
+
+  const qaRes  = await get('/production-qa/checklist', accessToken)
+  const qaBody = await qaRes.json() as Record<string, unknown>
+  check('GET /production-qa/checklist → 200',        qaRes.status === 200)
+  check('production-qa has overallStatus',           typeof qaBody.overallStatus === 'string')
+  check('production-qa overallStatus is valid',      ['PASS','FAIL','WARN','MANUAL_REVIEW_NEEDED'].includes(qaBody.overallStatus as string))
+  check('production-qa has items array',             Array.isArray(qaBody.items))
+  check('production-qa has summary object',          typeof qaBody.summary === 'object')
+  const qaItems = qaBody.items as Record<string, unknown>[]
+  check('production-qa items count > 0',             qaItems.length > 0)
+  if (qaItems.length > 0) {
+    check('production-qa item has category',         typeof qaItems[0].category === 'string')
+    check('production-qa item has status',           typeof qaItems[0].status === 'string')
+  }
+  // Safety: no broadcast item should be PASS
+  const noBcastItem = qaItems.find(i => i.id === 'no_broadcast')
+  check('production-qa no_broadcast item is PASS',   noBcastItem?.status === 'PASS')
+  check('production-qa no secrets',                  !JSON.stringify(qaBody).includes('JWT_SECRET'))
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

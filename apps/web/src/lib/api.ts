@@ -891,6 +891,119 @@ export async function fetchStagingReadiness(): Promise<StagingReadiness> {
   return apiFetch<StagingReadiness>('/channels/setup/staging-readiness')
 }
 
+// ── Phase 15A: Settings ───────────────────────────────────────────────────────
+export interface SettingsOverview {
+  tenantId:   string
+  company:    { name: string | null; slug: string | null; plan: string; isActive: boolean; defaultLanguage: string; memberSince: string | null }
+  onboarding: { status: string | null; companyName: string | null; industry: string | null; goalsCount: number; businessHours: string | null; hasPreview: boolean; enabledAt: string | null }
+  knowledgeBase: { activeItems: number; ready: boolean }
+  channel:    { type: string | null; setupStatus: string; credentialStatus: string; activeChannels: number; channels: { id: string; type: string; displayName: string }[] }
+  safety:     { realSendEnabled: boolean; waSessionAllowed: boolean; metaSendAllowed: boolean; realSendDisabled: boolean }
+  team:       { userCount: number; users: { id: string; name: string | null; email: string; role: string }[]; rbacNote: string }
+  links:      Record<string, string>
+}
+
+export async function fetchSettingsOverview(): Promise<SettingsOverview> {
+  return apiFetch<SettingsOverview>('/settings/overview')
+}
+
+export async function updateCompanyProfile(data: {
+  companyName?:   string
+  industry?:      string
+  businessHours?: string
+  website?:       string
+  serviceArea?:   string
+}): Promise<{ saved: boolean; companyName: string | null; industry: string | null }> {
+  return apiFetch('/settings/company-profile', {
+    method: 'PATCH',
+    body:   JSON.stringify(data),
+  })
+}
+
+// ── Phase 15A: Billing ────────────────────────────────────────────────────────
+export interface BillingPlan {
+  id:             string
+  name:           string
+  priceRm:        number
+  period:         string
+  channels:       number
+  users:          number
+  features:       string[]
+  limits:         { aiRepliesPerMonth: number; customersPerMonth: number; knowledgeItems: number }
+  metaApiFeeNote: string
+  ordinaryWaNote: string
+  noBroadcastNote:string
+  recommended:    boolean
+}
+
+export interface UsageSummary {
+  tenantId:    string
+  period:      string
+  currentPlan: string
+  usage: {
+    aiRepliesThisMonth:   number
+    llmTokensThisMonth:   number
+    estimatedCostUsd:     number
+    estimatedCostRm:      number
+    customers:            number
+    activeKnowledgeItems: number
+  }
+  planLimits:  { aiRepliesPerMonth: number; customersPerMonth: number; knowledgeItems: number }
+  metaFeeNote: string
+}
+
+export async function fetchBillingPlans(): Promise<{
+  tenantId:       string
+  currentPlan:    string
+  plans:          BillingPlan[]
+  boundary:       Record<string, string>
+  paymentGateway: string
+  note:           string
+}> {
+  return apiFetch('/billing/plans')
+}
+
+export async function fetchUsageSummary(): Promise<UsageSummary> {
+  return apiFetch<UsageSummary>('/billing/usage-summary')
+}
+
+export async function selectPlanDraft(planId: string): Promise<{
+  saved:          boolean
+  selectedPlan:   string
+  priceRm:        number
+  charged:        boolean
+  paymentGateway: string
+  note:           string
+}> {
+  return apiFetch('/billing/select-plan-draft', {
+    method: 'POST',
+    body:   JSON.stringify({ planId }),
+  })
+}
+
+// ── Phase 15A: Production QA ──────────────────────────────────────────────────
+export interface QaItem {
+  id:       string
+  category: string
+  label:    string
+  status:   'PASS' | 'FAIL' | 'WARN' | 'MANUAL'
+  detail:   string
+  action?:  string
+}
+
+export interface ProductionQaResult {
+  tenantId:      string
+  asOf:          string
+  overallStatus: string
+  summary:       { passed: number; failed: number; warned: number; manual: number; total: number }
+  items:         QaItem[]
+  operatorNote:  string
+}
+
+export async function fetchProductionQa(): Promise<ProductionQaResult> {
+  return apiFetch<ProductionQaResult>('/production-qa/checklist')
+}
+
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────
 export interface CostEstimate {
   ai:             { totalReplies: number; totalAiCostUsd: number; totalAiCostRm: number }

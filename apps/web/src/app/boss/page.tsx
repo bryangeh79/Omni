@@ -475,8 +475,14 @@ export default function BossDashboardPage() {
             {[
               { href: '/inbox',                  label: '💬 Operator Inbox',        sub: 'Web dashboard' },
               { href: '/pwa',                    label: '📱 Mobile PWA',             sub: 'On-the-go' },
+              { href: '/onboarding',             label: '🧙 Onboarding',             sub: 'Setup wizard' },
+              { href: '/knowledge',              label: '🧠 Knowledge Base',         sub: 'FAQ & content' },
+              { href: '/channels/setup',         label: '💬 Channel Setup',          sub: 'WA/Meta config' },
+              { href: '/launch-checklist',       label: '🚀 Launch Checklist',       sub: 'Readiness check' },
+              { href: '/settings',               label: '⚙️ Settings',               sub: 'Account & AI' },
+              { href: '/billing',                label: '💳 Billing & Plans',        sub: 'RM199/499/999+' },
+              { href: '/production-qa',          label: '🔍 Production QA',          sub: 'Launch readiness' },
               { href: '/admin/cost-calculator',  label: '💰 Cost Calculator',        sub: 'Internal planning' },
-              { href: '/boss',                   label: '⚡ Boss Dashboard',          sub: 'This page' },
             ].map(({ href, label, sub }) => (
               <a key={href} href={href} className="group rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50 p-4 transition-colors">
                 <p className="text-sm font-semibold text-gray-800 group-hover:text-blue-700">{label}</p>

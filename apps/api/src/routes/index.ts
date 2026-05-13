@@ -23,6 +23,9 @@ import { opsRoutes }          from './ops'
 import { bossRoutes }           from './boss'
 import { costCalculatorRoutes } from './cost-calculator'
 import { onboardingRoutes }     from './onboarding'
+import { settingsRoutes }       from './settings'
+import { billingRoutes }        from './billing'
+import { productionQaRoutes }   from './production-qa'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -55,4 +58,10 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(costCalculatorRoutes, { prefix: '/admin/cost-calculator' })
   // Onboarding wizard — Phase 11B
   await app.register(onboardingRoutes,     { prefix: '/onboarding' })
+  // Tenant admin settings — Phase 15A
+  await app.register(settingsRoutes,       { prefix: '/settings' })
+  // Billing / plan readiness — Phase 15A
+  await app.register(billingRoutes,        { prefix: '/billing' })
+  // Production QA checklist — Phase 15A
+  await app.register(productionQaRoutes,   { prefix: '/production-qa' })
 }
