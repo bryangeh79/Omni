@@ -1,4 +1,4 @@
-// Omni API client — web dashboard (Phase 8A → 9A)
+// Omni API client — web dashboard (Phase 8A → 11A)
 // Uses localStorage for JWT storage (dev/Phase-8A only; replace with httpOnly cookie in prod)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
@@ -285,6 +285,79 @@ export async function cancelFollowUp(id: string): Promise<{ taskId: string; stat
 // ── Conversation close ────────────────────────────────────────────────────────
 export async function closeConversation(id: string): Promise<{ conversationId: string; status: string }> {
   return apiFetch<{ conversationId: string; status: string }>(`/conversations/${id}/close`, { method: 'POST' })
+}
+
+// ── Boss Dashboard (Phase 11A) ────────────────────────────────────────────────
+export interface ActionItem {
+  priority:    'urgent' | 'high' | 'normal'
+  type:        string
+  label:       string
+  count?:      number
+  hint?:       string
+  link?:       string
+}
+
+export interface BossToday {
+  tenantId:       string
+  asOf:           string
+  today: {
+    newCustomers:          number
+    needHuman:             number
+    highIntentCustomers:   number
+    overdueFollowUps:      number
+    dueFollowUpsToday:     number
+    humanRemindersPending: number
+    openConversations:     number
+    closedToday:           number
+    aiReplies:             number
+    aiCostUsd:             number
+  }
+  urgentCustomers: {
+    conversationId: string
+    status:         string
+    lastMessageAt:  string | null
+    customer:       { id: string; name: string | null; phone: string; stage: string; score: number }
+  }[]
+  suggestedActions: ActionItem[]
+}
+
+export interface BossMetrics {
+  tenantId: string
+  asOf:     string
+  customers: { total: number; new30d: number; highIntent: number; stageBreakdown: Record<string, number> }
+  conversations: { open: number; pendingHandoff: number; closedToday: number; closed30d: number }
+  followUps: { pending: number; overdue: number; completed30d: number }
+  usage30d: { aiReplies: number; llmTokens: number; estimatedCostUsd: number }
+}
+
+export async function fetchBossToday(): Promise<BossToday> {
+  return apiFetch<BossToday>('/boss/today')
+}
+
+export async function fetchBossMetrics(): Promise<BossMetrics> {
+  return apiFetch<BossMetrics>('/boss/metrics')
+}
+
+// ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────
+export interface CostEstimate {
+  ai:             { totalReplies: number; totalAiCostUsd: number; totalAiCostRm: number }
+  meta:           { estimatedConversations: number; totalMetaCostUsd: number; totalMetaCostRm: number; note: string }
+  infrastructure: { serverCostUsd: number; supportCostUsd: number }
+  totals:         { totalCostUsd: number; totalCostRm: number; costPerTenantRm: number }
+  revenue:        { selectedPackage: string; packagePriceRm: number; totalRevenueRm: number; grossProfitRm: number; grossMarginPct: number }
+  recommendation: { breakEvenRmPerTenant: number; suggestedMinPriceRm: number; advice: string }
+  packages:       { name: string; priceRm: number; maxAgents: number; maxCustomers: number }[]
+}
+
+export async function fetchCostDefaults(): Promise<{ defaults: Record<string, number>; packages: { name: string; priceRm: number; features: readonly string[] }[] }> {
+  return apiFetch('/admin/cost-calculator/defaults')
+}
+
+export async function estimateCost(input: Record<string, unknown>): Promise<CostEstimate> {
+  return apiFetch<CostEstimate>('/admin/cost-calculator/estimate', {
+    method: 'POST',
+    body:   JSON.stringify(input),
+  })
 }
 
 // ── Push notifications (Phase 10A stubs) ─────────────────────────────────────

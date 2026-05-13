@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   login, clearToken, getToken,
   fetchConversations, fetchConversation, fetchMessages, fetchCustomer,
+  fetchBossToday,
   takeoverConversation, releaseAi, closeConversation, sendMessage,
   updateCustomerStage, setCustomerTags,
   fetchFollowUps, completeFollowUp, cancelFollowUp,
   createRealtimeConnection,
   type ConversationSummary, type ConversationDetail, type Message,
-  type CustomerDetail, type FollowUpTask, type SseTransport,
+  type CustomerDetail, type FollowUpTask, type SseTransport, type BossToday,
 } from '@/lib/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -587,9 +588,17 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
 
 // ── Boss Today Card ────────────────────────────────────────────────────────────
 function BossTodayTab({ conversations, onSelect }: { conversations: ConversationSummary[]; onSelect: (id: string) => void }) {
-  const urgent   = conversations.filter(c => c.needsHuman)
+  const [bossData, setBossData] = useState<BossToday | null>(null)
+
+  // Fetch Boss API data on mount (non-blocking; falls back to conversation list)
+  useEffect(() => {
+    fetchBossToday().then(setBossData).catch(() => null)
+  }, [])
+
+  const data  = bossData?.today
+  const urgent = conversations.filter(c => c.needsHuman)
   const highScore = conversations.filter(c => !c.needsHuman && c.customer.score >= 60)
-  const recent   = conversations.filter(c => !c.needsHuman && c.customer.score < 60).slice(0, 5)
+  const recent = conversations.filter(c => !c.needsHuman && c.customer.score < 60).slice(0, 5)
 
   const Section = ({ title, items, badge }: { title: string; items: ConversationSummary[]; badge?: string }) => (
     items.length === 0 ? null : (
@@ -612,12 +621,16 @@ function BossTodayTab({ conversations, onSelect }: { conversations: Conversation
         </p>
       </div>
 
-      {/* Stats row */}
+      {/* Stats row — from Boss API when available, conversation list as fallback */}
       <div className="flex gap-3 px-4 py-3 overflow-x-auto">
         {[
-          { label: 'Needs Human', value: urgent.length, color: 'bg-amber-50 text-amber-700 border-amber-200' },
-          { label: 'High Intent', value: highScore.length, color: 'bg-orange-50 text-orange-700 border-orange-200' },
-          { label: 'Active',      value: conversations.length, color: 'bg-blue-50 text-blue-700 border-blue-200' },
+          { label: 'Needs Human',    value: data?.needHuman        ?? urgent.length,    color: 'bg-amber-50 text-amber-700 border-amber-200' },
+          { label: 'High Intent',    value: data?.highIntentCustomers ?? highScore.length, color: 'bg-orange-50 text-orange-700 border-orange-200' },
+          { label: 'Active',         value: data?.openConversations ?? conversations.length, color: 'bg-blue-50 text-blue-700 border-blue-200' },
+          ...(data ? [
+            { label: 'Overdue F/U', value: data.overdueFollowUps,  color: data.overdueFollowUps > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200' },
+            { label: 'New Today',   value: data.newCustomers,       color: 'bg-green-50 text-green-700 border-green-200' },
+          ] : []),
         ].map(({ label, value, color }) => (
           <div key={label} className={`flex-shrink-0 rounded-2xl border px-4 py-3 min-w-[100px] ${color}`}>
             <p className="text-2xl font-bold">{value}</p>
@@ -625,6 +638,17 @@ function BossTodayTab({ conversations, onSelect }: { conversations: Conversation
           </div>
         ))}
       </div>
+
+      {/* Suggested actions from Boss API */}
+      {bossData?.suggestedActions && bossData.suggestedActions.some(a => a.type !== 'ALL_CLEAR') && (
+        <div className="px-4 mb-4">
+          {bossData.suggestedActions.filter(a => a.priority === 'urgent' || a.priority === 'high').slice(0, 3).map((a, i) => (
+            <div key={i} className={`mb-2 rounded-xl border px-3 py-2 text-xs font-medium ${a.priority === 'urgent' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+              {a.label}
+            </div>
+          ))}
+        </div>
+      )}
 
       <Section title="Needs Human" items={urgent} badge={urgent.length > 0 ? String(urgent.length) : undefined} />
       <Section title="High Intent" items={highScore} />
