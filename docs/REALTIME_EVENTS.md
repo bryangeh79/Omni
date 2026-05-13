@@ -187,11 +187,22 @@ Specifically when takeover or release-ai changes handoff state.
 
 ### `customer.updated`
 
-Reserved for customer stage/score/tag changes (Phase 9).
+Published when a customer's stage, tags, or score changes (Phase 9A).
+
+```json
+{
+  "customerId": "...",
+  "stage": "HIGH_INTENT",
+  "tags": ["vip"],
+  "ts": "..."
+}
+```
+
+Published from: `PATCH /customers/:id`, `PATCH /customers/:id/stage`, `PATCH /customers/:id/tags`, `POST /customers/:id/tags`, `DELETE /customers/:id/tags/:tag`.
 
 ### `worker.job.failed`
 
-Reserved for worker job failure notifications (Phase 9).
+Reserved for worker job failure notifications (Phase 9B+).
 
 ---
 
@@ -251,7 +262,8 @@ When Redis is not reachable at API startup:
 ## TODO (Phase 9+)
 
 - Auto-reconnect Redis pub/sub after runtime failure without API restart
-- Publish `customer.updated` events from customer stage/score/tag routes
+- Per-conversation SSE subscription filtering — Phase 9B
+- Auto-reconnect IORedis pub/sub after runtime loss without API restart — Phase 9B
 - Publish `worker.job.failed` events on worker errors
 - Per-conversation SSE subscription filtering
 - Replace SSE with WebSocket if bidirectional communication needed

@@ -1,10 +1,13 @@
-// Customer / CRM routes — full CRUD implementation (Phase 3B)
+// Customer / CRM routes — full CRUD implementation (Phase 3B → 9A)
 // All endpoints are tenant-scoped via req.user.tenantId from JWT.
+// Phase 9A: PATCH /:id/stage, PATCH /:id/tags (batch replace), customer.updated events.
 
 import type { FastifyInstance } from 'fastify'
 import { prisma, LeadStage } from '@omni/db'
 import type { Prisma } from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
+import { publishEvent } from '../realtime-bus'
+import { REALTIME_EVENT_TYPES } from '@omni/shared'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const VALID_STAGES    = Object.values(LeadStage) as string[]
@@ -63,21 +66,18 @@ export async function customerRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Invalid language. Valid: ${VALID_LANGUAGES.join(', ')}` })
     }
 
-    // Build where clause — always tenant-scoped
     const where: Prisma.CustomerWhereInput = { tenantId }
-    if (stage)    where.stage            = stage as LeadStage
+    if (stage)    where.stage              = stage as LeadStage
     if (language) where.languagePreference = language
-    if (source)   where.source           = source
-    if (tag)      where.tags             = { some: { tag } }
+    if (source)   where.source             = source
+    if (tag)      where.tags               = { some: { tag } }
 
-    // Score range
     if (minScore !== undefined || maxScore !== undefined) {
       const min = parseIntSafe(minScore, 0)
       const max = parseIntSafe(maxScore, 100)
       where.score = { gte: min, lte: max }
     }
 
-    // Free-text search across name / phone / company / whatsappName
     if (q && q.trim()) {
       const qTrim = q.trim()
       where.OR = [
@@ -101,12 +101,7 @@ export async function customerRoutes(app: FastifyInstance) {
 
     return {
       data:       rows.map(formatCustomer),
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
+      pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     }
   })
 
@@ -123,26 +118,25 @@ export async function customerRoutes(app: FastifyInstance) {
       const customer = await prisma.customer.findFirst({
         where:   { id, tenantId },
         include: {
-          tags: { select: { tag: true } },
+          tags:          { select: { tag: true } },
           conversations: {
-            select: { id: true, status: true, lastMessageAt: true },
+            select:  { id: true, status: true, lastMessageAt: true },
             orderBy: { lastMessageAt: 'desc' },
-            take: 5,
+            take:    5,
           },
         },
       })
 
       if (!customer) {
-        // 404 even if the ID exists in another tenant — no cross-tenant leak
         return reply.status(404).send({ error: 'Customer not found' })
       }
 
       const { tags, conversations, ...rest } = customer
       return {
         ...rest,
-        tags:              tags.map((t) => t.tag),
-        conversationCount: conversations.length,
-        lastMessageAt:     conversations[0]?.lastMessageAt ?? null,
+        tags,
+        conversationCount:   conversations.length,
+        lastMessageAt:       conversations[0]?.lastMessageAt ?? null,
         recentConversations: conversations,
       }
     },
@@ -181,8 +175,6 @@ export async function customerRoutes(app: FastifyInstance) {
     if (!body.phone || typeof body.phone !== 'string' || !body.phone.trim()) {
       return reply.status(400).send({ error: 'phone is required' })
     }
-
-    // Validate optional fields
     if (body.stage !== undefined && !VALID_STAGES.includes(body.stage)) {
       return reply.status(400).send({ error: `Invalid stage. Valid: ${VALID_STAGES.join(', ')}` })
     }
@@ -196,7 +188,6 @@ export async function customerRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Invalid languagePreference. Valid: ${VALID_LANGUAGES.join(', ')}` })
     }
 
-    // Duplicate phone check (same tenant)
     const existing = await prisma.customer.findUnique({
       where: { tenantId_phone: { tenantId, phone: body.phone.trim() } },
     })
@@ -238,7 +229,7 @@ export async function customerRoutes(app: FastifyInstance) {
   })
 
   // ──────────────────────────────────────────────────────────────────────────
-  // PATCH /customers/:id
+  // PATCH /customers/:id  — general update (stage, score, notes, etc.)
   // ──────────────────────────────────────────────────────────────────────────
   app.patch<{
     Params: { id: string }
@@ -271,7 +262,6 @@ export async function customerRoutes(app: FastifyInstance) {
       const { id }       = req.params
       const body         = req.body ?? {}
 
-      // Validate values if provided
       if (body.stage !== undefined && !VALID_STAGES.includes(body.stage)) {
         return reply.status(400).send({ error: `Invalid stage. Valid: ${VALID_STAGES.join(', ')}` })
       }
@@ -289,13 +279,11 @@ export async function customerRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: `Invalid languagePreference. Valid: ${VALID_LANGUAGES.join(', ')}` })
       }
 
-      // Tenant-scoped existence check before update
       const existing = await prisma.customer.findFirst({ where: { id, tenantId } })
       if (!existing) {
         return reply.status(404).send({ error: 'Customer not found' })
       }
 
-      // Build update data — only include fields present in body
       type UpdateData = Prisma.CustomerUpdateInput
       const data: UpdateData = {}
       const updatable = [
@@ -319,12 +307,96 @@ export async function customerRoutes(app: FastifyInstance) {
         include: { tags: { select: { tag: true } } },
       })
 
+      // Publish customer.updated realtime event
+      publishEvent(tenantId, REALTIME_EVENT_TYPES.CUSTOMER_UPDATED, {
+        customerId: id,
+        stage:      updated.stage,
+        score:      updated.score,
+      })
+
       return formatCustomer(updated)
     },
   )
 
   // ──────────────────────────────────────────────────────────────────────────
-  // POST /customers/:id/tags
+  // PATCH /customers/:id/stage  — dedicated stage-only update (Phase 9A)
+  // ──────────────────────────────────────────────────────────────────────────
+  app.patch<{
+    Params: { id: string }
+    Body:   { stage?: string }
+  }>(
+    '/:id/stage',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const { id }       = req.params
+      const { stage }    = req.body ?? {}
+
+      if (!stage || !VALID_STAGES.includes(stage)) {
+        return reply.status(400).send({ error: `stage must be one of: ${VALID_STAGES.join(', ')}` })
+      }
+
+      const existing = await prisma.customer.findFirst({ where: { id, tenantId } })
+      if (!existing) return reply.status(404).send({ error: 'Customer not found' })
+
+      const updated = await prisma.customer.update({
+        where:   { id },
+        data:    { stage: stage as LeadStage },
+        include: { tags: { select: { tag: true } } },
+      })
+
+      publishEvent(tenantId, REALTIME_EVENT_TYPES.CUSTOMER_UPDATED, {
+        customerId: id,
+        stage:      updated.stage,
+        score:      updated.score,
+      })
+
+      return formatCustomer(updated)
+    },
+  )
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PATCH /customers/:id/tags  — replace all tags (Phase 9A)
+  // Accepts: { tags: string[] } or { tags: "tag1,tag2,tag3" }
+  // ──────────────────────────────────────────────────────────────────────────
+  app.patch<{
+    Params: { id: string }
+    Body:   { tags?: string[] | string }
+  }>(
+    '/:id/tags',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const { id }       = req.params
+      const body         = req.body ?? {}
+
+      let tags: string[] = []
+      if (Array.isArray(body.tags)) {
+        tags = body.tags.map((t) => t.trim()).filter(Boolean)
+      } else if (typeof body.tags === 'string') {
+        tags = body.tags.split(',').map((t) => t.trim()).filter(Boolean)
+      }
+
+      const existing = await prisma.customer.findFirst({ where: { id, tenantId } })
+      if (!existing) return reply.status(404).send({ error: 'Customer not found' })
+
+      // Replace all tags atomically
+      await prisma.$transaction([
+        prisma.customerTag.deleteMany({ where: { customerId: id } }),
+        ...tags.map((tag) => prisma.customerTag.create({ data: { customerId: id, tag } })),
+      ])
+
+      publishEvent(tenantId, REALTIME_EVENT_TYPES.CUSTOMER_UPDATED, {
+        customerId: id,
+        tags,
+      })
+
+      return { customerId: id, tags }
+    },
+  )
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // POST /customers/:id/tags  — add a single tag (idempotent)
   // ──────────────────────────────────────────────────────────────────────────
   app.post<{
     Params: { id: string }
@@ -341,13 +413,11 @@ export async function customerRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'tag is required' })
       }
 
-      // Verify customer belongs to tenant
       const customer = await prisma.customer.findFirst({ where: { id, tenantId } })
       if (!customer) {
         return reply.status(404).send({ error: 'Customer not found' })
       }
 
-      // Idempotent upsert
       await prisma.customerTag.upsert({
         where:  { customerId_tag: { customerId: id, tag: tag.trim() } },
         create: { customerId: id, tag: tag.trim() },
@@ -359,10 +429,10 @@ export async function customerRoutes(app: FastifyInstance) {
         include: { tags: { select: { tag: true } } },
       })
 
-      return reply.status(201).send({
-        customerId: id,
-        tags:       updated?.tags.map((t) => t.tag) ?? [],
-      })
+      const allTags = updated?.tags.map((t) => t.tag) ?? []
+      publishEvent(tenantId, REALTIME_EVENT_TYPES.CUSTOMER_UPDATED, { customerId: id, tags: allTags })
+
+      return reply.status(201).send({ customerId: id, tags: allTags })
     },
   )
 
@@ -375,28 +445,25 @@ export async function customerRoutes(app: FastifyInstance) {
     '/:id/tags/:tag',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const { tenantId }  = getAuthUser(req)
-      const { id, tag }   = req.params
+      const { tenantId } = getAuthUser(req)
+      const { id, tag }  = req.params
 
-      // Verify customer belongs to tenant
       const customer = await prisma.customer.findFirst({ where: { id, tenantId } })
       if (!customer) {
         return reply.status(404).send({ error: 'Customer not found' })
       }
 
-      await prisma.customerTag.deleteMany({
-        where: { customerId: id, tag },
-      })
+      await prisma.customerTag.deleteMany({ where: { customerId: id, tag } })
 
       const updated = await prisma.customer.findFirst({
         where:   { id },
         include: { tags: { select: { tag: true } } },
       })
 
-      return {
-        customerId: id,
-        tags:       updated?.tags.map((t) => t.tag) ?? [],
-      }
+      const allTags = updated?.tags.map((t) => t.tag) ?? []
+      publishEvent(tenantId, REALTIME_EVENT_TYPES.CUSTOMER_UPDATED, { customerId: id, tags: allTags })
+
+      return { customerId: id, tags: allTags }
     },
   )
 }

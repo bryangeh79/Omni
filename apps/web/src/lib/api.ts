@@ -1,4 +1,4 @@
-// Omni API client — web dashboard (Phase 8A)
+// Omni API client — web dashboard (Phase 8A → 9A)
 // Uses localStorage for JWT storage (dev/Phase-8A only; replace with httpOnly cookie in prod)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
@@ -98,6 +98,23 @@ export interface MessageListResponse {
 
 export type ConversationFilter = 'all' | 'needs_human' | 'ai_handling' | 'high_intent'
 
+export interface CustomerDetail {
+  id:           string
+  tenantId:     string
+  name:         string | null
+  phone:        string
+  whatsappName: string | null
+  company:      string | null
+  stage:        string
+  score:        number
+  tags:         string[]
+  notes:        string | null
+  nextFollowUpAt: string | null
+  conversationCount: number
+  lastMessageAt: string | null
+  recentConversations: { id: string; status: string; lastMessageAt: string | null }[]
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login(tenantSlug: string, email: string, password: string): Promise<LoginResult> {
   const result = await apiFetch<LoginResult>('/auth/login', {
@@ -147,6 +164,43 @@ export async function sendMessage(conversationId: string, body: string): Promise
     method: 'POST',
     body:   JSON.stringify({ conversationId, body }),
   })
+}
+
+// ── Customer actions ──────────────────────────────────────────────────────────
+export async function fetchCustomer(id: string): Promise<CustomerDetail> {
+  return apiFetch<CustomerDetail>(`/customers/${id}`)
+}
+
+export async function updateCustomerStage(id: string, stage: string): Promise<CustomerDetail> {
+  return apiFetch<CustomerDetail>(`/customers/${id}/stage`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ stage }),
+  })
+}
+
+export async function setCustomerTags(id: string, tags: string[]): Promise<{ customerId: string; tags: string[] }> {
+  return apiFetch<{ customerId: string; tags: string[] }>(`/customers/${id}/tags`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ tags }),
+  })
+}
+
+export async function addCustomerTag(id: string, tag: string): Promise<{ customerId: string; tags: string[] }> {
+  return apiFetch<{ customerId: string; tags: string[] }>(`/customers/${id}/tags`, {
+    method: 'POST',
+    body:   JSON.stringify({ tag }),
+  })
+}
+
+export async function removeCustomerTag(id: string, tag: string): Promise<{ customerId: string; tags: string[] }> {
+  return apiFetch<{ customerId: string; tags: string[] }>(`/customers/${id}/tags/${encodeURIComponent(tag)}`, {
+    method: 'DELETE',
+  })
+}
+
+// ── Conversation close ────────────────────────────────────────────────────────
+export async function closeConversation(id: string): Promise<{ conversationId: string; status: string }> {
+  return apiFetch<{ conversationId: string; status: string }>(`/conversations/${id}/close`, { method: 'POST' })
 }
 
 // ── SSE transport mode (from connected event) ─────────────────────────────────

@@ -4,11 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   login, clearToken, getToken,
   fetchConversations, fetchConversation, fetchMessages,
-  takeoverConversation, releaseAi, sendMessage,
+  takeoverConversation, releaseAi, sendMessage, closeConversation,
+  updateCustomerStage, setCustomerTags,
   createRealtimeConnection,
   type ConversationSummary, type ConversationDetail, type Message, type ConversationFilter,
   type SseTransport,
 } from '@/lib/api'
+
+const STAGES = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST','AFTER_SALES'] as const
 
 // ── Login Form ────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -153,45 +156,118 @@ function MsgBubble({ msg }: { msg: Message }) {
   )
 }
 
-// ── Customer Card ─────────────────────────────────────────────────────────────
-function CustomerCard({ detail }: { detail: ConversationDetail }) {
-  const c   = detail.customer
-  const name = c.name ?? c.whatsappName ?? c.phone
+const STAGE_COLORS: Record<string, string> = {
+  NEW:         'bg-gray-100 text-gray-600',
+  INTERESTED:  'bg-blue-100 text-blue-700',
+  HIGH_INTENT: 'bg-orange-100 text-orange-700',
+  QUOTED:      'bg-yellow-100 text-yellow-700',
+  BOOKED:      'bg-green-100 text-green-700',
+  WON:         'bg-emerald-100 text-emerald-700',
+  LOST:        'bg-red-100 text-red-700',
+  AFTER_SALES: 'bg-purple-100 text-purple-700',
+}
 
-  const stageColors: Record<string, string> = {
-    NEW: 'bg-gray-100 text-gray-600',
-    INTERESTED: 'bg-blue-100 text-blue-700',
-    HIGH_INTENT: 'bg-orange-100 text-orange-700',
-    QUOTED: 'bg-yellow-100 text-yellow-700',
-    BOOKED: 'bg-green-100 text-green-700',
-    WON: 'bg-emerald-100 text-emerald-700',
-    LOST: 'bg-red-100 text-red-700',
-    AFTER_SALES: 'bg-purple-100 text-purple-700',
+// ── Customer Card ─────────────────────────────────────────────────────────────
+function CustomerCard({
+  detail, onCustomerChanged,
+}: {
+  detail:            ConversationDetail
+  onCustomerChanged: () => void
+}) {
+  const c    = detail.customer
+  const name = c.name ?? c.whatsappName ?? c.phone
+  const [editStage, setEditStage] = useState(false)
+  const [tagInput,  setTagInput]  = useState(c.tags.join(', '))
+  const [localTags, setLocalTags] = useState<string[]>(c.tags)
+  const [busy,      setBusy]      = useState(false)
+
+  async function handleStageChange(stage: string) {
+    setBusy(true)
+    try {
+      await updateCustomerStage(c.id, stage)
+      setEditStage(false)
+      onCustomerChanged()
+    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    finally { setBusy(false) }
+  }
+
+  async function handleTagsSave() {
+    const tags = tagInput.split(',').map(t => t.trim()).filter(Boolean)
+    setBusy(true)
+    try {
+      const res = await setCustomerTags(c.id, tags)
+      setLocalTags(res.tags)
+      onCustomerChanged()
+    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    finally { setBusy(false) }
   }
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-4 space-y-3 overflow-y-auto h-full">
       <h3 className="font-semibold text-gray-800 text-sm">{name}</h3>
       <p className="text-xs text-gray-500">{c.phone}</p>
 
-      <div className="flex flex-wrap gap-1">
-        <span className={`text-xs rounded px-2 py-0.5 font-medium ${stageColors[c.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-          {c.stage}
-        </span>
-        <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5">
-          Score: {c.score}
-        </span>
+      {/* Stage with edit */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-gray-400 font-medium">Stage</span>
+          <button
+            onClick={() => setEditStage(!editStage)}
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            {editStage ? 'cancel' : 'edit'}
+          </button>
+        </div>
+        {editStage ? (
+          <div className="flex flex-wrap gap-1">
+            {STAGES.map((s) => (
+              <button
+                key={s}
+                disabled={busy}
+                onClick={() => handleStageChange(s)}
+                className={`text-xs rounded px-2 py-0.5 font-medium cursor-pointer transition-opacity ${STAGE_COLORS[s] ?? 'bg-gray-100 text-gray-600'} ${c.stage === s ? 'ring-2 ring-offset-1 ring-blue-400' : 'opacity-60 hover:opacity-100'}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className={`text-xs rounded px-2 py-0.5 font-medium ${STAGE_COLORS[c.stage] ?? 'bg-gray-100 text-gray-600'}`}>
+            {c.stage}
+          </span>
+        )}
       </div>
 
-      {c.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {c.tags.map((tag) => (
-            <span key={tag} className="text-xs bg-blue-50 text-blue-600 rounded px-2 py-0.5">
-              #{tag}
-            </span>
+      <div className="text-xs text-gray-500">
+        Score: <span className="font-medium text-gray-700">{c.score}</span>
+      </div>
+
+      {/* Tags with edit */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-gray-400 font-medium">Tags</span>
+        </div>
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {localTags.map((tag) => (
+            <span key={tag} className="text-xs bg-blue-50 text-blue-600 rounded px-2 py-0.5">#{tag}</span>
           ))}
         </div>
-      )}
+        <div className="flex gap-1">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            placeholder="tag1, tag2"
+            className="flex-1 border rounded text-xs px-2 py-1 outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <button
+            onClick={handleTagsSave} disabled={busy}
+            className="text-xs bg-blue-500 text-white rounded px-2 py-1 disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      </div>
 
       <div className="border-t pt-3 space-y-1 text-xs text-gray-500">
         <div><span className="font-medium">Channel:</span> {detail.channel.type}</div>
@@ -213,6 +289,8 @@ export default function InboxPage() {
   const [selectedId,    setSelectedId]    = useState<string | null>(null)
   const [detail,        setDetail]        = useState<ConversationDetail | null>(null)
   const [messages,      setMessages]      = useState<Message[]>([])
+  const [msgPage,       setMsgPage]       = useState(1)
+  const [totalMsgs,     setTotalMsgs]     = useState(0)
   const [composer,      setComposer]      = useState('')
   const [sending,       setSending]       = useState(false)
   const [actionBusy,    setActionBusy]    = useState(false)
@@ -252,9 +330,11 @@ export default function InboxPage() {
   const loadThread = useCallback(async (id: string) => {
     setThreadError(null)
     try {
-      const [det, msgs] = await Promise.all([fetchConversation(id), fetchMessages(id)])
+      const [det, msgs] = await Promise.all([fetchConversation(id), fetchMessages(id, 1)])
       setDetail(det)
       setMessages(msgs.data)
+      setTotalMsgs(msgs.pagination.total)
+      setMsgPage(1)
     } catch (e) {
       setThreadError(e instanceof Error ? e.message : 'Failed to load')
     }
@@ -262,7 +342,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (selectedId) loadThread(selectedId)
-    else { setDetail(null); setMessages([]) }
+    else { setDetail(null); setMessages([]); setMsgPage(1); setTotalMsgs(0) }
   }, [selectedId, loadThread])
 
   // Scroll to bottom when messages change
@@ -318,6 +398,29 @@ export default function InboxPage() {
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed')
     } finally { setActionBusy(false) }
+  }
+
+  async function handleClose() {
+    if (!selectedId || actionBusy) return
+    if (!confirm('Close this conversation? This cannot be undone.')) return
+    setActionBusy(true)
+    try {
+      await closeConversation(selectedId)
+      await loadThread(selectedId)
+      await loadList()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed')
+    } finally { setActionBusy(false) }
+  }
+
+  async function handleLoadOlder() {
+    if (!selectedId) return
+    const nextPage = msgPage + 1
+    try {
+      const res = await fetchMessages(selectedId, nextPage)
+      setMessages((prev) => [...res.data, ...prev])
+      setMsgPage(nextPage)
+    } catch { /* ignore */ }
   }
 
   async function handleSend(e: React.FormEvent) {
@@ -465,17 +568,42 @@ export default function InboxPage() {
                     Release to AI
                   </button>
                 )}
+                {detail && detail.status !== 'CLOSED' && (
+                  <button
+                    onClick={handleClose}
+                    disabled={actionBusy}
+                    className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded disabled:opacity-50"
+                  >
+                    Close
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-3">
               {threadError && <p className="text-xs text-red-500 mb-2">{threadError}</p>}
+              {/* Load older messages */}
+              {msgPage * 50 < totalMsgs && (
+                <div className="flex justify-center mb-3">
+                  <button
+                    onClick={handleLoadOlder}
+                    className="text-xs text-blue-500 hover:text-blue-700 bg-white border border-blue-200 rounded-full px-4 py-1"
+                  >
+                    Load older messages
+                  </button>
+                </div>
+              )}
               {messages.map((msg) => <MsgBubble key={msg.id} msg={msg} />)}
               <div ref={bottomRef} />
             </div>
 
-            {/* Composer */}
+            {/* Composer — disabled if closed */}
+            {detail?.status === 'CLOSED' ? (
+              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 text-center text-xs text-gray-400">
+                Conversation closed — reply not available
+              </div>
+            ) : (
             <form
               onSubmit={handleSend}
               className="bg-white border-t border-gray-200 px-4 py-3 flex items-end gap-2"
@@ -498,6 +626,7 @@ export default function InboxPage() {
                 {sending ? '...' : 'Send'}
               </button>
             </form>
+            )}
           </>
         )}
       </div>
@@ -505,7 +634,7 @@ export default function InboxPage() {
       {/* ── Right panel: customer card ── */}
       <div className="w-64 flex-shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
         {detail ? (
-          <CustomerCard detail={detail} />
+          <CustomerCard detail={detail} onCustomerChanged={() => selectedId && loadThread(selectedId)} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 text-xs p-4">
             Select a conversation to see customer details

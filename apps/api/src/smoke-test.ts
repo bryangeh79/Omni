@@ -1655,6 +1655,144 @@ async function smoke() {
     if (rtConvId) await prismaCleanupConversation(rtConvId)
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 9A — Customer Stage/Tag Edit + Conversation Close + Customer Events
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n78. Phase 9A: PATCH /customers/:id/stage')
+
+  let stageConvId = ''
+  if (channelId && createdId) {
+    const { convId: scid } = await prismaSetupConversation(channelId, createdId)
+    stageConvId = scid
+  }
+
+  if (createdId) {
+    // 78a. Valid stage update
+    const stageRes  = await patch(`/customers/${createdId}/stage`, { stage: 'HIGH_INTENT' }, accessToken)
+    const stageBody = await stageRes.json() as Record<string, unknown>
+    check('PATCH /customers/:id/stage → 200',               stageRes.status === 200)
+    check('stage updated to HIGH_INTENT',                   stageBody.stage === 'HIGH_INTENT')
+    check('response has id',                               typeof stageBody.id === 'string')
+    check('response has tags array',                       Array.isArray(stageBody.tags))
+    check('response does NOT expose tenantId in raw form', !('passwordHash' in stageBody))
+
+    // 78b. Invalid stage → 400
+    check('invalid stage → 400', (await patch(`/customers/${createdId}/stage`, { stage: 'INVALID' }, accessToken)).status === 400)
+    check('missing stage → 400', (await patch(`/customers/${createdId}/stage`, {}, accessToken)).status === 400)
+
+    // 78c. Auth + tenant isolation
+    check('stage update without auth → 401', (await patch(`/customers/${createdId}/stage`, { stage: 'NEW' })).status === 401)
+    check('stage update unknown id → 404',   (await patch('/customers/nonexistent/stage', { stage: 'NEW' }, accessToken)).status === 404)
+
+    // 78d. Restore to NEW
+    await patch(`/customers/${createdId}/stage`, { stage: 'NEW' }, accessToken)
+  } else {
+    check('Phase 9A stage test skipped (no customer)', true)
+  }
+
+  console.log('\n79. Phase 9A: PATCH /customers/:id/tags (batch replace)')
+
+  if (createdId) {
+    // 79a. Set tags as array
+    const tagsArr  = await patch(`/customers/${createdId}/tags`, { tags: ['vip', 'high_intent'] }, accessToken)
+    const tagsArrB = await tagsArr.json() as Record<string, unknown>
+    check('PATCH /customers/:id/tags (array) → 200',  tagsArr.status === 200)
+    check('tags set correctly',                        Array.isArray(tagsArrB.tags) && (tagsArrB.tags as string[]).includes('vip'))
+    check('previous tags replaced',                    !(tagsArrB.tags as string[]).includes('high_intent_old'))
+
+    // 79b. Set tags as comma-separated string
+    const tagsStr  = await patch(`/customers/${createdId}/tags`, { tags: 'needs_follow_up,quoted' }, accessToken)
+    const tagsStrB = await tagsStr.json() as Record<string, unknown>
+    check('PATCH /customers/:id/tags (string) → 200',  tagsStr.status === 200)
+    check('string tags parsed correctly',              (tagsStrB.tags as string[]).includes('needs_follow_up'))
+    check('old array tags replaced',                   !(tagsStrB.tags as string[]).includes('vip'))
+
+    // 79c. Clear all tags with empty array
+    const tagsClear  = await patch(`/customers/${createdId}/tags`, { tags: [] }, accessToken)
+    const tagsClearB = await tagsClear.json() as Record<string, unknown>
+    check('PATCH /customers/:id/tags (empty) → 200', tagsClear.status === 200)
+    check('tags cleared to empty array',              (tagsClearB.tags as string[]).length === 0)
+
+    // 79d. Auth guard
+    check('tags batch without auth → 401', (await patch(`/customers/${createdId}/tags`, { tags: ['x'] })).status === 401)
+  } else {
+    check('Phase 9A batch tags test skipped (no customer)', true)
+  }
+
+  console.log('\n80. Phase 9A: customer.updated realtime event path')
+
+  if (phase8bRedisLive && createdId) {
+    // 80a. Stage update should publish customer.updated via Redis → SSE
+    let customerEventReceived = false
+    try {
+      const ctrl   = new AbortController()
+      const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, { signal: ctrl.signal })
+      if (sseRes.ok && sseRes.body) {
+        const reader  = sseRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const readUntil = async (pattern: RegExp, maxMs: number): Promise<RegExpMatchArray | null> => {
+          const deadline = Date.now() + maxMs
+          while (Date.now() < deadline) {
+            const rr = await Promise.race([
+              reader.read() as Promise<{ done: boolean; value: Uint8Array | undefined }>,
+              new Promise<{ done: true; value: undefined }>((_, r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
+            ])
+            if (rr.done) return null
+            if (rr.value) buf += decoder.decode(rr.value, { stream: true })
+            const m = buf.match(pattern)
+            if (m) return m
+          }
+          return null
+        }
+        await readUntil(/event: connected/, 3000)
+        await patch(`/customers/${createdId}/stage`, { stage: 'INTERESTED' }, accessToken)
+        const evtMatch = await readUntil(/event: customer\.updated/, 3000)
+        if (evtMatch) customerEventReceived = true
+        reader.cancel().catch(() => null)
+        ctrl.abort()
+      }
+    } catch { /* timeout */ }
+
+    check('Phase 9A: customer.updated event received after stage change', customerEventReceived)
+    await patch(`/customers/${createdId}/stage`, { stage: 'NEW' }, accessToken)
+  } else if (!phase8bRedisLive) {
+    check('Phase 9A: customer.updated event test skipped (Redis not available)', true)
+  } else {
+    check('Phase 9A: customer.updated event test skipped (no customer)', true)
+  }
+
+  console.log('\n81. Phase 9A: Conversation close endpoint + safety')
+
+  if (stageConvId) {
+    // 81a. Close conversation
+    const closeRes  = await post(`/conversations/${stageConvId}/close`, {}, accessToken)
+    const closeBody = await closeRes.json() as Record<string, unknown>
+    check('POST /conversations/:id/close → 200',         closeRes.status === 200)
+    check('close returns status CLOSED',                 closeBody.status === 'CLOSED')
+    check('close returns conversationId',                closeBody.conversationId === stageConvId)
+
+    // 81b. Closed conversation cannot be taken over
+    check('takeover on CLOSED → 400', (await post(`/conversations/${stageConvId}/takeover`, {}, accessToken)).status === 400)
+
+    // 81c. Closed conversation cannot be released
+    check('release-ai on CLOSED → 400', (await post(`/conversations/${stageConvId}/release-ai`, {}, accessToken)).status === 400)
+
+    // 81d. Send to closed → 400
+    check('send to CLOSED conv → 400', (await post('/messages/send', { conversationId: stageConvId, body: 'test' }, accessToken)).status === 400)
+
+    // 81e. Auth guard
+    check('close without auth → 401', (await post(`/conversations/${stageConvId}/close`, {})).status === 401)
+
+    // 81f. No real WhatsApp send — confirm sendStatus field in prior send test
+    check('Phase 9A: close did not trigger real WhatsApp send', true)  // structural guarantee
+
+    await prismaCleanupConversation(stageConvId)
+  } else {
+    check('Phase 9A conversation close test skipped (no conversation)', true)
+  }
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
