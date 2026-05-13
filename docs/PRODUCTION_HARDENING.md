@@ -1,4 +1,4 @@
-# Omni Production Hardening — Phase 10A/10B
+# Omni Production Hardening — Phase 10A/10B → 15B
 
 ## Health Endpoints
 
@@ -133,3 +133,32 @@ The `realtime-bus` now handles runtime Redis reconnects:
 | `OMNI_ALLOW_WA_SESSION` | `false` | Required for WA Web session activation |
 | `OMNI_ENABLE_REAL_META_SEND` | `false` | Required for Meta API message send |
 | `OMNI_ENABLE_ONBOARDING_AI` | `false` | Required for AI-generated onboarding preview |
+
+---
+
+## Phase 15B: Ops Hardening Checklist Items
+
+Four new MANUAL items added to `GET /production-qa/checklist` under the Ops category:
+
+### monitoring_configured
+Configure uptime monitoring (UptimeRobot, Grafana, Better Uptime) pointed at `/health` or `/ops/health`. Set up alert channels (email, Slack, PagerDuty) for API/worker failures.
+
+### log_retention
+Define log retention policy (e.g. 30-day rolling). Configure log aggregation (AWS CloudWatch, Datadog, Logtail) to ship and retain Fastify API logs and worker stderr output.
+
+### incident_response
+Document on-call escalation path, SLA targets (e.g. P1 response in 30 min), and a runbook URL covering: how to restart API/worker, how to check DB/Redis health, and what to do if a WhatsApp session drops.
+
+### support_contact
+Set up a customer-facing support channel (support email, WhatsApp, Intercom, or help desk) before live activation.
+
+## Phase 15B: RBAC Hardening
+
+Write endpoints now require OWNER/ADMIN role:
+- `POST /billing/select-plan-draft`
+- `PATCH /settings/company-profile`
+- `POST /team/invite-draft`
+- `PATCH /team/members/:id/role`
+- `PATCH /team/members/:id/status`
+
+Read endpoints (GET /settings/overview, GET /billing/plans, GET /team/members) require any valid auth token. MANAGER+ required for team member list.

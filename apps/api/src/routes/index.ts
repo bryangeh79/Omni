@@ -26,6 +26,7 @@ import { onboardingRoutes }     from './onboarding'
 import { settingsRoutes }       from './settings'
 import { billingRoutes }        from './billing'
 import { productionQaRoutes }   from './production-qa'
+import { teamRoutes }            from './team'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -64,4 +65,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(billingRoutes,        { prefix: '/billing' })
   // Production QA checklist — Phase 15A
   await app.register(productionQaRoutes,   { prefix: '/production-qa' })
+  // Team management + RBAC — Phase 15B
+  await app.register(teamRoutes,            { prefix: '/team' })
 }

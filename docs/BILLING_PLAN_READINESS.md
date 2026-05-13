@@ -77,7 +77,13 @@ Body: `{ planId: 'starter' | 'pro' | 'business' }` — saves plan preference to 
 
 ---
 
-## Limitations (Phase 15A)
+## RBAC (Phase 15B)
+
+`POST /billing/select-plan-draft` now requires **OWNER or ADMIN** role. Other billing GET endpoints accept any authenticated user.
+
+---
+
+## Limitations (Phase 15A/15B)
 
 - No real payment gateway — plan selection is a draft preference only
 - No invoice generation

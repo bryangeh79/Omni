@@ -100,6 +100,8 @@ export default function BillingPage() {
           <nav className="flex items-center gap-3 text-xs">
             <a href="/settings" className="text-gray-400 hover:text-gray-700">Settings</a>
             <span className="text-gray-200">|</span>
+            <a href="/team" className="text-indigo-600 hover:text-indigo-800">Team</a>
+            <span className="text-gray-200">|</span>
             <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA Checklist</a>
             <span className="text-gray-200">|</span>
             <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
@@ -112,8 +114,9 @@ export default function BillingPage() {
         {notice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
 
         {/* No real charge notice */}
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-800">
-          <strong>Planning Mode:</strong> Plan selection is a draft preference. No real payment gateway is configured. No charges will occur until payment integration is completed.
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-800 space-y-1">
+          <p><strong>Planning Mode:</strong> Plan selection is a draft preference. No real payment gateway is configured. No charges will occur until payment integration is completed.</p>
+          <p><strong>RBAC:</strong> Only OWNER or ADMIN can select a plan. MANAGER/AGENT/VIEWER have read-only access to billing.</p>
         </div>
 
         {/* Usage summary */}

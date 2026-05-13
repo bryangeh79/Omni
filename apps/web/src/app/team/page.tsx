@@ -1,0 +1,266 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import {
+  getToken, login, getMe,
+  fetchTeamMembers, inviteDraft, updateMemberRole, updateMemberStatus,
+  type TeamMember, type TeamMembersResponse,
+} from '@/lib/api'
+
+const ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'AGENT', 'VIEWER']
+
+const ROLE_COLORS: Record<string, string> = {
+  OWNER:   'bg-purple-100 text-purple-700',
+  ADMIN:   'bg-blue-100 text-blue-700',
+  MANAGER: 'bg-indigo-100 text-indigo-700',
+  AGENT:   'bg-emerald-100 text-emerald-700',
+  VIEWER:  'bg-gray-100 text-gray-600',
+}
+
+function LoginForm({ onLogin }: { onLogin: () => void }) {
+  const [slug, setSlug] = useState(''); const [email, setEmail] = useState(''); const [pass, setPass] = useState('')
+  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(''); setBusy(true)
+    try { await login(slug, email, pass); onLogin() }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    finally { setBusy(false) }
+  }
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-100">
+      <form onSubmit={submit} className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm space-y-4">
+        <div className="text-center mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 mb-3"><span className="text-white text-xl">👥</span></div>
+          <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
+          <p className="text-sm text-gray-400 mt-1">Sign in to manage your team</p>
+        </div>
+        {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
+        <button type="submit" disabled={busy} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? 'Signing in…' : 'Sign In'}</button>
+      </form>
+    </div>
+  )
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROLE_COLORS[role] ?? 'bg-gray-100 text-gray-500'}`}>{role}</span>
+  )
+}
+
+export default function TeamPage() {
+  const [authed,    setAuthed]    = useState(false)
+  const [myRole,    setMyRole]    = useState<string | null>(null)
+  const [team,      setTeam]      = useState<TeamMembersResponse | null>(null)
+  const [loading,   setLoading]   = useState(false)
+  const [notice,    setNotice]    = useState('')
+  const [error,     setError]     = useState('')
+  // Invite form
+  const [invEmail,  setInvEmail]  = useState('')
+  const [invName,   setInvName]   = useState('')
+  const [invRole,   setInvRole]   = useState('AGENT')
+  const [inviting,  setInviting]  = useState(false)
+  const [invResult, setInvResult] = useState<string | null>(null)
+  // Role edit
+  const [editingId,    setEditingId]    = useState<string | null>(null)
+  const [editingRole,  setEditingRole]  = useState('')
+  const [savingRole,   setSavingRole]   = useState(false)
+
+  useEffect(() => {
+    if (getToken()) { setAuthed(true); void load() }
+  }, [])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [t, me] = await Promise.all([fetchTeamMembers(), getMe()])
+      setTeam(t)
+      setMyRole(me.role)
+    } catch { /* ignore */ }
+    finally { setLoading(false) }
+  }
+
+  const isAdmin = myRole === 'OWNER' || myRole === 'ADMIN'
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault(); setInviting(true); setError('')
+    try {
+      const r = await inviteDraft({ email: invEmail, name: invName || undefined, role: invRole })
+      setInvResult(`Invite recorded for ${r.invited.email} as ${r.invited.role}. ${r.note}`)
+      setInvEmail(''); setInvName('')
+      setTimeout(() => setInvResult(null), 8000)
+    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Invite failed') }
+    finally { setInviting(false) }
+  }
+
+  async function handleRoleSave(member: TeamMember) {
+    setSavingRole(true); setError('')
+    try {
+      await updateMemberRole(member.id, editingRole)
+      setNotice(`Role updated to ${editingRole}`)
+      setEditingId(null)
+      setTimeout(() => setNotice(''), 3000)
+      await load()
+    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Update failed') }
+    finally { setSavingRole(false) }
+  }
+
+  async function handleToggleStatus(member: TeamMember) {
+    setError('')
+    try {
+      await updateMemberStatus(member.id, !member.isActive)
+      setNotice(`${member.email} ${!member.isActive ? 'activated' : 'deactivated'}`)
+      setTimeout(() => setNotice(''), 3000)
+      await load()
+    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Status update failed') }
+  }
+
+  if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void load() }} />
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
+            <div>
+              <h1 className="text-base font-bold text-gray-900">Team Management</h1>
+              <p className="text-xs text-gray-400">{team ? `${team.active} active · ${team.total} total` : 'Loading…'}{myRole ? ` · Your role: ${myRole}` : ''}</p>
+            </div>
+          </div>
+          <nav className="flex items-center gap-2 text-xs flex-wrap">
+            <a href="/settings" className="text-gray-400 hover:text-gray-700">Settings</a>
+            <span className="text-gray-200">|</span>
+            <a href="/billing" className="text-blue-500 hover:text-blue-700">Billing</a>
+            <span className="text-gray-200">|</span>
+            <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
+          </nav>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+        {error   && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
+        {notice  && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
+
+        {/* RBAC info banner */}
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 text-xs text-indigo-800 space-y-1">
+          <p><strong>RBAC Tiers:</strong> OWNER/ADMIN — manage team, billing, settings. MANAGER — view team and reports. AGENT — inbox access. VIEWER — read-only.</p>
+          {!isAdmin && <p className="text-amber-700"><strong>Note:</strong> You need OWNER or ADMIN role to invite or modify team members.</p>}
+        </div>
+
+        {loading && !team ? (
+          <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-3">⏳</p><p>Loading team…</p></div>
+        ) : (
+          <>
+            {/* Member List */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Team Members</h2>
+              <div className="space-y-2">
+                {(team?.members ?? []).map(m => (
+                  <div key={m.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 ${m.isActive ? 'bg-gray-50' : 'bg-red-50 opacity-70'}`}>
+                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-bold text-indigo-700">
+                      {(m.name?.[0] ?? m.email[0]).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{m.name ?? m.email}</p>
+                      <p className="text-xs text-gray-400 truncate">{m.name ? m.email : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {editingId === m.id ? (
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={editingRole}
+                            onChange={e => setEditingRole(e.target.value)}
+                            className="text-xs border border-indigo-200 rounded-lg px-2 py-1 outline-none"
+                          >
+                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                          <button onClick={() => { void handleRoleSave(m) }} disabled={savingRole} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">{savingRole ? '…' : 'Save'}</button>
+                          <button onClick={() => setEditingId(null)} className="text-xs text-gray-400 px-1">✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <RoleBadge role={m.role} />
+                          {!m.isActive && <span className="text-xs text-red-500 font-bold">Inactive</span>}
+                          {isAdmin && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => { setEditingId(m.id); setEditingRole(m.role) }}
+                                className="text-xs text-indigo-500 hover:text-indigo-700 px-1"
+                                title="Change role"
+                              >Edit</button>
+                              <button
+                                onClick={() => { void handleToggleStatus(m) }}
+                                className={`text-xs px-1 ${m.isActive ? 'text-red-400 hover:text-red-600' : 'text-emerald-500 hover:text-emerald-700'}`}
+                                title={m.isActive ? 'Deactivate' : 'Activate'}
+                              >{m.isActive ? 'Deactivate' : 'Activate'}</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {(team?.members?.length ?? 0) === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">No team members yet.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Invite Form — ADMIN+ only */}
+            {isAdmin && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Invite Team Member (Draft)</h2>
+                {invResult && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-xs mb-4">{invResult}</div>
+                )}
+                <form onSubmit={e => { void handleInvite(e) }} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 block mb-1">Email *</label>
+                      <input
+                        type="email"
+                        required
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                        placeholder="user@company.com"
+                        value={invEmail}
+                        onChange={e => setInvEmail(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 block mb-1">Name</label>
+                      <input
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                        placeholder="Full name (optional)"
+                        value={invName}
+                        onChange={e => setInvName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 block mb-1">Role</label>
+                    <select
+                      value={invRole}
+                      onChange={e => setInvRole(e.target.value)}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="submit" disabled={inviting} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2 rounded-xl disabled:opacity-50">
+                      {inviting ? 'Recording…' : 'Record Invite Draft'}
+                    </button>
+                    <p className="text-xs text-amber-600">No real email sent — email delivery not configured in this phase.</p>
+                  </div>
+                </form>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  )
+}

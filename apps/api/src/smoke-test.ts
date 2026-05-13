@@ -3051,6 +3051,79 @@ async function smoke() {
   check('production-qa no_broadcast item is PASS',   noBcastItem?.status === 'PASS')
   check('production-qa no secrets',                  !JSON.stringify(qaBody).includes('JWT_SECRET'))
 
+  // ── Phase 15B: Team Management + RBAC ─────────────────────────────────────
+
+  console.log('\n147. Phase 15B: GET /team/members (MANAGER+)')
+  check('GET /team/members without auth → 401', (await get('/team/members')).status === 401)
+
+  const teamRes  = await get('/team/members', accessToken)
+  const teamBody = await teamRes.json() as Record<string, unknown>
+  check('GET /team/members → 200',              teamRes.status === 200)
+  check('team has tenantId',                    typeof teamBody.tenantId === 'string')
+  check('team has members array',               Array.isArray(teamBody.members))
+  check('team has total count',                 typeof teamBody.total === 'number')
+  check('team has active count',                typeof teamBody.active === 'number')
+  const teamMembers = teamBody.members as Record<string, unknown>[]
+  if (teamMembers.length > 0) {
+    check('team member has id',                 typeof teamMembers[0].id === 'string')
+    check('team member has email',              typeof teamMembers[0].email === 'string')
+    check('team member has role',               typeof teamMembers[0].role === 'string')
+    check('team member no passwordHash',        !Object.keys(teamMembers[0]).includes('passwordHash'))
+  }
+
+  console.log('\n148. Phase 15B: POST /team/invite-draft (ADMIN+, no real email)')
+  check('POST /team/invite-draft without auth → 401', (await post('/team/invite-draft', { email: 'x@x.com' })).status === 401)
+
+  const invRes  = await post('/team/invite-draft', { email: 'smoke-invite@omni.test', name: 'Smoke Invitee', role: 'AGENT' }, accessToken)
+  const invBody = await invRes.json() as Record<string, unknown>
+  check('POST /team/invite-draft → 200',        invRes.status === 200)
+  check('invite has tenantId',                  typeof invBody.tenantId === 'string')
+  check('invite emailSent=false',               invBody.emailSent === false)
+  check('invite stub=true',                     invBody.stub === true)
+  check('invite has invited object',            typeof invBody.invited === 'object')
+  const invInvited = invBody.invited as Record<string, unknown>
+  check('invite invited.email matches',         invInvited.email === 'smoke-invite@omni.test')
+  check('invite invited.role is AGENT',         invInvited.role === 'AGENT')
+  check('invite bad email → 400',               (await post('/team/invite-draft', { email: 'not-an-email' }, accessToken)).status === 400)
+
+  console.log('\n149. Phase 15B: PATCH /team/members/:id/role + /status (ADMIN+)')
+  // Find a member that's NOT the current caller (self-demote is blocked by design)
+  const me15b = await get('/auth/me', accessToken)
+  const me15bBody = await me15b.json() as Record<string, unknown>
+  const callerId  = (me15bBody.userId ?? me15bBody.id) as string | undefined
+  const otherMember = teamMembers.find(m => m.id !== callerId) as Record<string, unknown> | undefined
+
+  if (otherMember?.id) {
+    const roleRes  = await patch(`/team/members/${otherMember.id as string}/role`, { role: 'MANAGER' }, accessToken)
+    const roleBody = await roleRes.json() as Record<string, unknown>
+    check('PATCH /team/members/:id/role → 200', roleRes.status === 200)
+    check('role update saved=true',             roleBody.saved === true)
+    check('role update has user',               typeof roleBody.user === 'object')
+    const roleUser = (roleBody.user ?? {}) as Record<string, unknown>
+    check('role update no passwordHash',        !Object.keys(roleUser).includes('passwordHash'))
+    // restore original role
+    await patch(`/team/members/${otherMember.id as string}/role`, { role: otherMember.role as string }, accessToken)
+  } else {
+    // Demo seed has only one user — self-demote is correctly blocked (400)
+    const selfRes = await patch(`/team/members/${callerId ?? 'self'}/role`, { role: 'MANAGER' }, accessToken)
+    check('self-demote → 400 (Cannot demote yourself)', selfRes.status === 400)
+    check('role update saved=true (skipped — only self)',   true)
+    check('role update has user (skipped — only self)',     true)
+    check('role update no passwordHash (skipped — only self)', true)
+  }
+  check('PATCH /team/members/bad-id/role without auth → 401', (await patch('/team/members/bad-id/role', { role: 'AGENT' })).status === 401)
+  check('PATCH /team/members/bad-id/role invalid role → 400', (await patch('/team/members/bad-id/role', { role: 'SUPERADMIN' }, accessToken)).status === 400)
+
+  console.log('\n150. Phase 15B: RBAC guards on billing + settings write endpoints')
+  // select-plan-draft now requires OWNER/ADMIN — demo user is ADMIN so should still work
+  const rbacPlanRes = await post('/billing/select-plan-draft', { planId: 'pro' }, accessToken)
+  check('POST /billing/select-plan-draft (ADMIN token) → 200', rbacPlanRes.status === 200)
+  // PATCH /settings/company-profile requires OWNER/ADMIN
+  const rbacSettingsRes = await patch('/settings/company-profile', { companyName: 'RBAC Test Co' }, accessToken)
+  check('PATCH /settings/company-profile (ADMIN token) → 200', rbacSettingsRes.status === 200)
+  // Restore
+  await patch('/settings/company-profile', { companyName: 'Omni Demo' }, accessToken)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

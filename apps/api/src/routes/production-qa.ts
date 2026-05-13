@@ -157,7 +157,31 @@ export async function productionQaRoutes(app: FastifyInstance) {
         id: 'backup_docs', category: 'Ops',
         label:   'Backup strategy documented',
         status:  'MANUAL',
-        detail:  'Database backup and recovery plan must be configured by operator',
+        detail:  'Database backup and recovery plan must be configured by operator (pg_dump, RDS snapshots, etc.)',
+      },
+      {
+        id: 'monitoring_configured', category: 'Ops',
+        label:   'Monitoring and alerting configured',
+        status:  'MANUAL',
+        detail:  'Operator must configure uptime monitoring (e.g. UptimeRobot, Grafana) and alert channels for API/worker failures.',
+      },
+      {
+        id: 'log_retention', category: 'Ops',
+        label:   'Log retention policy configured',
+        status:  'MANUAL',
+        detail:  'Operator must define log retention policy (e.g. 30-day rolling) and configure log aggregation (CloudWatch, Datadog, etc.).',
+      },
+      {
+        id: 'incident_response', category: 'Ops',
+        label:   'Incident response runbook documented',
+        status:  'MANUAL',
+        detail:  'On-call escalation path, runbook URL, and incident SLA targets must be documented before live activation.',
+      },
+      {
+        id: 'support_contact', category: 'Ops',
+        label:   'Support contact configured for tenants',
+        status:  'MANUAL',
+        detail:  'Customer-facing support email / WhatsApp / Intercom must be set up so tenants can reach operator support.',
       },
 
       // ── Commercial ────────────────────────────────────────────────────────

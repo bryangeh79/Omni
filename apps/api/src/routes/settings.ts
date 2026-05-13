@@ -10,7 +10,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
-import { requireAuth, getAuthUser } from '../auth'
+import { requireAuth, requireRole, getAuthUser } from '../auth'
 
 export async function settingsRoutes(app: FastifyInstance) {
 
@@ -78,7 +78,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       team: {
         userCount: users.length,
         users:     users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })),
-        rbacNote:  'Full RBAC and team management in next phase.',
+        rbacNote:  'RBAC enforced: OWNER/ADMIN can manage team, MANAGER can view, AGENT/VIEWER have inbox access only.',
       },
       links: {
         onboarding:      '/onboarding',
@@ -101,7 +101,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       website?:       string
       serviceArea?:   string
     }
-  }>('/company-profile', { preHandler: requireAuth }, async (req) => {
+  }>('/company-profile', { preHandler: requireRole('OWNER', 'ADMIN') }, async (req) => {
     const { tenantId } = getAuthUser(req)
     const { companyName, industry, businessHours, website, serviceArea } = req.body ?? {}
 

@@ -1,4 +1,4 @@
-# Omni Production Launch QA — Phase 15A
+# Omni Production Launch QA — Phase 15A/15B
 
 ## Overview
 
@@ -71,6 +71,10 @@ Returns a deterministic checklist. No DB writes. No external calls.
 - Health endpoint available
 - Ops readiness check passes (MANUAL)
 - Backup strategy documented (MANUAL)
+- Monitoring and alerting configured (MANUAL) — Phase 15B
+- Log retention policy configured (MANUAL) — Phase 15B
+- Incident response runbook documented (MANUAL) — Phase 15B
+- Support contact configured for tenants (MANUAL) — Phase 15B
 
 ### Commercial
 - Plan selected
@@ -95,9 +99,13 @@ These cannot be automated and must be reviewed by the operator:
 
 1. **Ops readiness** — run `GET /ops/health` and verify DB/Redis/worker are all healthy
 2. **Backup strategy** — configure PostgreSQL backup (pg_dump, RDS snapshots, etc.)
-3. **Meta fees** — confirm with customer that Meta per-conversation fees are pass-through
-4. **Env flags** — review before enabling `OMNI_ALLOW_WA_SESSION` or `OMNI_ENABLE_REAL_META_SEND`
-5. **Plan review** — confirm plan selection and customer acceptance
+3. **Monitoring** — set up uptime monitoring and alert channels for API/worker failures
+4. **Log retention** — configure log aggregation and define retention policy (30-day minimum)
+5. **Incident response** — document on-call escalation path and runbook URL
+6. **Support contact** — set up customer-facing support channel
+7. **Meta fees** — confirm with customer that Meta per-conversation fees are pass-through
+8. **Env flags** — review before enabling `OMNI_ALLOW_WA_SESSION` or `OMNI_ENABLE_REAL_META_SEND`
+9. **Plan review** — confirm plan selection and customer acceptance
 
 ---
 
@@ -107,7 +115,7 @@ All items confirm that Omni is a 1:1 AI customer service product. The `no_broadc
 
 ---
 
-## Limitations (Phase 15A)
+## Limitations (Phase 15A/15B)
 
 - Checklist is tenant-scoped only — no cross-tenant admin view
 - Manual items cannot be auto-resolved

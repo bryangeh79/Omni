@@ -981,6 +981,59 @@ export async function selectPlanDraft(planId: string): Promise<{
   })
 }
 
+// ── Phase 15B: Team Management ───────────────────────────────────────────────
+export interface TeamMember {
+  id:        string
+  name:      string | null
+  email:     string
+  role:      string
+  isActive:  boolean
+  createdAt: string
+}
+
+export interface TeamMembersResponse {
+  tenantId: string
+  total:    number
+  active:   number
+  members:  TeamMember[]
+}
+
+export async function fetchTeamMembers(): Promise<TeamMembersResponse> {
+  return apiFetch<TeamMembersResponse>('/team/members')
+}
+
+export async function inviteDraft(data: {
+  email: string
+  name?:  string
+  role?:  string
+}): Promise<{
+  tenantId:  string
+  invited:   { email: string; name: string | null; role: string }
+  emailSent: false
+  stub:      boolean
+  note:      string
+  action:    string
+}> {
+  return apiFetch('/team/invite-draft', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function updateMemberRole(id: string, role: string): Promise<{ saved: boolean; tenantId: string; user: TeamMember }> {
+  return apiFetch(`/team/members/${id}/role`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ role }),
+  })
+}
+
+export async function updateMemberStatus(id: string, isActive: boolean): Promise<{ saved: boolean; tenantId: string; user: TeamMember }> {
+  return apiFetch(`/team/members/${id}/status`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ isActive }),
+  })
+}
+
 // ── Phase 15A: Production QA ──────────────────────────────────────────────────
 export interface QaItem {
   id:       string

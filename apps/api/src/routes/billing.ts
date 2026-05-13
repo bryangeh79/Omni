@@ -12,7 +12,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
-import { requireAuth, getAuthUser } from '../auth'
+import { requireAuth, requireRole, getAuthUser } from '../auth'
 
 // ── Plan definitions ───────────────────────────────────────────────────────
 const PLANS = [
@@ -174,7 +174,7 @@ export async function billingRoutes(app: FastifyInstance) {
   // Save plan preference — NO real charge, NO payment gateway
   app.post<{ Body: { planId?: string } }>(
     '/select-plan-draft',
-    { preHandler: requireAuth },
+    { preHandler: requireRole('OWNER', 'ADMIN') },
     async (req, reply) => {
       const { tenantId } = getAuthUser(req)
       const { planId }   = req.body ?? {}

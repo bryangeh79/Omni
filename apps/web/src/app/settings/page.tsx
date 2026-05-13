@@ -94,6 +94,8 @@ export default function SettingsPage() {
           <nav className="flex items-center gap-2 text-xs flex-wrap">
             <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
             <span className="text-gray-200">|</span>
+            <a href="/team" className="text-indigo-600 hover:text-indigo-800">Team</a>
+            <span className="text-gray-200">|</span>
             <a href="/billing" className="text-blue-500 hover:text-blue-700">Billing</a>
             <span className="text-gray-200">|</span>
             <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA Checklist</a>
