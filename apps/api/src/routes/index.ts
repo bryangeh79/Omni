@@ -17,6 +17,7 @@ import { dashboardRoutes }    from './dashboard'
 import { usageRoutes }        from './usage'
 import { webhookMetaRoutes }  from './webhook-meta'
 import { realtimeRoutes }     from './realtime'
+import { followUpRoutes }     from './follow-up'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -35,4 +36,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(webhookMetaRoutes,  { prefix: '/webhooks' })
   // Real-time SSE — auth via ?token= query param
   await app.register(realtimeRoutes,     { prefix: '/realtime' })
+  // Follow-up tasks — Phase 9B
+  await app.register(followUpRoutes,     { prefix: '/follow-ups' })
 }

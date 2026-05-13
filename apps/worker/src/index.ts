@@ -5,8 +5,9 @@ import dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') })
 
-import { createInboundWorker }   from './consumer'
-import { closeWorkerPublisher } from './realtime-publisher'
+import { createInboundWorker }              from './consumer'
+import { closeWorkerPublisher }            from './realtime-publisher'
+import { startFollowUpProcessor, stopFollowUpProcessor } from './follow-up-processor'
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:43114'
 
@@ -20,9 +21,13 @@ async function startWorker(): Promise<void> {
   console.log('[omni-worker] Ready — consuming from queue omni:inbound-messages')
   console.log('[omni-worker] Phase 4B: AI stub mode (no real LLM, no real WhatsApp send)')
 
+  // Start follow-up task processor (Phase 9B)
+  startFollowUpProcessor()
+
   // Graceful shutdown on SIGTERM/SIGINT
   const shutdown = async (signal: string) => {
     console.log(`[omni-worker] Received ${signal}, shutting down gracefully...`)
+    stopFollowUpProcessor()
     await worker.close()
     await closeWorkerPublisher()
     console.log('[omni-worker] Shutdown complete')

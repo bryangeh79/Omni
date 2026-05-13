@@ -202,7 +202,30 @@ Published from: `PATCH /customers/:id`, `PATCH /customers/:id/stage`, `PATCH /cu
 
 ### `worker.job.failed`
 
-Reserved for worker job failure notifications (Phase 9B+).
+Reserved for worker job failure notifications (Phase 10+).
+
+### `followup.created`
+
+Published when a new FollowUpTask is scheduled.
+
+```json
+{ "taskId": "...", "conversationId": "...", "scenario": "...", "stepIndex": 0, "dueAt": "...", "requiresHuman": false }
+```
+
+### `followup.updated`
+
+Published when a task is completed, cancelled, or a chain is cancelled.
+
+```json
+{ "taskId": "...", "conversationId": "...", "status": "DONE" | "CANCELLED", "reason": "MANUAL" | "CUSTOMER_REPLIED" }
+```
+
+### `followup.due`
+
+Published by the worker when a due task is processed.
+
+```json
+{ "taskId": "...", "conversationId": "...", "scenario": "...", "stepIndex": 0, "requiresHuman": false }
 
 ---
 

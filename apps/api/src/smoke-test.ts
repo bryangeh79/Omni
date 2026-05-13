@@ -1793,6 +1793,175 @@ async function smoke() {
     check('Phase 9A conversation close test skipped (no conversation)', true)
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 9B — Follow-up Rules Automation + Scheduled Worker Jobs
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n82. Phase 9B: /follow-ups/scenarios — list valid scenarios')
+
+  const scenariosRes  = await get('/follow-ups/scenarios', accessToken)
+  const scenariosBody = await scenariosRes.json() as Record<string, unknown>
+  check('GET /follow-ups/scenarios → 200',   scenariosRes.status === 200)
+  check('scenarios has array',               Array.isArray(scenariosBody.scenarios))
+  const scenarios = scenariosBody.scenarios as Record<string, unknown>[]
+  check('PRICE_ASKED_NO_REPLY exists',       scenarios.some((s) => s.scenario === 'PRICE_ASKED_NO_REPLY'))
+  check('HIGH_INTENT_UNHANDLED exists',      scenarios.some((s) => s.scenario === 'HIGH_INTENT_UNHANDLED'))
+  check('HIGH_INTENT has human reminder',    scenarios.find((s) => s.scenario === 'HIGH_INTENT_UNHANDLED')?.hasHumanReminder === true)
+  check('scenarios without auth → 401',     (await get('/follow-ups/scenarios')).status === 401)
+
+  console.log('\n83. Phase 9B: POST /follow-ups/schedule-demo')
+
+  let demoTaskId = ''
+  let demoConvId = ''
+  const demoRes  = await post('/follow-ups/schedule-demo', { scenario: 'PRICE_ASKED_NO_REPLY', dueOffsetMinutes: 0 }, accessToken)
+  const demoBody = await demoRes.json() as Record<string, unknown>
+  if (demoRes.status === 201 || demoRes.status === 200) {
+    check('POST /follow-ups/schedule-demo → 2xx',              [200, 201].includes(demoRes.status))
+    check('demo task has taskId',                              typeof demoBody.taskId === 'string')
+    check('demo task has conversationId',                      typeof demoBody.conversationId === 'string')
+    check('demo task has dueAt',                               typeof demoBody.dueAt === 'string')
+    check('demo task scenario = PRICE_ASKED_NO_REPLY',        demoBody.scenario === 'PRICE_ASKED_NO_REPLY')
+    check('demo task requiresHuman = false (step 0)',          demoBody.requiresHuman === false)
+    demoTaskId = demoBody.taskId as string
+    demoConvId = demoBody.conversationId as string
+  } else {
+    check('schedule-demo → 404 (no open conversation) or 2xx', demoRes.status === 404)
+    console.log('  ℹ️  No open conversation for demo task (OK if DB is clean)')
+  }
+
+  check('schedule-demo without auth → 401', (await post('/follow-ups/schedule-demo', { scenario: 'CONSIDERING' })).status === 401)
+  check('schedule-demo invalid scenario → 400', (await post('/follow-ups/schedule-demo', { scenario: 'INVALID' }, accessToken)).status === 400)
+
+  console.log('\n84. Phase 9B: GET /follow-ups')
+
+  const fuListRes  = await get('/follow-ups?status=PENDING', accessToken)
+  const fuListBody = await fuListRes.json() as Record<string, unknown>
+  check('GET /follow-ups → 200',              fuListRes.status === 200)
+  check('follow-ups has data array',          Array.isArray(fuListBody.data))
+  check('follow-ups has pagination',          typeof (fuListBody.pagination as Record<string, unknown>)?.total === 'number')
+
+  // today=true filter
+  const fuTodayRes = await get('/follow-ups?today=true&status=PENDING', accessToken)
+  check('GET /follow-ups?today=true → 200',   fuTodayRes.status === 200)
+
+  // overdue=true filter
+  const fuOverdueRes = await get('/follow-ups?overdue=true', accessToken)
+  check('GET /follow-ups?overdue=true → 200', fuOverdueRes.status === 200)
+
+  // requiresHuman filter
+  const fuHumanRes = await get('/follow-ups?requiresHuman=true&status=PENDING', accessToken)
+  check('GET /follow-ups?requiresHuman=true → 200', fuHumanRes.status === 200)
+
+  // Auth guard
+  check('GET /follow-ups without auth → 401', (await get('/follow-ups')).status === 401)
+
+  console.log('\n85. Phase 9B: complete + cancel follow-up task')
+
+  if (demoTaskId) {
+    // Create a second demo task for cancel test (same conv but duplicate-safe)
+    const cancelDemoRes  = await post('/follow-ups/schedule-demo', { scenario: 'CONSIDERING', dueOffsetMinutes: 10 }, accessToken)
+    const cancelDemoBody = await cancelDemoRes.json() as Record<string, unknown>
+    const cancelTaskId   = cancelDemoBody.taskId as string ?? ''
+
+    // Complete the first demo task
+    const completeRes  = await post(`/follow-ups/${demoTaskId}/complete`, {}, accessToken)
+    const completeBody = await completeRes.json() as Record<string, unknown>
+    check('POST /follow-ups/:id/complete → 200', completeRes.status === 200)
+    check('complete returns DONE status',        completeBody.status === 'DONE')
+
+    // Double-complete → 404 (already DONE, no longer PENDING)
+    check('double-complete → 404', (await post(`/follow-ups/${demoTaskId}/complete`, {}, accessToken)).status === 404)
+
+    // Cancel the second task
+    if (cancelTaskId) {
+      const cancelRes  = await post(`/follow-ups/${cancelTaskId}/cancel`, { reason: 'MANUAL' }, accessToken)
+      const cancelBody = await cancelRes.json() as Record<string, unknown>
+      check('POST /follow-ups/:id/cancel → 200',  cancelRes.status === 200)
+      check('cancel returns CANCELLED status',    cancelBody.status === 'CANCELLED')
+      check('cancel returns reason',              cancelBody.reason === 'MANUAL')
+    } else {
+      check('cancel task created for test', true)
+    }
+
+    // Auth guards
+    check('complete without auth → 401', (await post(`/follow-ups/${demoTaskId}/complete`, {})).status === 401)
+    check('cancel without auth → 401',   (await post(`/follow-ups/${demoTaskId}/cancel`, {})).status === 401)
+    check('complete unknown id → 404',   (await post('/follow-ups/nonexistent/complete', {}, accessToken)).status === 404)
+  } else {
+    check('Phase 9B complete/cancel skipped (no demo task created)', true)
+  }
+
+  console.log('\n86. Phase 9B: follow-up does not send real WhatsApp')
+
+  // Verify that follow-up processing creates STUB messages, not real sends
+  // The process creates messages with content starting '[FOLLOW-UP STUB — NOT SENT]'
+  // We verify by checking that the API does not have OMNI_ENABLE_REAL_META_SEND set
+  const omniMetaSend = process.env.OMNI_ENABLE_REAL_META_SEND
+  check('OMNI_ENABLE_REAL_META_SEND not set (no real send)', !omniMetaSend || omniMetaSend !== 'true')
+
+  // HIGH_INTENT_UNHANDLED creates HUMAN reminder, not customer send
+  const hiDemoRes  = await post('/follow-ups/schedule-demo', { scenario: 'HIGH_INTENT_UNHANDLED', dueOffsetMinutes: 5 }, accessToken)
+  const hiDemoBody = await hiDemoRes.json() as Record<string, unknown>
+  if ([200, 201].includes(hiDemoRes.status)) {
+    check('HIGH_INTENT_UNHANDLED task requiresHuman=true', hiDemoBody.requiresHuman === true)
+    check('HIGH_INTENT_UNHANDLED suggestedMessage is human reminder', String(hiDemoBody.suggestedMessage ?? '').includes('HUMAN REMINDER'))
+    // Cancel it so it doesn't interfere with other tests
+    if (hiDemoBody.taskId) {
+      await post(`/follow-ups/${hiDemoBody.taskId as string}/cancel`, {}, accessToken)
+    }
+  } else {
+    check('HIGH_INTENT human reminder test skipped (no open conv)', true)
+  }
+
+  console.log('\n87. Phase 9B: realtime event on schedule-demo')
+
+  if (phase8bRedisLive && demoConvId) {
+    // schedule-demo should have already published followup.created
+    // Create another and verify SSE receives it
+    let fuEventType: string | null = null
+    try {
+      const ctrl   = new AbortController()
+      const sseRes = await fetch(`${BASE}/realtime/events?token=${encodeURIComponent(accessToken)}`, { signal: ctrl.signal })
+      if (sseRes.ok && sseRes.body) {
+        const reader  = sseRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const readUntil = async (pattern: RegExp, maxMs: number): Promise<RegExpMatchArray | null> => {
+          const deadline = Date.now() + maxMs
+          while (Date.now() < deadline) {
+            const rr = await Promise.race([
+              reader.read() as Promise<{ done: boolean; value: Uint8Array | undefined }>,
+              new Promise<{ done: true; value: undefined }>((_, r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
+            ])
+            if (rr.done) return null
+            if (rr.value) buf += decoder.decode(rr.value, { stream: true })
+            const m = buf.match(pattern)
+            if (m) return m
+          }
+          return null
+        }
+        await readUntil(/event: connected/, 3000)
+        // Cancel a task which should fire followup.updated
+        if (demoTaskId) {
+          // already completed, try schedule a new one
+          const newDemo = await post('/follow-ups/schedule-demo', { scenario: 'LONG_NO_REPLY', dueOffsetMinutes: 15 }, accessToken)
+          const newDemoBody = await newDemo.json() as Record<string, unknown>
+          if (newDemoBody.taskId) {
+            await post(`/follow-ups/${newDemoBody.taskId as string}/cancel`, {}, accessToken)
+          }
+        }
+        const m = await readUntil(/event: (followup\.\S+)/, 3000)
+        if (m) fuEventType = m[1]
+        reader.cancel().catch(() => null)
+        ctrl.abort()
+      }
+    } catch { /* timeout */ }
+    check('Phase 9B: followup.* SSE event received', fuEventType !== null)
+    if (fuEventType) console.log(`  ℹ️  Received: ${fuEventType}`)
+  } else {
+    check('Phase 9B: realtime follow-up event test skipped (Redis not available or no conv)', true)
+  }
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

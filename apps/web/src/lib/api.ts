@@ -198,6 +198,60 @@ export async function removeCustomerTag(id: string, tag: string): Promise<{ cust
   })
 }
 
+// ── Follow-up tasks ───────────────────────────────────────────────────────────
+export interface FollowUpTask {
+  id:              string
+  tenantId:        string
+  conversationId:  string
+  customerId:      string
+  scenario:        string
+  stepIndex:       number
+  dueAt:           string
+  status:          'PENDING' | 'DONE' | 'CANCELLED' | 'SKIPPED'
+  requiresHuman:   boolean
+  suggestedMessage: string | null
+  cancelledReason: string | null
+  customer: {
+    id:    string
+    name:  string | null
+    phone: string
+    stage: string
+    score: number
+  }
+  conversation: {
+    id:      string
+    status:  string
+    channelId: string
+  }
+}
+
+export interface FollowUpListResponse {
+  data:       FollowUpTask[]
+  pagination: { page: number; pageSize: number; total: number; totalPages: number }
+}
+
+export async function fetchFollowUps(params?: {
+  today?:         boolean
+  overdue?:       boolean
+  requiresHuman?: boolean
+  status?:        string
+}): Promise<FollowUpListResponse> {
+  const p = new URLSearchParams({ pageSize: '50' })
+  if (params?.today)         p.set('today', 'true')
+  if (params?.overdue)       p.set('overdue', 'true')
+  if (params?.requiresHuman !== undefined) p.set('requiresHuman', String(params.requiresHuman))
+  if (params?.status)        p.set('status', params.status)
+  return apiFetch<FollowUpListResponse>(`/follow-ups?${p}`)
+}
+
+export async function completeFollowUp(id: string): Promise<{ taskId: string; status: string }> {
+  return apiFetch<{ taskId: string; status: string }>(`/follow-ups/${id}/complete`, { method: 'POST' })
+}
+
+export async function cancelFollowUp(id: string): Promise<{ taskId: string; status: string }> {
+  return apiFetch<{ taskId: string; status: string }>(`/follow-ups/${id}/cancel`, { method: 'POST' })
+}
+
 // ── Conversation close ────────────────────────────────────────────────────────
 export async function closeConversation(id: string): Promise<{ conversationId: string; status: string }> {
   return apiFetch<{ conversationId: string; status: string }>(`/conversations/${id}/close`, { method: 'POST' })
@@ -229,8 +283,11 @@ export function createRealtimeConnection(
     'conversation.updated',
     'conversation.handoff.updated',
     'customer.updated',
-    'ai.reply.created',      // Phase 8B: worker AI reply events
-    'worker.job.failed',     // Phase 8B: worker failure notification
+    'ai.reply.created',   // Phase 8B: worker AI reply events
+    'worker.job.failed',  // Phase 8B: worker failure notification
+    'followup.created',   // Phase 9B: follow-up task scheduled
+    'followup.updated',   // Phase 9B: follow-up task completed/cancelled
+    'followup.due',       // Phase 9B: follow-up task processed by worker
   ]
   eventTypes.forEach((type) => {
     src.addEventListener(type, (e: MessageEvent) => {

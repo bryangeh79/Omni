@@ -66,7 +66,11 @@ High-intent customers (score ≥ 60) in AI or pending handoff state.
 
 ### 📅 Follow-up
 
-Placeholder for Phase 9B scheduled follow-up rules.
+Real follow-up task list (Phase 9B). Shows:
+- Today's pending follow-up tasks
+- Overdue tasks (red highlight)
+- Human reminder tasks (amber badge)
+- Task actions: Open Chat, Done (complete), Skip (cancel)
 
 ---
 

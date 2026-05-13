@@ -6,9 +6,10 @@ import {
   fetchConversations, fetchConversation, fetchMessages, fetchCustomer,
   takeoverConversation, releaseAi, closeConversation, sendMessage,
   updateCustomerStage, setCustomerTags,
+  fetchFollowUps, completeFollowUp, cancelFollowUp,
   createRealtimeConnection,
   type ConversationSummary, type ConversationDetail, type Message,
-  type CustomerDetail, type SseTransport,
+  type CustomerDetail, type FollowUpTask, type SseTransport,
 } from '@/lib/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -458,6 +459,132 @@ function ThreadView({
   )
 }
 
+// ── Follow-up Tab ─────────────────────────────────────────────────────────────
+function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) => void }) {
+  const [tasks,    setTasks]    = useState<FollowUpTask[]>([])
+  const [overdue,  setOverdue]  = useState<FollowUpTask[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [actionId, setActionId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [todayRes, overdueRes] = await Promise.all([
+        fetchFollowUps({ today: true, status: 'PENDING' }),
+        fetchFollowUps({ overdue: true }),
+      ])
+      setTasks(todayRes.data)
+      setOverdue(overdueRes.data)
+    } catch { /* ignore */ }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleComplete(id: string) {
+    setActionId(id)
+    try { await completeFollowUp(id); await load() }
+    catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    finally { setActionId(null) }
+  }
+
+  async function handleCancel(id: string) {
+    setActionId(id)
+    try { await cancelFollowUp(id); await load() }
+    catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    finally { setActionId(null) }
+  }
+
+  const TaskCard = ({ task }: { task: FollowUpTask }) => {
+    const name      = task.customer.name ?? task.customer.phone
+    const isOverdue = new Date(task.dueAt) < new Date()
+    const dueStr    = new Date(task.dueAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return (
+      <div className={`bg-white rounded-2xl border p-4 mb-3 ${isOverdue ? 'border-red-200' : 'border-gray-100'}`}>
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{name}</p>
+            <p className="text-xs text-gray-400">{task.scenario.replace(/_/g, ' ')}</p>
+          </div>
+          <div className="text-right">
+            {task.requiresHuman && (
+              <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium block mb-1">
+                Human
+              </span>
+            )}
+            <span className={`text-xs ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+              {isOverdue ? 'Overdue · ' : ''}{dueStr}
+            </span>
+          </div>
+        </div>
+        {task.suggestedMessage && (
+          <p className="text-xs text-gray-500 italic mb-3 bg-gray-50 rounded-xl px-3 py-2 leading-relaxed">
+            "{task.suggestedMessage}"
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onOpenConversation(task.conversationId)}
+            className="flex-1 bg-blue-50 text-blue-600 rounded-xl py-2 text-xs font-medium active:bg-blue-100"
+          >
+            Open Chat
+          </button>
+          <button
+            onClick={() => handleComplete(task.id)} disabled={actionId === task.id}
+            className="flex-1 bg-green-50 text-green-700 rounded-xl py-2 text-xs font-medium active:bg-green-100 disabled:opacity-40"
+          >
+            Done
+          </button>
+          <button
+            onClick={() => handleCancel(task.id)} disabled={actionId === task.id}
+            className="px-3 bg-gray-50 text-gray-500 rounded-xl py-2 text-xs active:bg-gray-100 disabled:opacity-40"
+          >
+            Skip
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="pb-24 px-4 pt-4">
+        <h1 className="text-lg font-bold text-gray-900 mb-3">Follow-up</h1>
+        <p className="text-xs text-gray-400 text-center py-8">Loading…</p>
+      </div>
+    )
+  }
+
+  const allTasks = [...overdue.filter(t => !tasks.some(t2 => t2.id === t.id)), ...tasks]
+
+  return (
+    <div className="pb-24 px-4 pt-4">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-bold text-gray-900">Follow-up</h1>
+        <button onClick={load} className="text-xs text-blue-500">Refresh</button>
+      </div>
+
+      {overdue.length > 0 && (
+        <div className="mb-2">
+          <p className="text-xs font-bold text-red-500 uppercase tracking-wide mb-2">
+            Overdue ({overdue.length})
+          </p>
+        </div>
+      )}
+
+      {allTasks.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">
+          <p className="text-3xl mb-2">✓</p>
+          <p className="text-sm font-medium">No follow-ups due today</p>
+          <p className="text-xs mt-1 text-gray-300">Great work — all caught up!</p>
+        </div>
+      ) : (
+        allTasks.map(task => <TaskCard key={task.id} task={task} />)
+      )}
+    </div>
+  )
+}
+
 // ── Boss Today Card ────────────────────────────────────────────────────────────
 function BossTodayTab({ conversations, onSelect }: { conversations: ConversationSummary[]; onSelect: (id: string) => void }) {
   const urgent   = conversations.filter(c => c.needsHuman)
@@ -726,14 +853,7 @@ export default function PwaPage() {
         />
       )}
       {tab === 'followup' && (
-        <div className="pb-24 px-4 pt-4">
-          <h1 className="text-lg font-bold text-gray-900 mb-3">Today Follow-up</h1>
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-gray-400">
-            <p className="text-3xl mb-2">📅</p>
-            <p className="text-sm font-medium">Follow-up automation coming soon</p>
-            <p className="text-xs mt-1 text-gray-300">Phase 9B: scheduled follow-up rules</p>
-          </div>
-        </div>
+        <FollowUpTab onOpenConversation={setSelectedId} />
       )}
 
       {/* Bottom navigation */}

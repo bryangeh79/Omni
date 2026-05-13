@@ -13,6 +13,7 @@ export {
   LeadStage,
   KnowledgeItemType,
   ChannelType as PrismaChannelType,
+  FollowUpStatus,
 } from '@prisma/client'
 
 export { prisma, connectDb, disconnectDb } from './client'

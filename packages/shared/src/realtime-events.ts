@@ -26,6 +26,9 @@ export const REALTIME_EVENT_TYPES = {
   CUSTOMER_UPDATED:     'customer.updated',
   AI_REPLY_CREATED:     'ai.reply.created',
   WORKER_JOB_FAILED:    'worker.job.failed',
+  FOLLOWUP_CREATED:     'followup.created',
+  FOLLOWUP_UPDATED:     'followup.updated',
+  FOLLOWUP_DUE:         'followup.due',
 } as const
 
 export type RealtimeEventType = typeof REALTIME_EVENT_TYPES[keyof typeof REALTIME_EVENT_TYPES]

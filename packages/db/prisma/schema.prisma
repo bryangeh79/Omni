@@ -31,6 +31,7 @@ model Tenant {
   knowledgeItems  KnowledgeItem[]
   aiConfig        AiConfig?
   followUpRules   FollowUpRule[]
+  followUpTasks   FollowUpTask[]
   handoffRules    HandoffRule[]
 }
 
@@ -132,6 +133,7 @@ model Customer {
   tenant              Tenant       @relation(fields: [tenantId], references: [id])
   tags                CustomerTag[]
   conversations       Conversation[]
+  followUpTasks       FollowUpTask[]
 
   @@unique([tenantId, phone])
 }
@@ -177,6 +179,7 @@ model Conversation {
   channel         Channel            @relation(fields: [channelId], references: [id])
   customer        Customer           @relation(fields: [customerId], references: [id])
   messages        Message[]
+  followUpTasks   FollowUpTask[]
 }
 
 enum ConversationStatus {
@@ -265,6 +268,45 @@ model AiConfig {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTOMATION RULES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FOLLOW-UP TASKS (runtime instances, Phase 9B)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FollowUpTask {
+  id               String         @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  customerId       String
+  ruleId           String?        // optional ref to source FollowUpRule (config)
+  scenario         String         // trigger key: PRICE_ASKED_NO_REPLY | CONSIDERING | etc.
+  stepIndex        Int            @default(0)  // 0=first, 1=second follow-up in the chain
+  dueAt            DateTime
+  status           FollowUpStatus @default(PENDING)
+  requiresHuman    Boolean        @default(false)  // true = human/admin reminder, not customer auto-send
+  suggestedMessage String?        // deterministic template message (not AI-generated in Phase 9B)
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  cancelledReason  String?        // CUSTOMER_REPLIED | MANUAL | CONVERSATION_CLOSED
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+  conversation     Conversation   @relation(fields: [conversationId], references: [id])
+  customer         Customer       @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, status, dueAt])
+  @@index([conversationId, status])
+}
+
+enum FollowUpStatus {
+  PENDING
+  DONE
+  CANCELLED
+  SKIPPED
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 model FollowUpRule {

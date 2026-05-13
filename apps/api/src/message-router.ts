@@ -6,6 +6,7 @@ import type { InboundEnvelope } from '@omni/channel-adapters'
 
 import { enqueueInboundMessage } from './queue'
 import { publishEvent }         from './realtime-bus'
+import { cancelFollowUpChain }  from './follow-up-engine'
 
 export interface RouterResult {
   customerId:        string
@@ -70,7 +71,13 @@ export async function routeInboundMessage(
     data:  { lastMessageAt: new Date() },
   })
 
-  // ── 5. Publish real-time events (API-process SSE subscribers) ───────────────
+  // ── 5. Cancel pending follow-up chain — customer replied ─────────────────────
+  // Non-fatal: do not block the message write pipeline on follow-up cancel.
+  cancelFollowUpChain(conversation.id, tenantId, 'CUSTOMER_REPLIED').catch((err) => {
+    console.warn('[message-router] Follow-up cancel failed (non-fatal):', (err as Error).message)
+  })
+
+  // ── 6. Publish real-time events (API-process SSE subscribers) ───────────────
   // Worker-process AI reply events cannot be published here (separate process).
   // Clients should reconnect / refetch on SSE close until Phase 8B Redis pub/sub.
   publishEvent(tenantId, 'conversation.message.created', {
