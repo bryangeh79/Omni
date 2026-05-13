@@ -478,17 +478,90 @@ export interface KnowledgeListResponse {
 }
 
 export async function fetchKnowledgeItems(params?: {
-  type?:   string
-  page?:   number
+  type?:     string
+  page?:     number
+  q?:        string
+  isActive?: boolean
 }): Promise<KnowledgeListResponse> {
   const p = new URLSearchParams({ pageSize: '50' })
-  if (params?.type) p.set('type', params.type)
-  if (params?.page) p.set('page', String(params.page))
+  if (params?.type)                        p.set('type', params.type)
+  if (params?.page)                        p.set('page', String(params.page))
+  if (params?.q)                           p.set('q', params.q)
+  if (params?.isActive !== undefined)      p.set('isActive', String(params.isActive))
   return apiFetch<KnowledgeListResponse>(`/knowledge?${p}`)
 }
 
-export async function deleteKnowledgeItem(id: string): Promise<{ deleted: boolean }> {
-  return apiFetch<{ deleted: boolean }>(`/knowledge/${id}`, { method: 'DELETE' })
+export async function createKnowledgeItem(data: {
+  type:       string
+  question?:  string
+  answer:     string
+  language?:  string
+}): Promise<KnowledgeItem> {
+  return apiFetch<KnowledgeItem>('/knowledge', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function updateKnowledgeItem(id: string, data: {
+  type?:      string
+  question?:  string | null
+  answer?:    string
+  language?:  string
+  isActive?:  boolean
+}): Promise<KnowledgeItem> {
+  return apiFetch<KnowledgeItem>(`/knowledge/${id}`, {
+    method: 'PATCH',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function deleteKnowledgeItem(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiFetch<{ id: string; isActive: boolean }>(`/knowledge/${id}`, { method: 'DELETE' })
+}
+
+// ── Channel Setup (Phase 12B) ─────────────────────────────────────────────────
+export interface ChannelSetupStatus {
+  tenantId:             string
+  channelType:          string | null
+  displayName:          string | null
+  testStatus:           'NOT_TESTED' | 'STUB' | 'OK' | 'FAILED'
+  realWaSessionEnabled: boolean
+  realMetaSendEnabled:  boolean
+  note:                 string
+}
+
+export interface ChannelSetupTestResult {
+  tenantId:               string
+  testResult:             'STUB' | 'OK' | 'FAILED'
+  connected:              boolean
+  realWaSessionEnabled:   boolean
+  realMetaSendEnabled:    boolean
+  metaApiCalled:          boolean
+  whatsappSessionStarted: boolean
+  note:                   string
+}
+
+export async function fetchChannelSetupStatus(): Promise<ChannelSetupStatus> {
+  return apiFetch<ChannelSetupStatus>('/channels/setup/status')
+}
+
+export async function saveChannelSetupDraft(data: {
+  channelType?: string
+  displayName?: string
+  phoneNumber?: string
+}): Promise<{ saved: boolean; channelType: string | null; note: string }> {
+  return apiFetch('/channels/setup/save-draft', {
+    method: 'POST',
+    body:   JSON.stringify(data),
+  })
+}
+
+export async function testChannelSetup(channelType?: string): Promise<ChannelSetupTestResult> {
+  return apiFetch<ChannelSetupTestResult>('/channels/setup/test', {
+    method: 'POST',
+    body:   JSON.stringify({ channelType }),
+  })
 }
 
 // ── Cost Calculator (Phase 11A) ───────────────────────────────────────────────

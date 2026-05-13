@@ -1,15 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
-  getToken, login, fetchKnowledgeItems, deleteKnowledgeItem,
+  getToken, login,
+  fetchKnowledgeItems, createKnowledgeItem, updateKnowledgeItem, deleteKnowledgeItem,
   type KnowledgeItem,
 } from '@/lib/api'
 
-const TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  GLOBAL_FAQ:      { label: 'Global FAQ',    color: 'bg-blue-50 text-blue-700' },
-  PRODUCT_FAQ:     { label: 'Product FAQ',   color: 'bg-emerald-50 text-emerald-700' },
-  KNOWLEDGE_CHUNK: { label: 'Knowledge',     color: 'bg-purple-50 text-purple-700' },
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TYPES = ['GLOBAL_FAQ', 'PRODUCT_FAQ', 'KNOWLEDGE_CHUNK'] as const
+type KbType = typeof TYPES[number]
+
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ms', label: 'Malay' },
+]
+
+const TYPE_CFG: Record<KbType, { label: string; badge: string; dot: string }> = {
+  GLOBAL_FAQ:      { label: 'Global FAQ',  badge: 'bg-blue-50 text-blue-700 border-blue-200',     dot: 'bg-blue-500' },
+  PRODUCT_FAQ:     { label: 'Product FAQ', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  KNOWLEDGE_CHUNK: { label: 'Knowledge',   badge: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -32,10 +43,10 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       <form onSubmit={submit} className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm space-y-4">
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-purple-600 mb-3">
-            <span className="text-white text-2xl">🧠</span>
+            <span className="text-white text-2xl font-bold">KB</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to view your AI knowledge</p>
+          <p className="text-sm text-gray-400 mt-1">Sign in to manage your AI knowledge</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
         <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
@@ -47,152 +58,411 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   )
 }
 
-// ── Knowledge Item Card ───────────────────────────────────────────────────────
-function KbCard({ item, onDelete }: { item: KnowledgeItem; onDelete: (id: string) => void }) {
-  const [confirming, setConfirming] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const typeInfo = TYPE_LABELS[item.type] ?? { label: item.type, color: 'bg-gray-100 text-gray-600' }
+// ── Create Item Form ──────────────────────────────────────────────────────────
+function CreateForm({ onCreate, onCancel }: { onCreate: (item: KnowledgeItem) => void; onCancel: () => void }) {
+  const [type,     setType]     = useState<KbType>('PRODUCT_FAQ')
+  const [question, setQuestion] = useState('')
+  const [answer,   setAnswer]   = useState('')
+  const [language, setLanguage] = useState('en')
+  const [busy,     setBusy]     = useState(false)
+  const [err,      setErr]      = useState('')
+  const ansRef = useRef<HTMLTextAreaElement>(null)
 
-  async function handleDelete() {
-    if (!confirming) { setConfirming(true); return }
-    setDeleting(true)
-    try { await deleteKnowledgeItem(item.id); onDelete(item.id) }
-    catch { setDeleting(false); setConfirming(false) }
+  const needsQuestion = type !== 'KNOWLEDGE_CHUNK'
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(''); setBusy(true)
+    try {
+      const item = await createKnowledgeItem({
+        type, answer,
+        question: needsQuestion ? question : (question || undefined),
+        language,
+      })
+      onCreate(item)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Create failed')
+    } finally { setBusy(false) }
   }
 
   return (
-    <div className={`bg-white rounded-2xl border border-gray-100 p-4 space-y-2 ${!item.isActive ? 'opacity-50' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeInfo.color}`}>{typeInfo.label}</span>
-            {!item.isActive && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactive</span>}
-          </div>
-          {item.question && (
-            <p className="text-sm font-semibold text-gray-800 leading-snug mb-1 truncate">{item.question}</p>
-          )}
-          <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{item.answer}</p>
-        </div>
-        <button
-          onClick={() => { void handleDelete() }}
-          disabled={deleting}
-          className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-xl font-medium transition-all disabled:opacity-50 ${confirming ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-        >
-          {deleting ? '…' : confirming ? 'Confirm?' : 'Delete'}
-        </button>
+    <form onSubmit={submit} className="bg-white rounded-2xl border border-purple-200 p-5 space-y-4 shadow-sm">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-bold text-gray-800">Add Knowledge Item</h3>
+        <button type="button" onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600">✕ Cancel</button>
       </div>
-      <p className="text-xs text-gray-400">Added {new Date(item.createdAt).toLocaleDateString()}</p>
+      {err && <p className="bg-red-50 text-red-600 text-xs rounded-lg px-3 py-2">{err}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Type *</label>
+          <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-purple-400" value={type} onChange={e => setType(e.target.value as KbType)}>
+            {TYPES.map(t => <option key={t} value={t}>{TYPE_CFG[t].label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Language</label>
+          <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-purple-400" value={language} onChange={e => setLanguage(e.target.value)}>
+            {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-gray-500 block mb-1">Question {needsQuestion ? '*' : '(optional)'}</label>
+        <input
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
+          placeholder={needsQuestion ? 'e.g. What are your business hours?' : 'Optional question…'}
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          required={needsQuestion}
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-gray-500 block mb-1">Answer *</label>
+        <textarea
+          ref={ansRef}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400 resize-none"
+          rows={3}
+          placeholder="The AI will use this answer when replying to customers…"
+          value={answer}
+          onChange={e => setAnswer(e.target.value)}
+          required
+        />
+      </div>
+      <button type="submit" disabled={busy} className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
+        {busy ? 'Saving…' : '+ Add to Knowledge Base'}
+      </button>
+    </form>
+  )
+}
+
+// ── Edit Inline Form ──────────────────────────────────────────────────────────
+function EditForm({
+  item, onSave, onCancel,
+}: { item: KnowledgeItem; onSave: (updated: KnowledgeItem) => void; onCancel: () => void }) {
+  const [type,     setType]     = useState<KbType>(item.type as KbType)
+  const [question, setQuestion] = useState(item.question ?? '')
+  const [answer,   setAnswer]   = useState(item.answer)
+  const [language, setLanguage] = useState(item.language)
+  const [busy,     setBusy]     = useState(false)
+  const [err,      setErr]      = useState('')
+
+  const needsQuestion = type !== 'KNOWLEDGE_CHUNK'
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(''); setBusy(true)
+    try {
+      const updated = await updateKnowledgeItem(item.id, {
+        type, answer,
+        question: needsQuestion ? (question || null) : (question || null),
+        language,
+      })
+      onSave(updated)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : 'Save failed')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+      {err && <p className="bg-red-50 text-red-600 text-xs rounded-lg px-3 py-2">{err}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Type</label>
+          <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white outline-none focus:ring-2 focus:ring-purple-400" value={type} onChange={e => setType(e.target.value as KbType)}>
+            {TYPES.map(t => <option key={t} value={t}>{TYPE_CFG[t].label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Language</label>
+          <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs bg-white outline-none focus:ring-2 focus:ring-purple-400" value={language} onChange={e => setLanguage(e.target.value)}>
+            {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-gray-500 block mb-1">Question {needsQuestion ? '*' : '(optional)'}</label>
+        <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-400" value={question} onChange={e => setQuestion(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-gray-500 block mb-1">Answer *</label>
+        <textarea className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-purple-400 resize-none" rows={3} value={answer} onChange={e => setAnswer(e.target.value)} required />
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-2 text-xs font-bold disabled:opacity-50">{busy ? 'Saving…' : 'Save Changes'}</button>
+        <button type="button" onClick={onCancel} className="px-4 bg-gray-100 text-gray-600 rounded-xl py-2 text-xs hover:bg-gray-200">Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+// ── Knowledge Item Row ────────────────────────────────────────────────────────
+function KbRow({
+  item, onUpdate, onRemove,
+}: { item: KnowledgeItem; onUpdate: (updated: KnowledgeItem) => void; onRemove: (id: string) => void }) {
+  const [editing,    setEditing]    = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [busy,       setBusy]       = useState(false)
+
+  const typeCfg = TYPE_CFG[item.type as KbType] ?? { label: item.type, badge: 'bg-gray-100 text-gray-600 border-gray-200', dot: 'bg-gray-400' }
+  const langLabel = LANGUAGES.find(l => l.value === item.language)?.label ?? item.language
+
+  async function handleToggleActive() {
+    setBusy(true)
+    try {
+      const updated = await updateKnowledgeItem(item.id, { isActive: !item.isActive })
+      onUpdate(updated)
+    } finally { setBusy(false) }
+  }
+
+  async function handleDelete() {
+    if (!confirming) { setConfirming(true); return }
+    setBusy(true)
+    try {
+      await deleteKnowledgeItem(item.id)
+      onRemove(item.id)
+    } catch { setBusy(false); setConfirming(false) }
+  }
+
+  return (
+    <div className={`bg-white rounded-2xl border p-4 transition-all ${item.isActive ? 'border-gray-100' : 'border-gray-100 opacity-60'}`}>
+      <div className="flex items-start gap-3">
+        {/* Type indicator */}
+        <div className={`w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 ${typeCfg.dot}`} />
+        <div className="flex-1 min-w-0">
+          {/* Badges row */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeCfg.badge}`}>{typeCfg.label}</span>
+            <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">{langLabel}</span>
+            {!item.isActive && <span className="text-xs text-orange-500 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">Inactive</span>}
+          </div>
+          {/* Question */}
+          {item.question && (
+            <p className="text-sm font-semibold text-gray-800 leading-snug mb-1">{item.question}</p>
+          )}
+          {/* Answer */}
+          {!editing && (
+            <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{item.answer}</p>
+          )}
+          {/* Inline edit form */}
+          {editing && (
+            <EditForm
+              item={item}
+              onSave={updated => { onUpdate(updated); setEditing(false) }}
+              onCancel={() => setEditing(false)}
+            />
+          )}
+          {/* Footer */}
+          {!editing && (
+            <p className="text-xs text-gray-400 mt-1.5">
+              Added {new Date(item.createdAt).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+        {/* Actions */}
+        {!editing && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition-all"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => { void handleToggleActive() }}
+              disabled={busy}
+              title={item.isActive ? 'Deactivate' : 'Reactivate'}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${item.isActive ? 'bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100' : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100'}`}
+            >
+              {item.isActive ? 'Deactivate' : 'Reactivate'}
+            </button>
+            <button
+              onClick={() => { void handleDelete() }}
+              disabled={busy}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-all disabled:opacity-50 ${confirming ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200' : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+            >
+              {busy ? '…' : confirming ? 'Confirm?' : 'Delete'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 // ── Main Knowledge Page ───────────────────────────────────────────────────────
 export default function KnowledgePage() {
-  const [authed,  setAuthed]  = useState(false)
-  const [items,   setItems]   = useState<KnowledgeItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
-  const [filter,  setFilter]  = useState<string>('all')
-  const [total,   setTotal]   = useState(0)
+  const [authed,      setAuthed]      = useState(false)
+  const [items,       setItems]       = useState<KnowledgeItem[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+  const [typeFilter,  setTypeFilter]  = useState('all')
+  const [showInactive,setShowInactive]= useState(false)
+  const [searchQ,     setSearchQ]     = useState('')
+  const [total,       setTotal]       = useState(0)
+  const [showCreate,  setShowCreate]  = useState(false)
 
   useEffect(() => {
     if (getToken()) { setAuthed(true); void load() }
   }, [])
 
-  async function load(type?: string) {
+  async function load(params?: { type?: string; q?: string; isActive?: boolean }) {
     setLoading(true); setError('')
     try {
-      const params = type && type !== 'all' ? { type } : undefined
-      const res = await fetchKnowledgeItems(params)
+      const res = await fetchKnowledgeItems({
+        type:     params?.type,
+        q:        params?.q,
+        isActive: params?.isActive,
+        page:     1,
+      })
       setItems(res.data)
       setTotal(res.pagination.total)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
     finally { setLoading(false) }
   }
 
-  function handleFilterChange(f: string) {
-    setFilter(f)
-    void load(f)
+  function applyFilters() {
+    void load({
+      type:     typeFilter !== 'all' ? typeFilter : undefined,
+      q:        searchQ.trim() || undefined,
+      isActive: showInactive ? undefined : true,
+    })
   }
 
-  function handleDelete(id: string) {
+  function handleTypeFilter(f: string) {
+    setTypeFilter(f)
+    void load({ type: f !== 'all' ? f : undefined, q: searchQ.trim() || undefined, isActive: showInactive ? undefined : true })
+  }
+
+  function handleCreate(item: KnowledgeItem) {
+    setItems(prev => [item, ...prev])
+    setTotal(prev => prev + 1)
+    setShowCreate(false)
+  }
+
+  function handleUpdate(updated: KnowledgeItem) {
+    setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
+  }
+
+  function handleRemove(id: string) {
     setItems(prev => prev.filter(i => i.id !== id))
     setTotal(prev => Math.max(0, prev - 1))
   }
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void load() }} />
 
-  const filtered = filter === 'all' ? items : items.filter(i => i.type === filter)
   const activeCount = items.filter(i => i.isActive).length
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-6 py-4">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white text-lg">🧠</span>
+              <span className="text-white text-sm font-bold">KB</span>
             </div>
             <div>
               <h1 className="text-base font-bold text-gray-900">Knowledge Base</h1>
-              <p className="text-xs text-gray-400">{total} total · {activeCount} active items</p>
+              <p className="text-xs text-gray-400">
+                {loading ? 'Loading…' : `${total} total · ${activeCount} active`}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <a href="/onboarding" className="text-xs text-purple-600 hover:text-purple-800 font-medium">+ Add from Wizard</a>
+          <nav className="flex items-center gap-3 text-xs">
+            <a href="/onboarding" className="text-purple-600 hover:text-purple-800 font-medium">+ Import from Wizard</a>
             <span className="text-gray-200">|</span>
-            <a href="/boss" className="text-xs text-gray-400 hover:text-gray-600">← Dashboard</a>
-          </div>
+            <a href="/channels/setup" className="text-blue-500 hover:text-blue-700">Channel Setup</a>
+            <span className="text-gray-200">|</span>
+            <a href="/boss" className="text-gray-400 hover:text-gray-600">Dashboard</a>
+          </nav>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-4">
         {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
 
-        {/* Filter bar */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {['all', 'GLOBAL_FAQ', 'PRODUCT_FAQ', 'KNOWLEDGE_CHUNK'].map(f => (
-            <button
-              key={f}
-              onClick={() => handleFilterChange(f)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all ${filter === f ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-300'}`}
-            >
-              {f === 'all' ? 'All Types' : TYPE_LABELS[f]?.label ?? f}
-            </button>
-          ))}
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+            <input
+              className="w-full border border-gray-200 rounded-xl pl-8 pr-4 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-purple-400"
+              placeholder="Search questions and answers…"
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
+            />
+          </div>
+          {/* Type filter chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(['all', ...TYPES] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => handleTypeFilter(f)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all ${typeFilter === f ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-300'}`}
+              >
+                {f === 'all' ? 'All' : TYPE_CFG[f]?.label ?? f}
+              </button>
+            ))}
+          </div>
+          {/* Show inactive toggle */}
           <button
-            onClick={() => { void load(filter === 'all' ? undefined : filter) }}
-            disabled={loading}
-            className="ml-auto text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-full border border-gray-200 bg-white disabled:opacity-50"
+            onClick={() => { setShowInactive(v => { const next = !v; void load({ type: typeFilter !== 'all' ? typeFilter : undefined, q: searchQ.trim() || undefined, isActive: next ? undefined : true }); return next }) }}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-all ${showInactive ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
           >
-            {loading ? 'Loading…' : '↻ Refresh'}
+            {showInactive ? 'Showing All' : 'Active Only'}
+          </button>
+          {/* Add button */}
+          <button
+            onClick={() => setShowCreate(v => !v)}
+            className="flex-shrink-0 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all"
+          >
+            {showCreate ? '✕ Cancel' : '+ Add Item'}
           </button>
         </div>
 
-        {/* Items */}
+        {/* Create form */}
+        {showCreate && (
+          <CreateForm
+            onCreate={handleCreate}
+            onCancel={() => setShowCreate(false)}
+          />
+        )}
+
+        {/* Items list */}
         {loading && items.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <p className="text-4xl mb-3">⏳</p>
             <p className="text-sm">Loading knowledge base…</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">🧠</p>
-            <p className="text-sm font-medium text-gray-500 mb-1">No knowledge items yet</p>
-            <p className="text-xs">Go through the onboarding wizard and ingest your materials to populate this knowledge base.</p>
-            <a href="/onboarding" className="inline-block mt-4 bg-purple-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-purple-700">Start Onboarding →</a>
+        ) : items.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-5xl mb-4">🧠</p>
+            <p className="text-base font-semibold text-gray-700 mb-2">No knowledge items yet</p>
+            <p className="text-sm text-gray-400 max-w-sm mx-auto mb-6">
+              Start by completing the onboarding wizard and ingesting your product/service materials — or add items manually using the button above.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <a href="/onboarding" className="bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-700">Complete Onboarding →</a>
+              <button onClick={() => setShowCreate(true)} className="bg-gray-100 text-gray-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-200">Add Manually</button>
+            </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map(item => (
-              <KbCard key={item.id} item={item} onDelete={handleDelete} />
+          <div className="space-y-2">
+            {items.map(item => (
+              <KbRow
+                key={item.id}
+                item={item}
+                onUpdate={handleUpdate}
+                onRemove={handleRemove}
+              />
             ))}
           </div>
         )}
 
-        {/* Safety footer */}
+        {/* Footer */}
         <div className="bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 text-xs text-blue-600">
-          Items sourced from onboarding materials ingestion. AI knowledge base is tenant-scoped and not shared across tenants.
+          Knowledge base is tenant-scoped — items are never shared across tenants. Active items are used by the AI agent when answering customer questions.
         </div>
       </main>
     </div>

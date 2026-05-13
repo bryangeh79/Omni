@@ -208,13 +208,18 @@ export default function OnboardingPage() {
         <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center">
           <div className="text-6xl mb-4">🎉</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Omni is Configured!</h2>
-          <p className="text-sm text-gray-500 mb-6">Your AI customer service assistant is set up and ready. Next steps: connect your WhatsApp channel in Settings, then go live.</p>
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-700 mb-6">
-            <strong>Note:</strong> WhatsApp channel connection and real send are separate steps — configure under Settings → Channels. Real send is currently disabled for safety.
+          <p className="text-sm text-gray-500 mb-4">Your AI configuration is ready. Next: connect your WhatsApp channel, then review your knowledge base.</p>
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-700 mb-4">
+            <strong>Note:</strong> WhatsApp channel connection and real send are separate steps — use Channel Setup below. Real send is disabled by default for safety.
           </div>
-          <div className="flex gap-3">
-            <a href="/boss" className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold text-center hover:bg-blue-700">Boss Dashboard →</a>
-            <a href="/knowledge" className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-3 text-sm font-semibold text-center hover:bg-gray-200">Knowledge Base →</a>
+          <div className="space-y-2">
+            <a href="/channels/setup" className="flex items-center justify-center gap-2 w-full bg-green-600 text-white rounded-xl py-3 text-sm font-semibold text-center hover:bg-green-700">
+              <span>💬</span> Set Up WhatsApp Channel →
+            </a>
+            <div className="flex gap-2">
+              <a href="/knowledge" className="flex-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl py-2.5 text-sm font-semibold text-center hover:bg-purple-100">Knowledge Base →</a>
+              <a href="/boss" className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold text-center hover:bg-gray-200">Dashboard →</a>
+            </div>
           </div>
         </div>
       </div>

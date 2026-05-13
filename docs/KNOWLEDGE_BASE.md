@@ -76,11 +76,36 @@ Parses the onboarding draft's `materialsText` into `KnowledgeItem` records.
 
 ---
 
-## Limitations (Phase 12A)
+## Phase 12B UI Additions
+
+### /knowledge Page (polished SaaS MVP)
+
+- **Create item** — inline form with type/question/answer/language
+- **Edit item** — inline edit form expands within the item card
+- **Deactivate / Reactivate** — sets `isActive=false/true` via PATCH, shown with orange badge
+- **Delete** — soft delete with confirm step
+- **Search** — text search via `?q=` param sent to API
+- **Filter** — by type (All / Global FAQ / Product FAQ / Knowledge)
+- **Active Only toggle** — hides inactive items by default
+
+### /knowledge/items API Alias
+
+Phase 12B registers the same CRUD routes at `/knowledge/items` (in addition to `/knowledge`):
+- `GET /knowledge/items` — list
+- `POST /knowledge/items` — create
+- `GET /knowledge/items/:id` — get one
+- `PATCH /knowledge/items/:id` — update
+- `DELETE /knowledge/items/:id` — soft delete
+
+Both paths are equivalent, tenant-scoped, and auth-required.
+
+---
+
+## Limitations (Phase 12B)
 
 - Materials text parsed deterministically — no AI-powered chunking or embedding
-- No semantic vector search (Phase 12B)
+- No semantic vector search (Phase 13)
 - No duplicate detection on ingestion
 - PDF/file upload not implemented
-- No KB item edit UI (delete only)
 - Max 20 items per ingestion run
+- No bulk import/export UI

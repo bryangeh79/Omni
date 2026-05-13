@@ -32,6 +32,8 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(conversationRoutes, { prefix: '/conversations' })
   await app.register(messageRoutes,      { prefix: '/messages' })
   await app.register(knowledgeRoutes,    { prefix: '/knowledge' })
+  // /knowledge/items — same CRUD routes, registered at /items sub-path (Phase 12B alias)
+  await app.register(knowledgeRoutes,    { prefix: '/knowledge/items' })
   await app.register(aiConfigRoutes,     { prefix: '/ai-config' })
   await app.register(aiAgentRoutes,      { prefix: '/ai-agent' })
   await app.register(automationRoutes,   { prefix: '/automation' })

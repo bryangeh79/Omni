@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { requireAuth, getAuthUser } from '../auth'
 import { whatsappWebRoutes } from './whatsapp-web'
 import { metaChannelRoutes } from './meta-channel'
+import { channelSetupRoutes } from './channel-setup'
 
 export async function channelRoutes(app: FastifyInstance) {
   // GET  /channels — list all tenant channels across types
@@ -22,4 +23,7 @@ export async function channelRoutes(app: FastifyInstance) {
 
   // Meta WhatsApp Business Platform sub-router (Phase 7A)
   await app.register(metaChannelRoutes, { prefix: '/meta' })
+
+  // Channel Setup Wizard — safe stubs (Phase 12B)
+  await app.register(channelSetupRoutes, { prefix: '/setup' })
 }

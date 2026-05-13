@@ -2489,6 +2489,95 @@ async function smoke() {
   check('ai mode without env flag → deterministic or fallback', aiModePreview.generationMode === 'DETERMINISTIC_TEMPLATE' || aiModePreview.generationMode === 'AI_FALLBACK')
   check('ai mode no real provider call (env not set)', process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
 
+  // ── Phase 12B: Knowledge/items alias + Channel Setup ─────────────────
+
+  console.log('\n109. Phase 12B: /knowledge/items alias requires auth')
+  check('GET /knowledge/items without auth → 401',    (await get('/knowledge/items')).status === 401)
+  check('POST /knowledge/items without auth → 401',   (await post('/knowledge/items', { type: 'GLOBAL_FAQ', answer: 'a' })).status === 401)
+
+  console.log('\n110. Phase 12B: /knowledge/items CRUD (tenant-scoped)')
+
+  // Create via /knowledge/items
+  const ki12Res  = await post('/knowledge/items', {
+    type:     'PRODUCT_FAQ',
+    question: 'Phase 12B: What is the smoke test?',
+    answer:   'A safe, non-destructive API validation run.',
+    language: 'en',
+  }, accessToken)
+  const ki12Body = await ki12Res.json() as Record<string, unknown>
+  check('POST /knowledge/items → 201',                ki12Res.status === 201)
+  check('created item has id',                        typeof ki12Body.id === 'string')
+  check('created item has tenantId',                  typeof ki12Body.tenantId === 'string')
+  check('created item isActive=true',                 ki12Body.isActive === true)
+  check('created item has no secret fields',          !JSON.stringify(ki12Body).includes('JWT_SECRET'))
+  if (ki12Body.id) kbIds.push(ki12Body.id as string)
+
+  // List via /knowledge/items
+  const ki12ListRes  = await get('/knowledge/items?pageSize=5', accessToken)
+  const ki12ListBody = await ki12ListRes.json() as Record<string, unknown>
+  check('GET /knowledge/items → 200',                 ki12ListRes.status === 200)
+  check('items list has data array',                  Array.isArray(ki12ListBody.data))
+  check('items list has pagination',                  typeof ki12ListBody.pagination === 'object')
+
+  // Update via /knowledge/items/:id
+  if (ki12Body.id) {
+    const ki12PatchRes  = await patch(`/knowledge/items/${ki12Body.id}`, { answer: 'Updated by smoke test.' }, accessToken)
+    const ki12PatchBody = await ki12PatchRes.json() as Record<string, unknown>
+    check('PATCH /knowledge/items/:id → 200',         ki12PatchRes.status === 200)
+    check('patched item answer updated',              ki12PatchBody.answer === 'Updated by smoke test.')
+  }
+
+  // Deactivate via /knowledge/items/:id
+  if (ki12Body.id) {
+    const ki12DeactRes  = await patch(`/knowledge/items/${ki12Body.id}`, { isActive: false }, accessToken)
+    const ki12DeactBody = await ki12DeactRes.json() as Record<string, unknown>
+    check('PATCH /knowledge/items/:id deactivate → 200', ki12DeactRes.status === 200)
+    check('deactivated item isActive=false',              ki12DeactBody.isActive === false)
+  }
+
+  // Cross-tenant isolation: no auth → 401 (already tested above)
+
+  console.log('\n111. Phase 12B: /channels/setup/status (safe, requires auth)')
+  check('GET /channels/setup/status without auth → 401', (await get('/channels/setup/status')).status === 401)
+
+  const chSetupRes  = await get('/channels/setup/status', accessToken)
+  const chSetupBody = await chSetupRes.json() as Record<string, unknown>
+  check('GET /channels/setup/status → 200',             chSetupRes.status === 200)
+  check('status has tenantId',                          typeof chSetupBody.tenantId === 'string')
+  check('status realWaSessionEnabled=false',            chSetupBody.realWaSessionEnabled === false)
+  check('status realMetaSendEnabled=false',             chSetupBody.realMetaSendEnabled === false)
+  check('status no secrets',                            !JSON.stringify(chSetupBody).includes('JWT_SECRET'))
+
+  console.log('\n112. Phase 12B: /channels/setup/save-draft')
+  const chSaveRes  = await post('/channels/setup/save-draft', { channelType: 'WA_WEB', displayName: 'Smoke Test Channel' }, accessToken)
+  const chSaveBody = await chSaveRes.json() as Record<string, unknown>
+  check('POST /channels/setup/save-draft → 200',        chSaveRes.status === 200)
+  check('save-draft saved=true',                        chSaveBody.saved === true)
+  check('save-draft channelType=WA_WEB',                chSaveBody.channelType === 'WA_WEB')
+  check('save-draft realWaSessionEnabled=false',        chSaveBody.realWaSessionEnabled === false)
+  check('save-draft realMetaSendEnabled=false',         chSaveBody.realMetaSendEnabled === false)
+  check('save-draft no secrets',                        !JSON.stringify(chSaveBody).includes('JWT_SECRET'))
+  // Invalid channelType → 400
+  check('save-draft invalid type → 400', (await post('/channels/setup/save-draft', { channelType: 'INVALID' }, accessToken)).status === 400)
+  check('save-draft without auth → 401', (await post('/channels/setup/save-draft', { channelType: 'WA_WEB' })).status === 401)
+
+  console.log('\n113. Phase 12B: /channels/setup/test (stub — no real calls)')
+  const chTestRes  = await post('/channels/setup/test', { channelType: 'WA_WEB' }, accessToken)
+  const chTestBody = await chTestRes.json() as Record<string, unknown>
+  check('POST /channels/setup/test → 200',              chTestRes.status === 200)
+  check('test result=STUB (no real call)',               chTestBody.testResult === 'STUB')
+  check('test connected=false (stub)',                   chTestBody.connected === false)
+  check('test metaApiCalled=false',                     chTestBody.metaApiCalled === false)
+  check('test whatsappSessionStarted=false',            chTestBody.whatsappSessionStarted === false)
+  check('test realWaSessionEnabled=false',              chTestBody.realWaSessionEnabled === false)
+  check('test realMetaSendEnabled=false',               chTestBody.realMetaSendEnabled === false)
+  check('test without auth → 401',                      (await post('/channels/setup/test', {})).status === 401)
+
+  console.log('\n114. Phase 12B: safety gates — no real WhatsApp/Meta/AI calls')
+  check('OMNI_ALLOW_WA_SESSION not enabled',            process.env.OMNI_ALLOW_WA_SESSION !== 'true')
+  check('OMNI_ENABLE_REAL_META_SEND not enabled',       process.env.OMNI_ENABLE_REAL_META_SEND !== 'true')
+  check('OMNI_ENABLE_ONBOARDING_AI not enabled',        process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
