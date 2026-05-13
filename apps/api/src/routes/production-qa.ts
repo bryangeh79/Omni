@@ -176,12 +176,34 @@ export async function productionQaRoutes(app: FastifyInstance) {
         label:   'Incident response runbook documented',
         status:  'MANUAL',
         detail:  'On-call escalation path, runbook URL, and incident SLA targets must be documented before live activation.',
+        action:  '/ops/runbook',
       },
       {
         id: 'support_contact', category: 'Ops',
         label:   'Support contact configured for tenants',
         status:  'MANUAL',
         detail:  'Customer-facing support email / WhatsApp / Intercom must be set up so tenants can reach operator support.',
+      },
+      {
+        id: 'audit_log_ready', category: 'Ops',
+        label:   'Audit log foundation active',
+        status:  'PASS',
+        detail:  'Admin actions are recorded in the AuditLog table. Review at /audit.',
+        action:  '/audit',
+      },
+      {
+        id: 'backup_runbook', category: 'Ops',
+        label:   'Backup runbook reviewed',
+        status:  'MANUAL',
+        detail:  'Review the backup checklist and verify pg_dump schedule is configured for production.',
+        action:  '/ops/runbook',
+      },
+      {
+        id: 'monitoring_runbook', category: 'Ops',
+        label:   'Monitoring runbook reviewed',
+        status:  'MANUAL',
+        detail:  'Review the monitoring checklist and confirm uptime alerting is configured before go-live.',
+        action:  '/ops/runbook',
       },
 
       // ── Commercial ────────────────────────────────────────────────────────

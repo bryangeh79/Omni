@@ -3124,6 +3124,107 @@ async function smoke() {
   // Restore
   await patch('/settings/company-profile', { companyName: 'Omni Demo' }, accessToken)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 15C — Audit Logs + Activity Timeline + Ops Runbook
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n151. Phase 15C: /audit/logs — auth guard + basic structure')
+  check('GET /audit/logs without auth → 401',  (await get('/audit/logs')).status === 401)
+
+  const auditListRes  = await get('/audit/logs', accessToken)
+  const auditListBody = await auditListRes.json() as Record<string, unknown>
+  check('GET /audit/logs → 200',               auditListRes.status === 200)
+  check('audit list has tenantId',             typeof auditListBody.tenantId === 'string')
+  check('audit list has pagination',           typeof auditListBody.pagination === 'object')
+  check('audit list has logs array',           Array.isArray(auditListBody.logs))
+  const auditPag = (auditListBody.pagination ?? {}) as Record<string, unknown>
+  check('audit pagination has total',          typeof auditPag.total === 'number')
+  check('audit pagination has page',           typeof auditPag.page  === 'number')
+  check('audit pagination has pageSize',       typeof auditPag.pageSize === 'number')
+
+  console.log('\n152. Phase 15C: /audit/demo-event — creates safe stub event')
+  check('POST /audit/demo-event without auth → 401', (await post('/audit/demo-event', {})).status === 401)
+
+  const demoEvtRes  = await post('/audit/demo-event', {}, accessToken)
+  const demoEvtBody = await demoEvtRes.json() as Record<string, unknown>
+  check('POST /audit/demo-event → 200',        demoEvtRes.status === 200)
+  check('demo-event created=true',             demoEvtBody.created === true)
+  check('demo-event action=SMOKE_TEST_EVENT',  demoEvtBody.action  === 'SMOKE_TEST_EVENT')
+  check('demo-event stub=true',                demoEvtBody.stub    === true)
+  check('demo-event no secrets in response',   !JSON.stringify(demoEvtBody).includes('JWT_SECRET'))
+
+  console.log('\n153. Phase 15C: audit log records demo event + no secrets')
+  // Wait briefly for the demo event to be written
+  await new Promise(r => setTimeout(r, 200))
+  const auditAfterRes  = await get('/audit/logs?action=SMOKE_TEST_EVENT', accessToken)
+  const auditAfterBody = await auditAfterRes.json() as Record<string, unknown>
+  check('GET /audit/logs?action=SMOKE_TEST_EVENT → 200', auditAfterRes.status === 200)
+  const auditLogs = (auditAfterBody.logs ?? []) as Record<string, unknown>[]
+  check('audit logs contain SMOKE_TEST_EVENT',           auditLogs.some(l => l.action === 'SMOKE_TEST_EVENT'))
+  const auditEntry = auditLogs.find(l => l.action === 'SMOKE_TEST_EVENT') ?? {}
+  check('audit entry has tenantId',                      typeof auditEntry.tenantId === 'string')
+  check('audit entry has entityType',                    typeof auditEntry.entityType === 'string')
+  check('audit entry has createdAt',                     typeof auditEntry.createdAt === 'string')
+  check('audit entry no passwordHash key',               !Object.keys(auditEntry).includes('passwordHash'))
+  check('audit entry metadataJson has no raw secrets',   !String(auditEntry.metadataJson ?? '').includes('JWT_SECRET'))
+  check('audit entry metadataJson has no passwords',     !String(auditEntry.metadataJson ?? '').includes('password'))
+
+  console.log('\n154. Phase 15C: /audit/logs pagination + entityType filter')
+  const auditPageRes  = await get('/audit/logs?page=1&pageSize=5', accessToken)
+  const auditPageBody = await auditPageRes.json() as Record<string, unknown>
+  check('GET /audit/logs?pageSize=5 → 200',              auditPageRes.status === 200)
+  const ap = (auditPageBody.pagination ?? {}) as Record<string, unknown>
+  check('audit pageSize=5 respected',                    ap.pageSize === 5)
+
+  const auditEntRes  = await get('/audit/logs?entityType=SmokeTest', accessToken)
+  check('GET /audit/logs?entityType=SmokeTest → 200',    auditEntRes.status === 200)
+  const auditEntBody = await auditEntRes.json() as Record<string, unknown>
+  const smokeEntries = (auditEntBody.logs ?? []) as Record<string, unknown>[]
+  check('entityType filter returns SmokeTest entries',    smokeEntries.every(l => l.entityType === 'SmokeTest'))
+
+  console.log('\n155. Phase 15C: instrumented admin actions produce audit events')
+  // team invite draft → TEAM_INVITE_DRAFT
+  const inviteAuditRes = await post('/team/invite-draft', { email: 'audit-test-15c@example.com', role: 'AGENT' }, accessToken)
+  check('invite-draft → 200 (audit instrumented)',        inviteAuditRes.status === 200)
+  await new Promise(r => setTimeout(r, 200))
+  const auditInviteRes  = await get('/audit/logs?action=TEAM_INVITE_DRAFT', accessToken)
+  const auditInviteBody = await auditInviteRes.json() as Record<string, unknown>
+  const inviteLog = ((auditInviteBody.logs ?? []) as Record<string, unknown>[])
+  check('TEAM_INVITE_DRAFT audit event created',          inviteLog.some(l => l.action === 'TEAM_INVITE_DRAFT'))
+  // billing plan → BILLING_PLAN_SELECTED
+  await post('/billing/select-plan-draft', { planId: 'starter' }, accessToken)
+  await new Promise(r => setTimeout(r, 200))
+  const auditBillRes  = await get('/audit/logs?action=BILLING_PLAN_SELECTED', accessToken)
+  const auditBillBody = await auditBillRes.json() as Record<string, unknown>
+  check('BILLING_PLAN_SELECTED audit event created',      ((auditBillBody.logs ?? []) as Record<string, unknown>[]).some(l => l.action === 'BILLING_PLAN_SELECTED'))
+  // settings update → SETTINGS_PROFILE_UPDATE
+  await patch('/settings/company-profile', { companyName: 'Audit Test Co' }, accessToken)
+  await new Promise(r => setTimeout(r, 200))
+  const auditSettRes  = await get('/audit/logs?action=SETTINGS_PROFILE_UPDATE', accessToken)
+  const auditSettBody = await auditSettRes.json() as Record<string, unknown>
+  check('SETTINGS_PROFILE_UPDATE audit event created',    ((auditSettBody.logs ?? []) as Record<string, unknown>[]).some(l => l.action === 'SETTINGS_PROFILE_UPDATE'))
+  // Restore company name
+  await patch('/settings/company-profile', { companyName: 'Omni Demo' }, accessToken)
+
+  console.log('\n156. Phase 15C: audit logs tenant-scoped (no cross-tenant access)')
+  // tenantId in all returned logs must match the current user's tenantId
+  const allLogsRes  = await get('/audit/logs?pageSize=20', accessToken)
+  const allLogsBody = await allLogsRes.json() as Record<string, unknown>
+  const allLogs = (allLogsBody.logs ?? []) as Record<string, unknown>[]
+  const currentTenantId = (allLogsBody.tenantId as string) ?? ''
+  check('all audit logs belong to caller tenant',         allLogs.every(l => l.tenantId === currentTenantId))
+  check('audit response has correct tenantId',            typeof currentTenantId === 'string' && currentTenantId.length > 0)
+
+  console.log('\n157. Phase 15C: /production-qa/checklist has 15C items')
+  const pqa15cRes  = await get('/production-qa/checklist', accessToken)
+  const pqa15cBody = await pqa15cRes.json() as Record<string, unknown>
+  check('GET /production-qa/checklist → 200',              pqa15cRes.status === 200)
+  const pqaItems = (pqa15cBody.items ?? []) as Record<string, unknown>[]
+  check('checklist has audit_log_ready item',              pqaItems.some(i => i.id === 'audit_log_ready'))
+  check('audit_log_ready status=PASS',                     pqaItems.find(i => i.id === 'audit_log_ready')?.status === 'PASS')
+  check('checklist has backup_runbook item',               pqaItems.some(i => i.id === 'backup_runbook'))
+  check('checklist has monitoring_runbook item',           pqaItems.some(i => i.id === 'monitoring_runbook'))
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -3135,6 +3236,7 @@ async function smoke() {
   if (createdId)      await prismaDeleteCustomer(createdId)
   if (kbIds.length  > 0) await prismaDeleteKnowledge(kbIds)
   if (furIds.length > 0 || hfrIds.length > 0) await prismaDeleteAutomation(furIds, hfrIds)
+  await prismaCleanupAuditLogs()
   console.log('  🗑️  smoke test records cleaned')
 
   // ── Result ────────────────────────────────────────────────────────────
@@ -3383,6 +3485,18 @@ async function prismaCleanupMetaChannel(channelId: string): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  Meta channel ${channelId} and related records deleted`)
   } catch (e) { console.warn('  ⚠️  Meta channel cleanup warning:', e) }
+}
+
+async function prismaCleanupAuditLogs(): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    const deleted = await p.auditLog.deleteMany({
+      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE'] } },
+    })
+    await p.$disconnect()
+    console.log(`  🗑️  ${deleted.count} audit log records deleted`)
+  } catch (e) { console.warn('  ⚠️  audit log cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })

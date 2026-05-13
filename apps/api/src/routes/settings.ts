@@ -11,6 +11,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, requireRole, getAuthUser } from '../auth'
+import { createAuditLog }                        from '../lib/audit'
 
 export async function settingsRoutes(app: FastifyInstance) {
 
@@ -116,6 +117,16 @@ export async function settingsRoutes(app: FastifyInstance) {
       where:  { tenantId },
       update: data,
       create: { tenantId, ...data },
+    })
+
+    void createAuditLog({
+      tenantId,
+      actorUserId: getAuthUser(req).userId,
+      actorRole:   getAuthUser(req).role,
+      action:      'SETTINGS_PROFILE_UPDATE',
+      entityType:  'Tenant',
+      entityId:    tenantId,
+      metadata:    { updatedFields: Object.keys(data) },
     })
 
     return {

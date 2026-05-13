@@ -1105,6 +1105,45 @@ export async function fetchNotificationStatus(): Promise<{ pushEnabled: boolean;
   return apiFetch<{ pushEnabled: boolean; activeSubscriptions: number }>('/notifications/status')
 }
 
+// ── Audit Logs (Phase 15C) ────────────────────────────────────────────────────
+export interface AuditLog {
+  id:           string
+  tenantId:     string
+  actorUserId:  string | null
+  actorRole:    string | null
+  action:       string
+  entityType:   string
+  entityId:     string | null
+  metadataJson: string
+  ip:           string | null
+  createdAt:    string
+}
+
+export interface AuditLogsResponse {
+  tenantId:   string
+  pagination: { total: number; page: number; pageSize: number; pages: number }
+  logs:       AuditLog[]
+}
+
+export async function fetchAuditLogs(params?: {
+  page?:       number
+  pageSize?:   number
+  action?:     string
+  entityType?: string
+}): Promise<AuditLogsResponse> {
+  const q = new URLSearchParams()
+  if (params?.page)       q.set('page',       String(params.page))
+  if (params?.pageSize)   q.set('pageSize',   String(params.pageSize))
+  if (params?.action)     q.set('action',     params.action)
+  if (params?.entityType) q.set('entityType', params.entityType)
+  const qs = q.toString() ? `?${q}` : ''
+  return apiFetch<AuditLogsResponse>(`/audit/logs${qs}`)
+}
+
+export async function createDemoAuditEvent(): Promise<{ created: boolean; action: string; stub: boolean }> {
+  return apiFetch<{ created: boolean; action: string; stub: boolean }>('/audit/demo-event', { method: 'POST' })
+}
+
 // ── SSE transport mode (from connected event) ─────────────────────────────────
 export type SseTransport = 'redis' | 'memory' | 'unknown'
 

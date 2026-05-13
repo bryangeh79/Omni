@@ -13,6 +13,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireRole, getAuthUser } from '../auth'
+import { createAuditLog }           from '../lib/audit'
 
 const ADMIN_ROLES   = ['OWNER', 'ADMIN']
 const MANAGER_ROLES = ['OWNER', 'ADMIN', 'MANAGER']
@@ -63,6 +64,15 @@ export async function teamRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'User with this email already exists in this tenant' })
     }
 
+    void createAuditLog({
+      tenantId,
+      actorUserId: getAuthUser(req).userId,
+      actorRole:   getAuthUser(req).role,
+      action:      'TEAM_INVITE_DRAFT',
+      entityType:  'TeamInvite',
+      metadata:    { email, name: name ?? null, role: assignRole },
+    })
+
     return {
       tenantId,
       invited: {
@@ -107,6 +117,16 @@ export async function teamRoutes(app: FastifyInstance) {
       select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
     })
 
+    void createAuditLog({
+      tenantId,
+      actorUserId: callerId,
+      actorRole:   getAuthUser(req).role,
+      action:      'TEAM_ROLE_UPDATE',
+      entityType:  'User',
+      entityId:    id,
+      metadata:    { newRole: role, targetEmail: target.email },
+    })
+
     return { saved: true, tenantId, user: safeUser(updated) }
   })
 
@@ -138,6 +158,16 @@ export async function teamRoutes(app: FastifyInstance) {
       where:  { id },
       data:   { isActive },
       select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+    })
+
+    void createAuditLog({
+      tenantId,
+      actorUserId: callerId,
+      actorRole:   getAuthUser(req).role,
+      action:      'TEAM_STATUS_UPDATE',
+      entityType:  'User',
+      entityId:    id,
+      metadata:    { isActive },
     })
 
     return { saved: true, tenantId, user: safeUser(updated) }

@@ -419,6 +419,27 @@ enum CredentialStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG (Phase 15C)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  tenantId     String
+  actorUserId  String?
+  actorRole    String?
+  action       String
+  entityType   String
+  entityId     String?
+  metadataJson String   @default("{}")
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // USAGE METERING
 // ─────────────────────────────────────────────────────────────────────────────
 

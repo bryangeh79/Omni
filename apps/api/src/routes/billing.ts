@@ -13,6 +13,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, requireRole, getAuthUser } from '../auth'
+import { createAuditLog }                        from '../lib/audit'
 
 // ── Plan definitions ───────────────────────────────────────────────────────
 const PLANS = [
@@ -193,6 +194,16 @@ export async function billingRoutes(app: FastifyInstance) {
       })
 
       const selectedPlan = PLANS.find(p => p.id === planId)!
+
+      void createAuditLog({
+        tenantId,
+        actorUserId: getAuthUser(req).userId,
+        actorRole:   getAuthUser(req).role,
+        action:      'BILLING_PLAN_SELECTED',
+        entityType:  'Tenant',
+        entityId:    tenantId,
+        metadata:    { planId, priceRm: selectedPlan.priceRm },
+      })
 
       return {
         saved:          true,

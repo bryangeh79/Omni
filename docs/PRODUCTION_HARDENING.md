@@ -162,3 +162,13 @@ Write endpoints now require OWNER/ADMIN role:
 - `PATCH /team/members/:id/status`
 
 Read endpoints (GET /settings/overview, GET /billing/plans, GET /team/members) require any valid auth token. MANAGER+ required for team member list.
+
+## Phase 15C: Audit Log Foundation
+
+Admin actions are now recorded in the `AuditLog` DB table (tenant-scoped, immutable append-only log). See `docs/AUDIT_LOGS.md` for full details.
+
+New pages:
+- `/audit` — admin activity timeline (all roles)
+- `/ops/runbook` — production monitoring/backup runbook (all roles)
+
+Production QA checklist now includes audit readiness, backup runbook review, and monitoring runbook review items. See `docs/OPS_RUNBOOK.md` for the full runbook.
