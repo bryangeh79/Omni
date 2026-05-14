@@ -1011,7 +1011,9 @@ async function smoke() {
 
   const FAKE_META_TOKEN   = 'EAAOmniSmokePhase7AFakeMetaAccessTokenForTest12345678'
   const FAKE_VERIFY_TOKEN = 'omni-smoke-7a-webhook-verify-token'
-  const SMOKE_WAMID       = 'wamid.smoke7a-test-message-id-001'
+  // P0: unique WAMID per run so wamid-based DB idempotency check doesn't conflict
+  // with leftover data from prior runs that escaped cleanup.
+  const SMOKE_WAMID       = `wamid.smoke7a-${Date.now().toString(36)}-001`
 
   console.log('\n62. Phase 7A: Meta channel config API')
 
@@ -1128,9 +1130,8 @@ async function smoke() {
     const wbBody = await wbRes.json() as Record<string, unknown>
     check('webhook POST returns received', wbBody.received === true)
 
-    // 63f. Brief settle then verify message was created in DB
-    await new Promise((r) => setTimeout(r, 400))
-    const metaInbound = await prismaGetMessageByChannelMsgId(SMOKE_WAMID)
+    // 63f. Wait for inbound message persistence (P0: active polling)
+    const metaInbound = await waitForMessageByChannelMsgId(SMOKE_WAMID)
     check('webhook POST created inbound message in DB',    metaInbound !== null)
     check('webhook POST message direction is INBOUND',     metaInbound?.direction === 'INBOUND')
     check('webhook POST message senderType is CUSTOMER',   metaInbound?.senderType === 'CUSTOMER')
@@ -1138,8 +1139,7 @@ async function smoke() {
 
     // 63g. Duplicate wamid → idempotent (no duplicate message created)
     await post(`/webhooks/meta/whatsapp/${metaChannelId}`, waMsgPayload)
-    await new Promise((r) => setTimeout(r, 200))
-    const dupCount = await prismaCountMessagesByChannelMsgId(SMOKE_WAMID)
+    const dupCount = await waitForMessageCountByChannelMsgId(SMOKE_WAMID, 1)
     check('webhook duplicate wamid → idempotent (1 message only)', dupCount === 1)
 
     // 63h. POST with malformed object → graceful 200
@@ -1192,8 +1192,11 @@ async function smoke() {
   // ════════════════════════════════════════════════════════════════════════
 
   const SMOKE_APP_SECRET  = 'smoke7b-fake-app-secret-for-hmac-test'
-  const SMOKE_WAMID_7B    = 'wamid.smoke7b-hmac-test-message-001'
-  const SMOKE_WAMID_7B_2  = 'wamid.smoke7b-hmac-test-message-002'
+  // P0 fix: unique WAMIDs per run so HMAC payloads produce unique signatures and
+  // bypass the 5-minute process-scoped replay cache when smoke is re-run.
+  const SMOKE_RUN_TAG_7B  = Date.now().toString(36)
+  const SMOKE_WAMID_7B    = `wamid.smoke7b-hmac-${SMOKE_RUN_TAG_7B}-001`
+  const SMOKE_WAMID_7B_2  = `wamid.smoke7b-hmac-${SMOKE_RUN_TAG_7B}-002`
 
   console.log('\n66. Phase 7B: App secret vault')
 
@@ -1261,9 +1264,8 @@ async function smoke() {
     const validBody = await validRes.json() as Record<string, unknown>
     check('webhook POST valid HMAC received', validBody.received === true)
 
-    // Brief settle then verify message created
-    await new Promise((r) => setTimeout(r, 400))
-    const hmacMsg = await prismaGetMessageByChannelMsgId(SMOKE_WAMID_7B)
+    // Active polling for message persistence (P0 fix — replaces fragile 400ms sleep)
+    const hmacMsg = await waitForMessageByChannelMsgId(SMOKE_WAMID_7B)
     check('valid HMAC: inbound message created in DB',   hmacMsg !== null)
     check('valid HMAC: message is INBOUND',              hmacMsg?.direction === 'INBOUND')
     check('valid HMAC response no raw appSecret',        !JSON.stringify(validBody).includes(SMOKE_APP_SECRET))
@@ -1299,9 +1301,9 @@ async function smoke() {
     await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, dupPayload, {
       'x-hub-signature-256': dupSig,
     })
-    await new Promise((r) => setTimeout(r, 200))
+    // P0: poll for stable idempotent count of 1
     check('duplicate wamid + valid HMAC → still idempotent',
-      (await prismaCountMessagesByChannelMsgId(SMOKE_WAMID_7B)) === 1)
+      (await waitForMessageCountByChannelMsgId(SMOKE_WAMID_7B, 1)) === 1)
 
     // 67e. New wamid with valid HMAC → message created normally
     const newMsgPayload = {
@@ -1329,8 +1331,8 @@ async function smoke() {
     await postWithHeaders(`/webhooks/meta/whatsapp/${metaChannelId}`, newMsgPayload, {
       'x-hub-signature-256': newSig,
     })
-    await new Promise((r) => setTimeout(r, 400))
-    check('new wamid + valid HMAC → message created', (await prismaGetMessageByChannelMsgId(SMOKE_WAMID_7B_2)) !== null)
+    // P0: poll until persisted
+    check('new wamid + valid HMAC → message created', (await waitForMessageByChannelMsgId(SMOKE_WAMID_7B_2)) !== null)
   } else {
     console.log('  ⚠️  HMAC verification tests skipped (vault not configured or no Meta channel)')
   }
@@ -4066,6 +4068,40 @@ async function prismaCountMessagesByChannelMsgId(channelMessageId: string): Prom
     await p.$disconnect()
     return n
   } catch { return -1 }
+}
+
+// ── P0 stabilization (Phase 7B HMAC fix) ──────────────────────────────────────
+// Active polling replaces fragile fixed sleeps. The underlying helpers create
+// fresh PrismaClient per call and silently swallow connection errors, returning
+// null/-1 even when the data is in DB. Polling absorbs transient connection
+// pressure (worker + API + ephemeral helpers competing for the pool).
+async function waitForMessageByChannelMsgId(
+  channelMessageId: string,
+  maxMs = 6000,
+): Promise<Record<string, unknown> | null> {
+  const deadline = Date.now() + maxMs
+  let msg: Record<string, unknown> | null = null
+  while (Date.now() < deadline) {
+    msg = await prismaGetMessageByChannelMsgId(channelMessageId)
+    if (msg) return msg
+    await new Promise(r => setTimeout(r, 100))
+  }
+  return msg
+}
+
+async function waitForMessageCountByChannelMsgId(
+  channelMessageId: string,
+  expectedCount: number,
+  maxMs = 6000,
+): Promise<number> {
+  const deadline = Date.now() + maxMs
+  let count = -1
+  while (Date.now() < deadline) {
+    count = await prismaCountMessagesByChannelMsgId(channelMessageId)
+    if (count === expectedCount) return count
+    await new Promise(r => setTimeout(r, 100))
+  }
+  return count
 }
 
 async function prismaCreateMetaConversation(channelId: string, customerId: string): Promise<string | null> {
