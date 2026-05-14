@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getToken } from '@/lib/api'
-import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel } from '@/lib/enumLabels'
+import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel, planLabel } from '@/lib/enumLabels'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
 const ACCENT   = '#6366f1'
@@ -259,7 +259,7 @@ export default function AccountPage() {
               <Row label="商家名称"    value={String(tenant.name ?? '—')} />
               <Row label="租户标识"    value={String(tenant.slug ?? '—')} mono />
               <Row label="默认语言"    value={String(tenant.defaultLanguage ?? '—').toUpperCase()} />
-              <Row label="套餐"        value={String(tenant.plan ?? '—')} />
+              <Row label="套餐"        value={tenant.plan ? planLabel(tenant.plan) : '—'} />
               <Row label="是否激活"    value={tenant.isActive ? '是' : '否'} color={tenant.isActive ? SUCCESS : DANGER} />
               <Row label="开通日期"    value={tenant.memberSince ? new Date(String(tenant.memberSince)).toLocaleDateString('zh-CN') : '—'} />
             </>

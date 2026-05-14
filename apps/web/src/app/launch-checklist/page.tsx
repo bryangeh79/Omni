@@ -2,20 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchLaunchChecklist, fetchStagingReadiness, type LaunchChecklist, type ChecklistItem, type StagingReadiness } from '@/lib/api'
+import { launchStatusLabel } from '@/lib/enumLabels'
+import { toChineseError } from '@/lib/errorText'
 
 // ── Status styles ─────────────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { icon: string; ring: string; bg: string; text: string; label: string }> = {
-  DONE:    { icon: '✓', ring: 'ring-emerald-300', bg: 'bg-emerald-50', text: 'text-emerald-700', label: '已完成' },
-  PENDING: { icon: '○', ring: 'ring-amber-300',   bg: 'bg-amber-50',   text: 'text-amber-700',   label: '待处理' },
-  WARN:    { icon: '!', ring: 'ring-yellow-300',  bg: 'bg-yellow-50',  text: 'text-yellow-700',  label: '可选' },
-  BLOCKED: { icon: '✕', ring: 'ring-red-200',     bg: 'bg-red-50',     text: 'text-red-700',     label: '阻塞' },
-  SKIP:    { icon: '–', ring: 'ring-gray-200',    bg: 'bg-gray-50',    text: 'text-gray-500',    label: '跳过' },
+// Label 走共用 launchStatusLabel；本地仅保留视觉样式 → 单一事实来源
+const STATUS_STYLE: Record<string, { icon: string; ring: string; bg: string; text: string }> = {
+  DONE:    { icon: '✓', ring: 'ring-emerald-300', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  PENDING: { icon: '○', ring: 'ring-amber-300',   bg: 'bg-amber-50',   text: 'text-amber-700'   },
+  WARN:    { icon: '!', ring: 'ring-yellow-300',  bg: 'bg-yellow-50',  text: 'text-yellow-700'  },
+  BLOCKED: { icon: '✕', ring: 'ring-red-200',     bg: 'bg-red-50',     text: 'text-red-700'     },
+  SKIP:    { icon: '–', ring: 'ring-gray-200',    bg: 'bg-gray-50',    text: 'text-gray-500'    },
 }
 
-const LAUNCH_STATUS_CFG = {
-  NOT_READY:                    { label: '尚未就绪',         bg: 'bg-red-100',     text: 'text-red-800',     border: 'border-red-200' },
-  READY_FOR_STAGING:            { label: '可进入预演环境',   bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-200' },
-  READY_FOR_PRODUCTION_REVIEW:  { label: '可进入生产复核',   bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200' },
+const LAUNCH_STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+  NOT_READY:                    { bg: 'bg-red-100',     text: 'text-red-800',     border: 'border-red-200' },
+  READY_FOR_STAGING:            { bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-200' },
+  READY_FOR_PRODUCTION_REVIEW:  { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200' },
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -55,7 +58,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 // ── Checklist Item Card ───────────────────────────────────────────────────────
 function ItemCard({ item }: { item: ChecklistItem }) {
-  const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.WARN
+  const cfg = STATUS_STYLE[item.status] ?? STATUS_STYLE.WARN
   return (
     <div className={`rounded-2xl border p-4 ring-1 ${cfg.ring} ${cfg.bg} transition-all`}>
       <div className="flex items-start gap-3">
@@ -65,7 +68,7 @@ function ItemCard({ item }: { item: ChecklistItem }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <p className={`text-sm font-semibold ${cfg.text}`}>{item.label}</p>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.text} border border-current border-opacity-20`}>{cfg.label}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.text} border border-current border-opacity-20`}>{launchStatusLabel(item.status)}</span>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">{item.detail}</p>
         </div>
@@ -101,14 +104,14 @@ export default function LaunchChecklistPage() {
       setChecklist(cl)
       if (st) setStaging(st)
     }
-    catch (e) { setError(e instanceof Error ? e.message : '加载失败') }
+    catch (e) { setError(toChineseError(e, '加载清单失败')) }
     finally { setLoading(false) }
   }
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void loadChecklist() }} />
 
   const launchStatusKey = checklist?.launchStatus ?? 'NOT_READY'
-  const launchCfg = LAUNCH_STATUS_CFG[launchStatusKey] ?? LAUNCH_STATUS_CFG.NOT_READY
+  const launchCfg = LAUNCH_STATUS_STYLE[launchStatusKey] ?? LAUNCH_STATUS_STYLE.NOT_READY
   const summary = checklist?.summary
 
   const readyItems   = checklist?.items.filter(i => i.status === 'DONE') ?? []
@@ -128,7 +131,7 @@ export default function LaunchChecklistPage() {
               <h1 className="text-base font-bold text-gray-900">上线清单</h1>
               {checklist && (
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${launchCfg.bg} ${launchCfg.text} ${launchCfg.border}`}>
-                  {launchCfg.label}
+                  {launchStatusLabel(launchStatusKey)}
                 </span>
               )}
             </div>
@@ -137,7 +140,7 @@ export default function LaunchChecklistPage() {
             <a href="/channels/setup" className="text-emerald-600 hover:text-emerald-800">渠道设置</a>
             <span className="text-gray-200">|</span>
             <a href="/boss" className="text-gray-500 hover:text-gray-700">工作台</a>
-            <button onClick={() => { void loadChecklist() }} disabled={loading} className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">
+            <button onClick={() => { void loadChecklist() }} disabled={loading} title="刷新上线清单状态，不会调用真实外部服务" className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">
               {loading ? '…' : '↻ 刷新'}
             </button>
           </nav>
@@ -157,7 +160,7 @@ export default function LaunchChecklistPage() {
             <div className={`rounded-2xl border p-5 ${launchCfg.bg} ${launchCfg.border}`}>
               <div className="flex items-center gap-3 mb-2">
                 <div>
-                  <h2 className={`text-base font-semibold ${launchCfg.text}`}>{launchCfg.label}</h2>
+                  <h2 className={`text-base font-semibold ${launchCfg.text}`}>{launchStatusLabel(launchStatusKey)}</h2>
                   <p className={`text-xs ${launchCfg.text} opacity-80`}>{checklist.launchNote}</p>
                 </div>
               </div>

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchBillingPlans, fetchUsageSummary, selectPlanDraft, type BillingPlan, type UsageSummary } from '@/lib/api'
+import { planLabel, planPeriodLabel } from '@/lib/enumLabels'
+import { toChineseError } from '@/lib/errorText'
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [slug, setSlug] = useState(''); const [email, setEmail] = useState(''); const [pass, setPass] = useState('')
@@ -35,8 +37,8 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
     <div className={`rounded-2xl border-2 p-5 transition-all ${isActive ? 'border-blue-500 bg-blue-50' : plan.recommended ? 'border-blue-200 bg-white' : 'border-gray-200 bg-white'}`}>
       {plan.recommended && <div className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full inline-block mb-2">最受欢迎</div>}
       {isActive && <div className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-2">当前套餐</div>}
-      <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-      <p className="text-2xl font-bold text-blue-700 my-2">RM{plan.priceRm}<span className="text-sm font-normal text-gray-400">/{plan.period}</span></p>
+      <h3 className="text-lg font-bold text-gray-900" title={plan.id}>{planLabel(plan.id) || plan.name}</h3>
+      <p className="text-2xl font-bold text-blue-700 my-2">RM{plan.priceRm}<span className="text-sm font-normal text-gray-400">/{planPeriodLabel(plan.period)}</span></p>
       <ul className="space-y-1.5 mb-4">
         {plan.features.map((f, i) => (
           <li key={i} className="text-xs text-gray-700 flex gap-1.5"><span className="text-emerald-500 flex-shrink-0">✓</span>{f}</li>
@@ -49,6 +51,8 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
       <button
         onClick={() => onSelect(plan.id)}
         disabled={selecting || isActive}
+        title={isActive ? '当前已选中此套餐' : '仅记录套餐草稿，不会触发真实扣款'}
+        aria-label={`选择套餐 ${planLabel(plan.id)}`}
         className={`w-full rounded-xl py-2 text-sm font-semibold transition-all disabled:opacity-50 ${isActive ? 'bg-emerald-100 text-emerald-700 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
       >
         {isActive ? '当前套餐' : selecting ? '保存中…' : '选择套餐（草稿）'}
@@ -80,10 +84,10 @@ export default function BillingPage() {
     setSelecting(true); setError('')
     try {
       await selectPlanDraft(planId)
-      setNotice(`套餐「${planId}」已保存为草稿，不会触发真实扣费。`)
+      setNotice(`套餐「${planLabel(planId)}」已保存为草稿，不会触发真实扣费。`)
       setTimeout(() => setNotice(''), 4000)
       await load()
-    } catch (e) { setError(e instanceof Error ? e.message : '选择失败') }
+    } catch (e) { setError(toChineseError(e, '选择套餐失败')) }
     finally { setSelecting(false) }
   }
 
@@ -95,7 +99,7 @@ export default function BillingPage() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">$</span></div>
-            <div><h1 className="text-base font-semibold text-gray-900">套餐与计费</h1><p className="text-xs text-gray-400">当前套餐：{plans?.currentPlan ?? '…'}</p></div>
+            <div><h1 className="text-base font-semibold text-gray-900">套餐与计费</h1><p className="text-xs text-gray-400" title={plans?.currentPlan ?? ''}>当前套餐：{plans ? planLabel(plans.currentPlan) : '…'}</p></div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
             <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>

@@ -1,5 +1,17 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 UAT Round-5 — Billing Plan + Status Label Unification
+
+继 Round-4 之后，Round-5 完成最后一组共用化：
+
+- **enumLabels 扩展**：新增 `planLabel` / `planPeriodLabel`（starter→Starter 基础版、pro/growth→Pro 成长版、business/enterprise→Business 企业版、trial→试用版、free→免费版、custom→自定义套餐；周期 monthly→月 / yearly→年 / one_time→一次性）、`launchStatusLabel` / `releaseStatusLabel` / `qaStatusLabel`（DONE / PENDING / WARN / BLOCKED / SKIP / OPTIONAL / PASS / FAIL / MANUAL / READY_FOR_*）。
+- **Billing page**：PlanCard title / 当前套餐 / 套餐通知文案使用 `planLabel`；周期使用 `planPeriodLabel`；选择按钮添加 `title` 与 `aria-label`。
+- **Settings / Account**：`o.company.plan` / `tenant.plan` 显示用 `planLabel`，悬停 title 保留原始 plan ID。
+- **Launch / Release / Production QA**：本地 STATUS_CFG / OVERALL_CFG 拆分为「视觉样式 STATUS_STYLE / OVERALL_STYLE + 共用 label util」单一事实来源；refresh / re-run 按钮添加中文 `title`。
+- **errorText 扩展**：6 类计费 / 套餐错误（plan_not_eligible / payment_not_configured / billing_disabled / 402 payment required / quota exceeded / subscription inactive）。
+- **未触碰**：后端 API plan.id 与 plan.period 字符串、route paths、enum value、smoke 用例。
+- **真实发送门控、产品定位（非广播 / 非广告 / 非群发）不变。**
+
 ## Post-v1 UAT Round-4 — Enum Label Utility + Operator Tooltips
 
 继 Round-3 之后，Round-4 集中前端 enum → 中文 label 映射并接入操作者帮助提示：

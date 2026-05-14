@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchSettingsOverview, updateCompanyProfile, type SettingsOverview } from '@/lib/api'
-import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel } from '@/lib/enumLabels'
+import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel, planLabel } from '@/lib/enumLabels'
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [slug, setSlug] = useState(''); const [email, setEmail] = useState(''); const [pass, setPass] = useState('')
@@ -89,7 +89,7 @@ export default function SettingsPage() {
             <div className="w-9 h-9 bg-slate-700 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">⚙</span></div>
             <div>
               <h1 className="text-base font-semibold text-gray-900">设置</h1>
-              <p className="text-xs text-gray-400">{o?.company.name ?? '加载中…'} · {o?.company.plan ?? 'trial'} 套餐</p>
+              <p className="text-xs text-gray-400" title={o?.company.plan ?? ''}>{o?.company.name ?? '加载中…'} · {planLabel(o?.company.plan ?? 'trial')}</p>
             </div>
           </div>
           <nav className="flex items-center gap-2 text-xs flex-wrap">
@@ -121,7 +121,7 @@ export default function SettingsPage() {
                       { label: '公司名称',   value: o.onboarding.companyName ?? '—' },
                       { label: '行业',       value: o.onboarding.industry ?? '—' },
                       { label: '营业时间',   value: o.onboarding.businessHours ?? '—' },
-                      { label: '套餐',       value: o.company.plan },
+                      { label: '套餐',       value: planLabel(o.company.plan) },
                     ].map(({ label, value }) => (
                       <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
                         <p className="text-xs text-gray-400">{label}</p>

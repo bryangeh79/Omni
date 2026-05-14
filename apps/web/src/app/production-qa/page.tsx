@@ -2,15 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchProductionQa, type ProductionQaResult } from '@/lib/api'
+import { qaStatusLabel } from '@/lib/enumLabels'
+import { toChineseError } from '@/lib/errorText'
 
-const STATUS_CFG = {
-  PASS:   { icon: '✓', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: '通过' },
-  FAIL:   { icon: '✕', bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     label: '失败' },
-  WARN:   { icon: '!', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   label: '警告' },
-  MANUAL: { icon: '?', bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    label: '人工' },
+// 暴露给 status icon 旁的可选小型标签（hover 时显示中文状态）
+const renderStatusTitle = (status: string) => qaStatusLabel(status)
+
+// 单项条目视觉样式（label 走共用 qaStatusLabel）
+const STATUS_STYLE = {
+  PASS:   { icon: '✓', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  FAIL:   { icon: '✕', bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200'     },
+  WARN:   { icon: '!', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200'   },
+  MANUAL: { icon: '?', bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200'    },
 }
 
-const OVERALL_CFG = {
+// 总体状态视觉样式 + 中文 label（OVERALL 含 "MANUAL_REVIEW_NEEDED" 这种汇总值，label 单独定义）
+const OVERALL_STYLE = {
   PASS:                     { label: '已就绪',         color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300' },
   FAIL:                     { label: '发现问题',       color: 'text-red-800',     bg: 'bg-red-100',     border: 'border-red-300' },
   WARN:                     { label: '存在警告',       color: 'text-amber-800',   bg: 'bg-amber-100',   border: 'border-amber-300' },
@@ -58,13 +65,13 @@ export default function ProductionQaPage() {
   async function runQa() {
     setLoading(true); setError('')
     try { setQa(await fetchProductionQa()) }
-    catch (e) { setError(e instanceof Error ? e.message : 'QA 检查失败') }
+    catch (e) { setError(toChineseError(e, 'QA 检查失败')) }
     finally { setLoading(false) }
   }
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void runQa() }} />
 
-  const overallCfg = qa ? (OVERALL_CFG[qa.overallStatus as keyof typeof OVERALL_CFG] ?? OVERALL_CFG.MANUAL_REVIEW_NEEDED) : null
+  const overallCfg = qa ? (OVERALL_STYLE[qa.overallStatus as keyof typeof OVERALL_STYLE] ?? OVERALL_STYLE.MANUAL_REVIEW_NEEDED) : null
   const categories = qa ? ['All', ...Array.from(new Set(qa.items.map(i => i.category)))] : ['All']
   const filtered   = qa?.items.filter(i => filterCat === 'All' || i.category === filterCat) ?? []
 
@@ -83,7 +90,7 @@ export default function ProductionQaPage() {
             <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800">上线清单</a>
             <span className="text-gray-200">|</span>
             <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>
-            <button onClick={() => { void runQa() }} disabled={loading} className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">{loading ? '…' : '↻ 重新运行'}</button>
+            <button onClick={() => { void runQa() }} disabled={loading} title="仅运行本地检查，不会调用真实外部服务" className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">{loading ? '…' : '↻ 重新运行'}</button>
           </nav>
         </div>
       </header>
@@ -128,11 +135,11 @@ export default function ProductionQaPage() {
             {/* Items */}
             <div className="space-y-2">
               {filtered.map(item => {
-                const cfg = STATUS_CFG[item.status as keyof typeof STATUS_CFG] ?? STATUS_CFG.MANUAL
+                const cfg = STATUS_STYLE[item.status as keyof typeof STATUS_STYLE] ?? STATUS_STYLE.MANUAL
                 return (
                   <div key={item.id} className={`rounded-xl border p-4 ${cfg.bg} ${cfg.border}`}>
                     <div className="flex items-start gap-3">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{cfg.icon}</span>
+                      <span title={renderStatusTitle(item.status)} className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{cfg.icon}</span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.text}`}>{item.category}</span>

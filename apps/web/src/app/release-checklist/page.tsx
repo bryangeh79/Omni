@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { getToken } from '@/lib/api'
+import { releaseStatusLabel } from '@/lib/enumLabels'
 
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [email,    setEmail]    = useState('')
@@ -223,6 +224,7 @@ export default function ReleaseChecklistPage() {
           <button
             onClick={loadApiStatus}
             disabled={loading}
+            title="刷新发布检查状态，不会调用真实外部服务"
             style={{ padding: '0.375rem 0.75rem', background: '#f3f4f6', color: '#374151', borderRadius: 6, border: '1px solid #d1d5db', cursor: 'pointer', fontSize: '0.8125rem' }}
           >
             {loading ? '检查中…' : '刷新'}
@@ -245,7 +247,7 @@ export default function ReleaseChecklistPage() {
               gap: '0.875rem',
             }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.color, background: `${colors.border}60`, padding: '0.1875rem 0.5rem', borderRadius: 4, flexShrink: 0, marginTop: 1 }}>
-                {({ PASS: '通过', WARN: '警告', FAIL: '失败', MANUAL: '人工', LOADING: '加载' } as const)[item.status] ?? item.status}
+                {releaseStatusLabel(item.status)}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{item.label}</div>

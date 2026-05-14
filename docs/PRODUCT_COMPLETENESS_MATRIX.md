@@ -83,7 +83,7 @@ Positioning: **Omni Ai Chatbot｜WhatsApp AI 客服 CRM 成交系统** — 1:1 A
 | Multi-instance Redis-backed HMAC replay cache | Single-instance deployment is the current target | Medium |
 | Audit-safe whitelist write-side enforcement | Defensive-in-depth; current write-side already filters via `lib/audit.ts` | Medium |
 | Audit UI advanced filters (action group, date range) — already done in `/account/activity`; mirror to `/audit` | Tier-2 polish | Low |
-| i18n (zh / en / ms) full multilingual | UAT Round-1 / 2 / 3 / 4 已完成 **中文优先（Chinese-first）** 全量覆盖（onboarding / channels / knowledge / launch / release / qa / ops / activation / account / audit / billing / team / settings / inbox / pwa / signup / boss）；Round-3 新增 `lib/errorText.ts`、Round-4 新增 `lib/enumLabels.ts` 集中 enum 映射 + 操作者 tooltips；i18n 多语言切换框架延后到 post-v1 | Medium |
+| i18n (zh / en / ms) full multilingual | UAT Round-1 ~ 5 已完成 **中文优先（Chinese-first）** 全量覆盖（onboarding / channels / knowledge / launch / release / qa / ops / activation / account / audit / billing / team / settings / inbox / pwa / signup / boss）；Round-3 新增 `lib/errorText.ts`、Round-4 新增 `lib/enumLabels.ts`；Round-5 扩展 plan / launch / release / qa 状态映射 + 套餐套餐 ID 中文显示 + 计费错误中文化；i18n 多语言切换框架延后到 post-v1 | Medium |
 | Real email verification (link, SMTP) | Out of v1; current stub is intentional | Medium |
 | Real payment integration (Stripe / Razorpay / etc.) | Out of v1 | Medium |
 | Webhook delivery retry queue (BullMQ-backed) | Current path is synchronous in handler; works for v1 single-instance | Medium |
