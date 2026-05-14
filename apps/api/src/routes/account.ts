@@ -241,4 +241,292 @@ export async function accountRoutes(app: FastifyInstance) {
       note: 'Profile updated. No secrets or credentials exposed.',
     }
   })
+
+  // ── GET /account/activity — Phase 17C ─────────────────────────────────────
+  // Returns recent safe audit events for the current tenant.
+  // Never includes raw secrets, tokens, credential refs, or encrypted blobs.
+  app.get<{ Querystring: { limit?: string } }>('/activity', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const take = Math.min(parseInt(req.query.limit ?? '20', 10) || 20, 100)
+
+    const ACCOUNT_ACTIONS = [
+      'ACCOUNT_PROFILE_UPDATE',
+      'TENANT_SIGNUP',
+      'TEAM_INVITE_DRAFT',
+      'TEAM_ROLE_UPDATE',
+      'TEAM_STATUS_UPDATE',
+      'BILLING_PLAN_SELECTED',
+      'SETTINGS_PROFILE_UPDATE',
+      'ACTIVATION_DRY_RUN',
+      'ACTIVATION_TEST_MESSAGE_DRY_RUN',
+    ]
+
+    const events = await prisma.auditLog.findMany({
+      where:   { tenantId, action: { in: ACCOUNT_ACTIONS } },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id:           true,
+        action:       true,
+        entityType:   true,
+        actorRole:    true,
+        createdAt:    true,
+        metadataJson: true,
+        // actorUserId, ip, userAgent intentionally omitted for display safety
+      },
+    })
+
+    // Generate safe one-line summary per action; never echo raw values
+    function summarize(action: string, _metaJson: string): string {
+      switch (action) {
+        case 'ACCOUNT_PROFILE_UPDATE':         return 'Account profile updated'
+        case 'TENANT_SIGNUP':                   return 'Tenant signed up'
+        case 'TEAM_INVITE_DRAFT':               return 'Team invite drafted (no email sent)'
+        case 'TEAM_ROLE_UPDATE':                return 'Team member role updated'
+        case 'TEAM_STATUS_UPDATE':              return 'Team member status changed'
+        case 'BILLING_PLAN_SELECTED':           return 'Billing plan selected (no charge)'
+        case 'SETTINGS_PROFILE_UPDATE':         return 'Settings profile updated'
+        case 'ACTIVATION_DRY_RUN':              return 'Activation dry-run executed (no real send)'
+        case 'ACTIVATION_TEST_MESSAGE_DRY_RUN': return 'Test message dry-run (no real send)'
+        default:                                return action
+      }
+    }
+
+    // Only return whitelisted metadata keys — never leak raw values
+    const SAFE_META_KEYS = new Set([
+      'updatedFields', 'newRole', 'isActive', 'planId', 'priceRm',
+      'channelType', 'intendedMode', 'dryRunStatus', 'blockedCount',
+      'industry', 'goal', 'channelPreference', 'recipientLabel',
+    ])
+
+    function safeMeta(json: string): Record<string, unknown> {
+      try {
+        const parsed = JSON.parse(json) as Record<string, unknown>
+        const out: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(parsed)) {
+          if (SAFE_META_KEYS.has(k)) out[k] = v
+        }
+        return out
+      } catch { return {} }
+    }
+
+    const safeEvents = events.map(e => ({
+      id:           e.id,
+      action:       e.action,
+      entityType:   e.entityType,
+      actorRole:    e.actorRole,
+      createdAt:    e.createdAt,
+      summary:      summarize(e.action, e.metadataJson),
+      safeMetadata: safeMeta(e.metadataJson),
+    }))
+
+    return {
+      tenantId,
+      asOf:    new Date().toISOString(),
+      events:  safeEvents,
+      counts:  { totalReturned: safeEvents.length, maxRequested: take },
+      note: 'Activity history is audit-log derived and tenant-scoped. Raw metadata values are filtered to a safe whitelist. No secrets/tokens/credentials are included.',
+    }
+  })
+
+  // ── GET /account/export — Phase 17C ───────────────────────────────────────
+  // Safe JSON summary of the tenant's account state. OWNER/ADMIN only.
+  // NEVER includes: passwordHash, credentialRef, raw tokens, encrypted blobs, raw provider data.
+  // NEVER includes: full conversations or customer messages.
+  app.get('/export', { preHandler: requireRole('OWNER', 'ADMIN') }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    const [tenant, users, onboarding, channelDraft, channels, kbItems, aiConfig, followUpRules, handoffRules, customerCount, conversationCount, auditCount] = await Promise.all([
+      prisma.tenant.findUnique({
+        where:  { id: tenantId },
+        select: { id: true, slug: true, name: true, defaultLanguage: true, plan: true, isActive: true, createdAt: true },
+      }),
+      prisma.user.findMany({
+        where:  { tenantId },
+        select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.onboardingDraft.findUnique({
+        where:  { tenantId },
+        select: { status: true, companyName: true, industry: true, aiGoals: true, businessHours: true, website: true, serviceArea: true, completedSteps: true, enabledAt: true, createdAt: true },
+      }),
+      prisma.channelSetupDraft.findUnique({
+        where:  { tenantId },
+        select: {
+          channelType:      true,
+          displayName:      true,
+          phoneLast4:       true,   // last 4 only — safe
+          setupStatus:      true,
+          credentialStatus: true,    // status label only — never credentialRef
+          testStatus:       true,
+          lastTestAt:       true,
+          realWaSessionEnabled: true,
+          realMetaSendEnabled:  true,
+          createdAt:        true,
+          // credentialRef, credentialLast4 intentionally omitted
+        },
+      }),
+      prisma.channel.findMany({
+        where:  { tenantId },
+        select: { id: true, type: true, displayName: true, isActive: true, createdAt: true },
+        // metaAccessTokenRef, webhookVerifyTokenRef, metaAppSecretRef intentionally NOT selected
+      }),
+      prisma.knowledgeItem.findMany({
+        where:  { tenantId, isActive: true },
+        select: { id: true, type: true, question: true, language: true, createdAt: true },
+        // answer intentionally omitted to avoid leaking pasted secrets if any
+        take: 50,
+      }),
+      prisma.aiConfig.findUnique({
+        where:  { tenantId },
+        select: { aiProvider: true, model: true, useTenantApiKey: true, replyLanguagePolicy: true, isActive: true, createdAt: true },
+        // apiKeyRef, apiKeyLast4 intentionally NOT selected
+      }),
+      prisma.followUpRule.findMany({
+        where:  { tenantId },
+        select: { id: true, trigger: true, delayHours: true, isActive: true },
+        // messageTemplate omitted — may contain user content
+      }),
+      prisma.handoffRule.findMany({
+        where:  { tenantId },
+        select: { id: true, condition: true, isActive: true },
+      }),
+      prisma.customer.count({ where: { tenantId } }),
+      prisma.conversation.count({ where: { tenantId } }),
+      prisma.auditLog.count({ where: { tenantId } }),
+    ])
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    return {
+      generatedAt: new Date().toISOString(),
+      tenantId,
+      schemaVersion: '17c-1',
+      tenant: tenant ? {
+        id:              tenant.id,
+        slug:            tenant.slug,
+        name:            tenant.name,
+        defaultLanguage: tenant.defaultLanguage,
+        plan:            tenant.plan,
+        isActive:        tenant.isActive,
+        createdAt:       tenant.createdAt,
+      } : null,
+      users: users.map(u => ({
+        id:        u.id,
+        email:     u.email,
+        name:      u.name,
+        role:      u.role,
+        isActive:  u.isActive,
+        createdAt: u.createdAt,
+        // passwordHash NEVER included
+      })),
+      onboarding: onboarding ?? null,
+      channelSetup: channelDraft ? {
+        channelType:          channelDraft.channelType,
+        displayName:          channelDraft.displayName,
+        phoneLast4:           channelDraft.phoneLast4,
+        setupStatus:          channelDraft.setupStatus,
+        credentialStatus:     channelDraft.credentialStatus,
+        testStatus:           channelDraft.testStatus,
+        lastTestAt:           channelDraft.lastTestAt,
+        realWaSessionEnabled: channelDraft.realWaSessionEnabled,
+        realMetaSendEnabled:  channelDraft.realMetaSendEnabled,
+        createdAt:            channelDraft.createdAt,
+        // credentialRef, credentialLast4 NEVER included
+      } : null,
+      activeChannels: channels.map(c => ({
+        id:          c.id,
+        type:        c.type,
+        displayName: c.displayName,
+        isActive:    c.isActive,
+        createdAt:   c.createdAt,
+        // metaAccessTokenRef, webhookVerifyTokenRef, metaAppSecretRef NEVER included
+      })),
+      knowledgeBase: {
+        activeItemCount: kbItems.length,
+        items: kbItems.map(k => ({
+          id:        k.id,
+          type:      k.type,
+          question:  k.question,
+          language:  k.language,
+          createdAt: k.createdAt,
+          // answer field deliberately excluded
+        })),
+        note: 'Only questions, not full answers, are exported to avoid leaking pasted content.',
+      },
+      aiConfig: aiConfig ? {
+        aiProvider:          aiConfig.aiProvider,
+        model:               aiConfig.model,
+        useTenantApiKey:     aiConfig.useTenantApiKey,
+        replyLanguagePolicy: aiConfig.replyLanguagePolicy,
+        isActive:            aiConfig.isActive,
+        createdAt:           aiConfig.createdAt,
+        // apiKeyRef, apiKeyLast4, apiKeyProvider intentionally excluded
+      } : null,
+      followUpRules: followUpRules.map(r => ({
+        id:         r.id,
+        trigger:    r.trigger,
+        delayHours: r.delayHours,
+        isActive:   r.isActive,
+        // messageTemplate excluded
+      })),
+      handoffRules: handoffRules.map(r => ({
+        id:        r.id,
+        condition: r.condition,
+        isActive:  r.isActive,
+      })),
+      counts: {
+        users:         users.length,
+        activeUsers:   users.filter(u => u.isActive).length,
+        activeChannels: channels.filter(c => c.isActive).length,
+        customers:     customerCount,
+        conversations: conversationCount,
+        knowledgeItems: kbItems.length,
+        followUpRules: followUpRules.length,
+        handoffRules:  handoffRules.length,
+        auditEvents:   auditCount,
+      },
+      safety: {
+        realSendEnabled:      false,
+        broadcastEnabled:     false,
+        realWaSessionEnabled: waSessionAllowed,
+        realMetaSendEnabled:  metaSendAllowed,
+        realSendCurrentlyOff: !waSessionAllowed && !metaSendAllowed,
+      },
+      setupChecklist: {
+        onboardingComplete:   onboarding?.status === 'ENABLED',
+        knowledgeBaseReady:   kbItems.length > 0,
+        channelConfigured:    !!channelDraft?.channelType,
+        teamHasAdmin:         users.some(u => ['OWNER', 'ADMIN'].includes(u.role) && u.isActive),
+      },
+      links: {
+        account:            '/account',
+        activationGuide:    '/activation-guide',
+        activationMonitor:  '/activation/monitoring',
+        opsRunbook:         '/ops/runbook',
+        releaseChecklist:   '/release-checklist',
+      },
+      redaction: {
+        passwordHashExcluded:     true,
+        credentialRefsExcluded:   true,
+        tokensExcluded:           true,
+        encryptedBlobsExcluded:   true,
+        rawProviderDataExcluded:  true,
+        rawConversationsExcluded: true,
+        rawKnowledgeAnswersExcluded: true,
+        rawFollowUpTemplatesExcluded: true,
+        apiKeyRefsExcluded:       true,
+        metaAccessTokenRefExcluded: true,
+        webhookVerifyTokenRefExcluded: true,
+      },
+      notes: [
+        'This export is a safe summary, NOT a full database backup.',
+        'No secrets, tokens, password hashes, credential refs, or encrypted blobs are included.',
+        'Full customer conversations and message content are NOT exported in this phase.',
+        'Real WhatsApp/Meta sends remain disabled unless operator explicitly changes env flags.',
+        'Omni is not a broadcast, ads, or bulk-sending platform.',
+      ],
+    }
+  })
 }

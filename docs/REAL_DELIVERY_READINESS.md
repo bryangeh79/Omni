@@ -194,3 +194,12 @@ New endpoints added:
 
 New page: `/activation/monitoring` — operator monitoring dashboard.
 See `docs/ACTIVATION_MONITORING.md` for documentation.
+
+
+## Phase 17C: Activity + Export Safety
+
+The new `/account/activity` and `/account/export` endpoints continue the no-real-send boundary:
+- Neither endpoint calls WhatsApp, Meta, AI, email, or payment providers
+- Export explicitly redacts: passwordHash, credentialRef, metaAccessTokenRef, webhookVerifyTokenRef, apiKeyRef, encrypted blobs, raw tokens
+- Export does not include full customer conversations or KB answers in this phase
+- Activity summaries filter metadata to a safe whitelist only

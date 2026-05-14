@@ -3701,6 +3701,149 @@ async function smoke() {
   check('POST-17B realSendEnabled still false',       finalSafety.realSendEnabled      === false)
   check('POST-17B broadcastEnabled still false',      finalSafety.broadcastEnabled     === false)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 17C — Account Activity History + Safe Export
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n194. Phase 17C: GET /account/activity — auth + shape')
+  check('GET /account/activity without auth → 401', (await get('/account/activity')).status === 401)
+
+  const actRes  = await get('/account/activity?limit=20', accessToken)
+  const actBody = await actRes.json() as Record<string, unknown>
+  check('GET /account/activity → 200',                actRes.status === 200)
+  check('activity has tenantId',                       typeof actBody.tenantId === 'string')
+  check('activity has asOf',                           typeof actBody.asOf === 'string')
+  check('activity has events array',                   Array.isArray(actBody.events))
+  check('activity has counts object',                  typeof actBody.counts === 'object')
+
+  console.log('\n195. Phase 17C: activity events have safe fields only')
+  const actEvents = (actBody.events ?? []) as Record<string, unknown>[]
+  if (actEvents.length > 0) {
+    const ev = actEvents[0]
+    check('event has id',                              typeof ev.id === 'string')
+    check('event has action',                          typeof ev.action === 'string')
+    check('event has actorRole field',                 'actorRole' in ev)
+    check('event has createdAt',                       typeof ev.createdAt === 'string')
+    check('event has summary',                         typeof ev.summary === 'string')
+    check('event has safeMetadata (object)',           typeof ev.safeMetadata === 'object')
+    check('event omits actorUserId',                   !('actorUserId' in ev))
+    check('event omits ip',                            !('ip' in ev))
+    check('event omits userAgent',                     !('userAgent' in ev))
+    check('event has no raw metadataJson',             !('metadataJson' in ev))
+  } else {
+    check('event has id (skip — empty)',               true)
+    check('event has action (skip — empty)',           true)
+    check('event has actorRole field (skip — empty)',  true)
+    check('event has createdAt (skip — empty)',        true)
+    check('event has summary (skip — empty)',          true)
+    check('event has safeMetadata (skip — empty)',     true)
+    check('event omits actorUserId (skip — empty)',    true)
+    check('event omits ip (skip — empty)',             true)
+    check('event omits userAgent (skip — empty)',      true)
+    check('event has no raw metadataJson (skip)',      true)
+  }
+
+  console.log('\n196. Phase 17C: activity response — no secrets')
+  check('activity no passwordHash',                    !JSON.stringify(actBody).includes('passwordHash'))
+  check('activity no JWT_SECRET',                      !JSON.stringify(actBody).includes('JWT_SECRET'))
+  check('activity no credentialRef',                   !JSON.stringify(actBody).includes('credentialRef'))
+  check('activity no metaAccessTokenRef',              !JSON.stringify(actBody).includes('metaAccessTokenRef'))
+  check('activity no webhookVerifyTokenRef',           !JSON.stringify(actBody).includes('webhookVerifyTokenRef'))
+  check('activity no apiKeyRef',                       !JSON.stringify(actBody).includes('apiKeyRef'))
+  check('activity no DATABASE_URL',                    !JSON.stringify(actBody).includes('DATABASE_URL'))
+
+  console.log('\n197. Phase 17C: GET /account/export — auth + RBAC')
+  check('GET /account/export without auth → 401',     (await get('/account/export')).status === 401)
+
+  const expRes  = await get('/account/export', accessToken)
+  const expBody = await expRes.json() as Record<string, unknown>
+  check('GET /account/export → 200',                   expRes.status === 200)
+  check('export has generatedAt',                      typeof expBody.generatedAt === 'string')
+  check('export has tenantId',                         typeof expBody.tenantId === 'string')
+  check('export has schemaVersion',                    typeof expBody.schemaVersion === 'string')
+  check('export has tenant object',                    typeof expBody.tenant === 'object')
+  check('export has users array',                      Array.isArray(expBody.users))
+  check('export has onboarding',                       'onboarding' in expBody)
+  check('export has channelSetup',                     'channelSetup' in expBody)
+  check('export has activeChannels array',             Array.isArray(expBody.activeChannels))
+  check('export has knowledgeBase object',             typeof expBody.knowledgeBase === 'object')
+  check('export has aiConfig',                         'aiConfig' in expBody)
+  check('export has followUpRules array',              Array.isArray(expBody.followUpRules))
+  check('export has handoffRules array',               Array.isArray(expBody.handoffRules))
+  check('export has counts object',                    typeof expBody.counts === 'object')
+  check('export has safety object',                    typeof expBody.safety === 'object')
+  check('export has setupChecklist object',            typeof expBody.setupChecklist === 'object')
+  check('export has redaction object',                 typeof expBody.redaction === 'object')
+
+  console.log('\n198. Phase 17C: export redaction block — all required flags true')
+  const redaction = (expBody.redaction ?? {}) as Record<string, unknown>
+  check('redaction.passwordHashExcluded=true',         redaction.passwordHashExcluded === true)
+  check('redaction.credentialRefsExcluded=true',       redaction.credentialRefsExcluded === true)
+  check('redaction.tokensExcluded=true',               redaction.tokensExcluded === true)
+  check('redaction.encryptedBlobsExcluded=true',       redaction.encryptedBlobsExcluded === true)
+  check('redaction.rawProviderDataExcluded=true',      redaction.rawProviderDataExcluded === true)
+  check('redaction.rawConversationsExcluded=true',     redaction.rawConversationsExcluded === true)
+  check('redaction.rawKnowledgeAnswersExcluded=true',  redaction.rawKnowledgeAnswersExcluded === true)
+  check('redaction.metaAccessTokenRefExcluded=true',   redaction.metaAccessTokenRefExcluded === true)
+
+  console.log('\n199. Phase 17C: export — secrets actually excluded (excluding redaction block)')
+  // Redaction block intentionally lists key names — exclude it from the secret-substring scan
+  const expBodyWithoutRedaction = { ...expBody } as Record<string, unknown>
+  delete expBodyWithoutRedaction.redaction
+  const expJson = JSON.stringify(expBodyWithoutRedaction)
+  check('export no passwordHash (outside redaction)',         !expJson.includes('passwordHash'))
+  check('export no credentialRef (outside redaction)',        !expJson.includes('credentialRef'))
+  check('export no metaAccessTokenRef (outside redaction)',   !expJson.includes('metaAccessTokenRef'))
+  check('export no webhookVerifyTokenRef (outside redaction)',!expJson.includes('webhookVerifyTokenRef'))
+  check('export no metaAppSecretRef (outside redaction)',     !expJson.includes('metaAppSecretRef'))
+  check('export no apiKeyRef (outside redaction)',            !expJson.includes('apiKeyRef'))
+  check('export no JWT_SECRET',                               !expJson.includes('JWT_SECRET'))
+  check('export no DATABASE_URL',                             !expJson.includes('DATABASE_URL'))
+
+  console.log('\n200. Phase 17C: export users do not include passwordHash')
+  const expUsers = (expBody.users ?? []) as Record<string, unknown>[]
+  if (expUsers.length > 0) {
+    const u = expUsers[0]
+    check('user has id',                                typeof u.id === 'string')
+    check('user has email',                             typeof u.email === 'string')
+    check('user has role',                              typeof u.role === 'string')
+    check('user no passwordHash key',                   !('passwordHash' in u))
+  } else {
+    check('user has id (skip — empty)',                 true)
+    check('user has email (skip — empty)',              true)
+    check('user has role (skip — empty)',               true)
+    check('user no passwordHash key (skip — empty)',    true)
+  }
+
+  console.log('\n201. Phase 17C: export KB has questions only, NOT answers')
+  const expKb = (expBody.knowledgeBase ?? {}) as Record<string, unknown>
+  const kbItems = (expKb.items ?? []) as Record<string, unknown>[]
+  if (kbItems.length > 0) {
+    const k = kbItems[0]
+    check('kb item has question',                       typeof k.question === 'string')
+    check('kb item no answer key',                      !('answer' in k))
+  } else {
+    check('kb item has question (skip — empty)',        true)
+    check('kb item no answer key (skip — empty)',       true)
+  }
+  // Follow-up rules omit messageTemplate
+  const expFur = (expBody.followUpRules ?? []) as Record<string, unknown>[]
+  if (expFur.length > 0) {
+    check('followUpRule has trigger',                   typeof expFur[0].trigger === 'string')
+    check('followUpRule no messageTemplate',            !('messageTemplate' in expFur[0]))
+  } else {
+    check('followUpRule has trigger (skip)',            true)
+    check('followUpRule no messageTemplate (skip)',     true)
+  }
+
+  console.log('\n202. Phase 17C: export safety flags still off')
+  const expSafety = (expBody.safety ?? {}) as Record<string, unknown>
+  check('export safety.realWaSessionEnabled=false',   expSafety.realWaSessionEnabled === false)
+  check('export safety.realMetaSendEnabled=false',    expSafety.realMetaSendEnabled  === false)
+  check('export safety.realSendCurrentlyOff=true',    expSafety.realSendCurrentlyOff === true)
+  check('export safety.broadcastEnabled=false',       expSafety.broadcastEnabled     === false)
+  check('export safety.realSendEnabled=false',        expSafety.realSendEnabled      === false)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

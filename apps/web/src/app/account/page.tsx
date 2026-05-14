@@ -57,7 +57,53 @@ export default function AccountPage() {
   const [saving,   setSaving]   = useState(false)
   const [saveOk,   setSaveOk]   = useState(false)
 
+  // Phase 17C — tabs + activity + export
+  type Tab = 'overview' | 'activity' | 'export'
+  const [tab,         setTab]         = useState<Tab>('overview')
+  const [activity,    setActivity]    = useState<AnyData | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [exportData,  setExportData]  = useState<AnyData | null>(null)
+  const [exportLoading, setExportLoading] = useState(false)
+
   useEffect(() => { setAuthed(!!getToken()) }, [])
+
+  const loadActivity = useCallback(async () => {
+    const tok = getToken()
+    if (!tok) return
+    setActivityLoading(true); setError('')
+    try {
+      const r = await fetch(`${API_BASE}/account/activity?limit=20`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setActivity(await r.json() as AnyData)
+    } catch (e) { setError((e as Error).message) }
+    finally { setActivityLoading(false) }
+  }, [])
+
+  const loadExport = useCallback(async () => {
+    const tok = getToken()
+    if (!tok) return
+    setExportLoading(true); setError('')
+    try {
+      const r = await fetch(`${API_BASE}/account/export`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` })) as { error?: string }
+        throw new Error(err.error ?? `HTTP ${r.status}`)
+      }
+      setExportData(await r.json() as AnyData)
+    } catch (e) { setError((e as Error).message) }
+    finally { setExportLoading(false) }
+  }, [])
+
+  const downloadExport = () => {
+    if (!exportData) return
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `omni-tenant-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   const loadOverview = useCallback(async () => {
     const tok = getToken()
@@ -126,6 +172,36 @@ export default function AccountPage() {
         </button>
       </div>
 
+      {/* Tabs (Phase 17C) */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', borderBottom: '1px solid #e5e7eb' }}>
+        {([
+          { id: 'overview', label: 'Overview',  icon: '🏠' },
+          { id: 'activity', label: 'Activity',  icon: '📜' },
+          { id: 'export',   label: 'Export',    icon: '📦' },
+        ] as { id: Tab; label: string; icon: string }[]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => {
+              setTab(t.id)
+              if (t.id === 'activity' && !activity) void loadActivity()
+            }}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'none',
+              border: 'none',
+              borderBottom: tab === t.id ? `2px solid ${ACCENT}` : '2px solid transparent',
+              color: tab === t.id ? ACCENT : NEUTRAL,
+              fontWeight: tab === t.id ? 700 : 500,
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              marginBottom: -1,
+            }}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.625rem 0.875rem', color: DANGER, fontSize: '0.875rem', marginBottom: '1rem' }}>
           {error}
@@ -137,6 +213,7 @@ export default function AccountPage() {
         </div>
       )}
 
+      {tab === 'overview' && <>
       {/* Two-column layout for tenant + user cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
 
@@ -260,6 +337,109 @@ export default function AccountPage() {
           </a>
         ))}
       </div>
+      </>}
+
+      {/* ── Activity tab (Phase 17C) ────────────────────────────────────── */}
+      {tab === 'activity' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>📜 Recent Account Activity</h2>
+            <button onClick={loadActivity} disabled={activityLoading} style={btnSecondary}>
+              {activityLoading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
+          <p style={{ color: NEUTRAL, fontSize: '0.8125rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+            Audit-derived activity for your tenant. Raw metadata values are filtered to a safe whitelist; no secrets, tokens, or credentials are shown.
+          </p>
+          <Card title={`Events (${((activity?.events ?? []) as AnyData[]).length})`}>
+            {((activity?.events ?? []) as AnyData[]).length === 0 ? (
+              <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>
+                {activityLoading ? 'Loading recent activity…' : 'No account activity recorded yet.'}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {((activity?.events ?? []) as AnyData[]).map(e => (
+                  <div key={String(e.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6', fontSize: '0.8125rem' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: ACCENT, marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 600, color: '#111827' }}>{String(e.summary ?? e.action)}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                          {e.actorRole ? `${String(e.actorRole)} · ` : ''}{e.createdAt ? new Date(String(e.createdAt)).toLocaleString() : '—'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: NEUTRAL, marginTop: 2 }}>
+                        <code style={{ background: '#f9fafb', padding: '0 4px', borderRadius: 3 }}>{String(e.action)}</code>
+                        {!!e.safeMetadata && Object.keys(e.safeMetadata as object).length > 0 && (
+                          <span style={{ marginLeft: '0.5rem', fontFamily: 'monospace', color: '#9ca3af' }}>
+                            {JSON.stringify(e.safeMetadata)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ── Export tab (Phase 17C) ─────────────────────────────────────── */}
+      {tab === 'export' && (
+        <div>
+          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700, color: '#111827' }}>📦 Safe Tenant Export</h2>
+          <Card title="What this export includes">
+            <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
+              <li>Tenant profile (id, slug, name, language, plan, active status)</li>
+              <li>Users list (id, email, name, role, isActive — NO passwordHash)</li>
+              <li>Onboarding draft fields (company name, industry, goals)</li>
+              <li>Channel setup status only (no credentialRef, no tokens)</li>
+              <li>Knowledge base questions list (NOT answers)</li>
+              <li>AI config provider label only (no API key refs)</li>
+              <li>Follow-up rule keys + delay (NOT message templates)</li>
+              <li>Handoff rule conditions</li>
+              <li>Counts: users, customers, conversations, audit events</li>
+              <li>Safety flags and redaction summary</li>
+            </ul>
+          </Card>
+          <Card title="What this export excludes">
+            <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
+              <li>Password hashes</li>
+              <li>Encrypted credential blobs (credentialRef, metaAccessTokenRef, webhookVerifyTokenRef, apiKeyRef)</li>
+              <li>Raw tokens of any kind</li>
+              <li>WhatsApp / Meta provider session or QR data</li>
+              <li>Full customer conversations or message content</li>
+              <li>Knowledge base answers (questions only, to avoid leaking pasted content)</li>
+              <li>Follow-up message templates</li>
+            </ul>
+          </Card>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+            <button onClick={loadExport} disabled={exportLoading} style={btnPrimary}>
+              {exportLoading ? 'Generating…' : (exportData ? 'Regenerate' : 'Generate Safe Export')}
+            </button>
+            {exportData && (
+              <button onClick={downloadExport} style={btnSecondary}>
+                ⬇  Download JSON
+              </button>
+            )}
+          </div>
+          {!isOwnerOrAdmin && (
+            <div style={{ marginTop: '0.625rem', fontSize: '0.75rem', color: WARN_C }}>
+              Note: Export is restricted to OWNER and ADMIN.
+            </div>
+          )}
+          {exportData && (
+            <div style={{ marginTop: '1rem' }}>
+              <Card title={`Export Preview (generated ${String(exportData.generatedAt ?? '')})`}>
+                <pre style={{ fontSize: '0.6875rem', fontFamily: 'monospace', background: '#f9fafb', padding: '0.75rem', borderRadius: 6, border: '1px solid #e5e7eb', overflow: 'auto', maxHeight: 360, margin: 0 }}>
+                  {JSON.stringify(exportData, null, 2)}
+                </pre>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
     </main>
   )
 }

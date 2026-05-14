@@ -234,3 +234,12 @@ New endpoints + page:
 
 No new permission tiers added. Existing RBAC (OWNER/ADMIN/MANAGER/AGENT/VIEWER) used.
 See `docs/TENANT_ACCOUNT_MANAGEMENT.md`.
+
+
+## Phase 17C: Tenant Activity History + Safe Account Export
+
+- `GET /account/activity` — safe tenant-scoped activity feed (audit-log derived); whitelisted metadata only
+- `GET /account/export` — OWNER/ADMIN only; safe JSON summary; explicit `redaction` block; NEVER includes passwordHash, credentialRef, raw tokens, encrypted blobs, raw provider data, full conversations, KB answers, or follow-up templates
+- `/account` UI: three tabs (Overview / Activity / Export) with Generate + Download JSON button
+
+See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.

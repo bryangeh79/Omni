@@ -98,3 +98,11 @@ Admin activity is recorded in the `AuditLog` table and visible at `/audit`. See 
 - `/activation/preflight` — API: pre-flight readiness checks
 - `/activation/dry-run` — API: simulate activation without enabling real send
 - `/activation/health` — API: post-activation safety flags + channel health
+
+
+## Phase 17C: Self-service Tenant Export
+
+Operators should note:
+- `GET /account/export` is a tenant-scoped safe summary — NOT a backup substitute
+- Production backup procedure remains `pg_dump` (see Backup & Restore above)
+- The export is intended for tenant data portability, audit review, and customer-facing transparency
