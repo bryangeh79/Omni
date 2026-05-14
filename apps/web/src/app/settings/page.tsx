@@ -41,7 +41,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function SettingsPage() {
-  const [authed,  setAuthed]  = useState(false)
+  const [authed,  setAuthed]  = useState<boolean | null>(null)
   const [overview, setOverview] = useState<SettingsOverview | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
@@ -76,6 +76,8 @@ export default function SettingsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

@@ -86,7 +86,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 // ── Main Onboarding Wizard ────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const [authed,   setAuthed]   = useState(false)
+  const [authed,   setAuthed]   = useState<boolean | null>(null)
   const [step,     setStep]     = useState(0)
   const [busy,     setBusy]     = useState(false)
   const [error,    setError]    = useState('')
@@ -185,6 +185,8 @@ export default function OnboardingPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '启用失败') }
     finally { setBusy(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

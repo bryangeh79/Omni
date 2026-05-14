@@ -87,10 +87,12 @@ const SUPPORT_READINESS = [
 ]
 
 export default function RunbookPage() {
-  const [authed,  setAuthed]  = useState(false)
+  const [authed,  setAuthed]  = useState<boolean | null>(null)
   const [section, setSection] = useState<string>('health')
 
   useEffect(() => { setAuthed(!!getToken()) }, [])
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onSuccess={() => setAuthed(true)} />
 

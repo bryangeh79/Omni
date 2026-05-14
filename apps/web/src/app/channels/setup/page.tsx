@@ -111,7 +111,7 @@ function ChannelCard({ type, icon, title, tagline, pros, cons, boundary, selecte
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ChannelSetupPage() {
-  const [authed,       setAuthed]       = useState(false)
+  const [authed,       setAuthed]       = useState<boolean | null>(null)
   const [status,       setStatus]       = useState<ChannelSetupStatus | null>(null)
   const [credStatus,   setCredStatus]   = useState<CredentialsStatus | null>(null)
   const [selected,     setSelected]     = useState('')
@@ -237,6 +237,8 @@ export default function ChannelSetupPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '激活确认失败') }
     finally { setConfirmingAct(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

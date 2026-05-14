@@ -166,7 +166,7 @@ function PipelineSection({ pipeline }: { pipeline: BossPipeline }) {
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function BossDashboardPage() {
-  const [authed,    setAuthed]    = useState(false)
+  const [authed,    setAuthed]    = useState<boolean | null>(null)
   const [today,     setToday]     = useState<BossToday | null>(null)
   const [metrics,   setMetrics]   = useState<BossMetrics | null>(null)
   const [pipeline,  setPipeline]  = useState<BossPipeline | null>(null)
@@ -218,6 +218,8 @@ export default function BossDashboardPage() {
     }
     return () => { src?.close(); setSseTransport('unknown') }
   }, [authed, load])
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); load() }} />
 

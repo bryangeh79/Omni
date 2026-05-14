@@ -48,7 +48,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 const inputCss: React.CSSProperties = { display: 'block', width: '100%', padding: '0.5rem 0.625rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box', fontSize: '0.875rem' }
 
 export default function AccountPage() {
-  const [authed,   setAuthed]   = useState(false)
+  const [authed,   setAuthed]   = useState<boolean | null>(null)
   const [data,     setData]     = useState<AnyData | null>(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
@@ -176,6 +176,8 @@ export default function AccountPage() {
     } catch (e) { setError((e as Error).message) }
     finally { setSaving(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onSuccess={() => setAuthed(true)} />
 

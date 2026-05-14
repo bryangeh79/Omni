@@ -52,7 +52,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 export default function TeamPage() {
-  const [authed,    setAuthed]    = useState(false)
+  const [authed,    setAuthed]    = useState<boolean | null>(null)
   const [myRole,    setMyRole]    = useState<string | null>(null)
   const [team,      setTeam]      = useState<TeamMembersResponse | null>(null)
   const [loading,   setLoading]   = useState(false)
@@ -117,6 +117,8 @@ export default function TeamPage() {
       await load()
     } catch (ex) { setError(ex instanceof Error ? ex.message : '状态更新失败') }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void load() }} />
 

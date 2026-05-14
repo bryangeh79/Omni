@@ -62,7 +62,7 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
 }
 
 export default function BillingPage() {
-  const [authed,   setAuthed]   = useState(false)
+  const [authed,   setAuthed]   = useState<boolean | null>(null)
   const [plans,    setPlans]    = useState<{ plans: BillingPlan[]; currentPlan: string; boundary: Record<string,string>; paymentGateway: string } | null>(null)
   const [usage,    setUsage]    = useState<UsageSummary | null>(null)
   const [selecting, setSelecting] = useState(false)
@@ -90,6 +90,8 @@ export default function BillingPage() {
     } catch (e) { setError(toChineseError(e, '选择套餐失败')) }
     finally { setSelecting(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

@@ -44,7 +44,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 // ── Main QR Staging Page ──────────────────────────────────────────────────────
 export default function WaWebQrPage() {
-  const [authed,     setAuthed]     = useState(false)
+  const [authed,     setAuthed]     = useState<boolean | null>(null)
   const [status,     setStatus]     = useState<WaWebStatus | null>(null)
   const [sessStatus, setSessStatus] = useState<{ sessionStatus: string; hasSessionRef: boolean; channelIsActive: boolean; lastUpdatedAt: string | null } | null>(null)
   const [loading,    setLoading]    = useState(false)
@@ -77,6 +77,8 @@ export default function WaWebQrPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '请求失败') }
     finally { setRequesting(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

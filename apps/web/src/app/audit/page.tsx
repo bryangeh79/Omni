@@ -66,7 +66,7 @@ function formatSafeMetadata(meta: Record<string, unknown> | undefined): string {
 }
 
 export default function AuditPage() {
-  const [authed, setAuthed]   = useState(false)
+  const [authed, setAuthed]   = useState<boolean | null>(null)
   const [data,   setData]     = useState<AuditLogsResponse | null>(null)
   const [error,  setError]    = useState('')
   const [loading, setLoading] = useState(false)
@@ -96,6 +96,8 @@ export default function AuditPage() {
   }, [filterAction, filterEntityType])
 
   useEffect(() => { if (authed) load(1) }, [authed, load])
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onSuccess={() => setAuthed(true)} />
 

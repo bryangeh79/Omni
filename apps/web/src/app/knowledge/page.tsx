@@ -290,7 +290,7 @@ function KbRow({
 
 // ── Main Knowledge Page ───────────────────────────────────────────────────────
 export default function KnowledgePage() {
-  const [authed,      setAuthed]      = useState(false)
+  const [authed,      setAuthed]      = useState<boolean | null>(null)
   const [items,       setItems]       = useState<KnowledgeItem[]>([])
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
@@ -346,6 +346,8 @@ export default function KnowledgePage() {
     setItems(prev => prev.filter(i => i.id !== id))
     setTotal(prev => Math.max(0, prev - 1))
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void load() }} />
 

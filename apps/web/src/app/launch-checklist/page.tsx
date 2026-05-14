@@ -84,7 +84,7 @@ function ItemCard({ item }: { item: ChecklistItem }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LaunchChecklistPage() {
-  const [authed,    setAuthed]    = useState(false)
+  const [authed,    setAuthed]    = useState<boolean | null>(null)
   const [checklist, setChecklist] = useState<LaunchChecklist | null>(null)
   const [staging,   setStaging]   = useState<StagingReadiness | null>(null)
   const [loading,   setLoading]   = useState(false)
@@ -107,6 +107,8 @@ export default function LaunchChecklistPage() {
     catch (e) { setError(toChineseError(e, '加载清单失败')) }
     finally { setLoading(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void loadChecklist() }} />
 

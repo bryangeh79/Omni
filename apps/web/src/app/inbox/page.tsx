@@ -289,7 +289,7 @@ function CustomerCard({
 
 // ── Main Inbox ────────────────────────────────────────────────────────────────
 export default function InboxPage() {
-  const [authed,        setAuthed]        = useState(false)
+  const [authed,        setAuthed]        = useState<boolean | null>(null)
   const [filter,        setFilter]        = useState<ConversationFilter>('all')
   const [search,        setSearch]        = useState('')
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
@@ -454,6 +454,7 @@ export default function InboxPage() {
     setMessages([])
   }
 
+  if (authed === null) return null
   if (!authed) {
     return <LoginForm onLogin={() => setAuthed(true)} />
   }

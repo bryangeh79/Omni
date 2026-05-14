@@ -146,7 +146,7 @@ interface ApiStatus {
 }
 
 export default function ReleaseChecklistPage() {
-  const [authed,    setAuthed]    = useState(false)
+  const [authed,    setAuthed]    = useState<boolean | null>(null)
   const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null)
   const [loading,   setLoading]   = useState(false)
 
@@ -167,6 +167,8 @@ export default function ReleaseChecklistPage() {
   }
 
   useEffect(() => { if (authed) void loadApiStatus() }, [authed])
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onSuccess={() => setAuthed(true)} />
 

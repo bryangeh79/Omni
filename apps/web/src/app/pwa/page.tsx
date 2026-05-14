@@ -716,7 +716,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 
 // ── Main PWA ──────────────────────────────────────────────────────────────────
 export default function PwaPage() {
-  const [authed,      setAuthed]      = useState(false)
+  const [authed,      setAuthed]      = useState<boolean | null>(null)
   const [tab,         setTab]         = useState<TabId>('boss')
   const [allConvs,    setAllConvs]    = useState<ConversationSummary[]>([])
   const [humanConvs,  setHumanConvs]  = useState<ConversationSummary[]>([])
@@ -825,6 +825,7 @@ export default function PwaPage() {
     setMessages([])
   }
 
+  if (authed === null) return null
   if (!authed) return <MobileLoginForm onLogin={() => setAuthed(true)} />
 
   return (

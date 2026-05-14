@@ -79,7 +79,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 // ── Main Meta Webhook Page ─────────────────────────────────────────────────────
 export default function MetaWebhookPage() {
-  const [authed,      setAuthed]      = useState(false)
+  const [authed,      setAuthed]      = useState<boolean | null>(null)
   const [status,      setStatus]      = useState<MetaWebhookStatus | null>(null)
   const [currentStep, setCurrentStep] = useState(0)
   const [saving,      setSaving]      = useState(false)
@@ -123,6 +123,8 @@ export default function MetaWebhookPage() {
     } catch (e) { setError(e instanceof Error ? e.message : '测试失败') }
     finally { setTesting(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
 

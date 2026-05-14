@@ -82,7 +82,7 @@ function relTime(iso: string): string {
 // /activation/timeline server now returns sanitized safeMetadata only.
 
 export default function ActivationMonitoringPage() {
-  const [authed,    setAuthed]    = useState(false)
+  const [authed,    setAuthed]    = useState<boolean | null>(null)
   const [loading,   setLoading]   = useState(false)
   const [preflight, setPreflight] = useState<AnyData | null>(null)
   const [health,    setHealth]    = useState<AnyData | null>(null)
@@ -115,6 +115,8 @@ export default function ActivationMonitoringPage() {
   }, [])
 
   useEffect(() => { if (authed) void loadAll() }, [authed, loadAll])
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onSuccess={() => setAuthed(true)} />
 

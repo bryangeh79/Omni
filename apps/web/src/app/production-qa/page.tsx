@@ -52,7 +52,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 }
 
 export default function ProductionQaPage() {
-  const [authed,  setAuthed]  = useState(false)
+  const [authed,  setAuthed]  = useState<boolean | null>(null)
   const [qa,      setQa]      = useState<ProductionQaResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -68,6 +68,8 @@ export default function ProductionQaPage() {
     catch (e) { setError(toChineseError(e, 'QA 检查失败')) }
     finally { setLoading(false) }
   }
+
+  if (authed === null) return null
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void runQa() }} />
 
