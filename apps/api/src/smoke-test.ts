@@ -3489,12 +3489,123 @@ async function smoke() {
   check('POST-16B realMetaSendEnabled still false',    finalFlags.realMetaSendEnabled  === false)
   check('POST-16B realSendCurrentlyOff still true',   finalFlags.realSendCurrentlyOff === true)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 17A — Tenant Self-service Signup
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Unique test slug so each smoke run creates a fresh tenant
+  const SMOKE_SLUG_17A = `smoke17a-${Date.now().toString(36)}`
+
+  console.log('\n178. Phase 17A: POST /tenants/signup — validation checks')
+  // Missing required fields
+  check('signup missing businessName → 400',   (await post('/tenants/signup', { slug: SMOKE_SLUG_17A, ownerName: 'Test', ownerEmail: 'test@test.com', password: 'pass1234' })).status === 400)
+  check('signup missing ownerEmail → 400',     (await post('/tenants/signup', { businessName: 'Test', slug: SMOKE_SLUG_17A, ownerName: 'Test', password: 'pass1234' })).status === 400)
+  check('signup short password → 400',         (await post('/tenants/signup', { businessName: 'Test', slug: SMOKE_SLUG_17A, ownerName: 'Test', ownerEmail: 'x@x.com', password: 'short' })).status === 400)
+  check('signup invalid email → 400',          (await post('/tenants/signup', { businessName: 'Test', slug: SMOKE_SLUG_17A, ownerName: 'Test', ownerEmail: 'not-email', password: 'pass1234' })).status === 400)
+
+  console.log('\n179. Phase 17A: POST /tenants/signup — successful creation')
+  const signupRes  = await post('/tenants/signup', {
+    businessName:      'Smoke Test Business 17A',
+    slug:              SMOKE_SLUG_17A,
+    ownerName:         'Smoke Owner',
+    ownerEmail:        `owner-${Date.now()}@smoke17a.test`,
+    password:          'SmokePass123!',
+    industry:          'retail',
+    channelPreference: 'META_WA_BUSINESS',
+    primaryGoal:       'sales',
+  })
+  const signupBody = await signupRes.json() as Record<string, unknown>
+  check('POST /tenants/signup → 201',               signupRes.status === 201)
+  check('signup has tenantId',                       typeof signupBody.tenantId === 'string')
+  check('signup has ownerUserId',                    typeof signupBody.ownerUserId === 'string')
+  check('signup has slug',                           signupBody.slug === SMOKE_SLUG_17A)
+  check('signup has accessToken',                    typeof signupBody.accessToken === 'string')
+  check('signup has refreshToken',                   typeof signupBody.refreshToken === 'string')
+  check('signup nextRoute=/onboarding',              signupBody.nextRoute === '/onboarding')
+  check('signup emailSent=false',                    signupBody.emailSent === false)
+  check('signup emailVerificationMode=STUB',         signupBody.emailVerificationMode === 'STUB')
+  check('signup onboardingDraftCreated=true',        signupBody.onboardingDraftCreated === true)
+  check('signup channelDraftCreated=true',           signupBody.channelDraftCreated === true)
+  check('signup starterKbCreated=true',              signupBody.starterKbCreated === true)
+
+  console.log('\n180. Phase 17A: signup response safety checks')
+  // passwordHash NEVER in response
+  check('signup no passwordHash in response',        !JSON.stringify(signupBody).includes('passwordHash'))
+  // No raw secrets
+  check('signup no JWT_SECRET in response',          !JSON.stringify(signupBody).includes('JWT_SECRET'))
+  check('signup no DATABASE_URL in response',        !JSON.stringify(signupBody).includes('DATABASE_URL'))
+  // Safety flags
+  const signupSafety = (signupBody.safety ?? {}) as Record<string, unknown>
+  check('signup safety.realSendEnabled=false',       signupSafety.realSendEnabled    === false)
+  check('signup safety.broadcastEnabled=false',      signupSafety.broadcastEnabled   === false)
+  check('signup safety.realMetaSendEnabled=false',   signupSafety.realMetaSendEnabled === false)
+  check('signup safety.waSessionEnabled=false',      signupSafety.waSessionEnabled   === false)
+
+  console.log('\n181. Phase 17A: signup creates usable tenant (token works)')
+  const signupToken = String(signupBody.accessToken ?? '')
+  const signupMeRes = await get('/auth/me', signupToken)
+  check('signup token valid — /auth/me → 200',        signupMeRes.status === 200)
+  const signupMeBody = await signupMeRes.json() as Record<string, unknown>
+  check('signup /auth/me returns matching tenantId',  signupMeBody.tenantId === signupBody.tenantId)
+  check('signup /auth/me no passwordHash',            !JSON.stringify(signupMeBody).includes('passwordHash'))
+
+  console.log('\n182. Phase 17A: duplicate slug → 409')
+  const dup17aRes = await post('/tenants/signup', {
+    businessName: 'Duplicate Biz',
+    slug:         SMOKE_SLUG_17A,
+    ownerName:    'Other Owner',
+    ownerEmail:   `other-${Date.now()}@smoke17a.test`,
+    password:     'DupPass1234!',
+  })
+  check('duplicate slug → 409',                      dup17aRes.status === 409)
+  const dup17aBody = await dup17aRes.json() as Record<string, unknown>
+  check('409 response has error field',              typeof dup17aBody.error === 'string')
+  check('409 response has suggestion field',         typeof dup17aBody.suggestion === 'string')
+
+  console.log('\n183. Phase 17A: verify-email-dry-run — no real email')
+  const tenantId17A = String(signupBody.tenantId ?? '')
+  const email17A    = String(signupBody.ownerEmail ?? '')
+  check('verify-email-dry-run missing fields → 400',
+    (await post('/tenants/signup/verify-email-dry-run', {})).status === 400)
+  check('verify-email-dry-run invalid email → 400',
+    (await post('/tenants/signup/verify-email-dry-run', { tenantId: tenantId17A, email: 'not-email' })).status === 400)
+
+  const ver17aRes  = await post('/tenants/signup/verify-email-dry-run', { tenantId: tenantId17A, email: email17A })
+  const ver17aBody = await ver17aRes.json() as Record<string, unknown>
+  check('POST verify-email-dry-run → 200',           ver17aRes.status === 200)
+  check('verify dryRun=true',                        ver17aBody.dryRun    === true)
+  check('verify emailSent=false',                    ver17aBody.emailSent === false)
+  check('verify verificationMode=STUB',              ver17aBody.verificationMode === 'STUB')
+  check('verify no secrets in response',             !JSON.stringify(ver17aBody).includes('JWT_SECRET'))
+
+  console.log('\n184. Phase 17A: signup audit event created')
+  await new Promise(r => setTimeout(r, 200))
+  // Use signup token to check audit logs for the new tenant
+  const signupAuditRes  = await get('/audit/logs?action=TENANT_SIGNUP', signupToken)
+  const signupAuditBody = await signupAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs?action=TENANT_SIGNUP → 200 (new tenant token)', signupAuditRes.status === 200)
+  const signupAuditLogs = (signupAuditBody.logs ?? []) as Record<string, unknown>[]
+  check('TENANT_SIGNUP audit event exists for new tenant', signupAuditLogs.some(l => l.action === 'TENANT_SIGNUP'))
+
+  console.log('\n185. Phase 17A: signup safety — real send flags unchanged')
+  const pfAfterRes  = await get('/activation/preflight', signupToken)
+  const pfAfterBody = await pfAfterRes.json() as Record<string, unknown>
+  check('preflight for new tenant → 200',            pfAfterRes.status === 200)
+  const pfAfterFlags = (pfAfterBody.currentFlags ?? {}) as Record<string, unknown>
+  check('new tenant realWaSessionEnabled=false',     pfAfterFlags.realWaSessionEnabled === false)
+  check('new tenant realMetaSendEnabled=false',      pfAfterFlags.realMetaSendEnabled  === false)
+  check('new tenant realSendCurrentlyOff=true',      pfAfterFlags.realSendCurrentlyOff === true)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up smoke test records...')
+  // Cleanup the Phase 17A smoke tenant (after logout so token is no longer active)
+  if (typeof signupBody !== 'undefined' && signupBody.tenantId) {
+    await prismaCleanupSmokeTenant(String(signupBody.tenantId))
+  }
   if (convId)         await prismaCleanupConversation(convId)
   if (metaChannelId)  await prismaCleanupMetaChannel(metaChannelId)
   if (createdId)      await prismaDeleteCustomer(createdId)
@@ -3761,6 +3872,25 @@ async function prismaCleanupAuditLogs(): Promise<void> {
     await p.$disconnect()
     console.log(`  🗑️  ${deleted.count} audit log records deleted`)
   } catch (e) { console.warn('  ⚠️  audit log cleanup warning:', e) }
+}
+
+async function prismaCleanupSmokeTenant(tenantId: string): Promise<void> {
+  try {
+    const { PrismaClient } = await import('@omni/db')
+    const p = new PrismaClient()
+    // Delete all child records first (order matters for FK constraints)
+    await p.auditLog.deleteMany({ where: { tenantId } })
+    await p.knowledgeItem.deleteMany({ where: { tenantId } })
+    await p.followUpRule.deleteMany({ where: { tenantId } })
+    await p.handoffRule.deleteMany({ where: { tenantId } })
+    await p.aiConfig.deleteMany({ where: { tenantId } })
+    await p.channelSetupDraft.deleteMany({ where: { tenantId } })
+    await p.onboardingDraft.deleteMany({ where: { tenantId } })
+    await p.user.deleteMany({ where: { tenantId } })
+    await p.tenant.delete({ where: { id: tenantId } })
+    await p.$disconnect()
+    console.log(`  🗑️  smoke tenant ${tenantId} and all child records deleted`)
+  } catch (e) { console.warn('  ⚠️  smoke tenant cleanup warning:', e) }
 }
 
 smoke().catch((e) => { console.error('[smoke] Fatal:', e); process.exit(1) })

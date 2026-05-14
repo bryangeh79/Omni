@@ -1144,6 +1144,56 @@ export async function createDemoAuditEvent(): Promise<{ created: boolean; action
   return apiFetch<{ created: boolean; action: string; stub: boolean }>('/audit/demo-event', { method: 'POST' })
 }
 
+// ── Tenant Self-service Signup (Phase 17A) ────────────────────────────────────
+export interface SignupInput {
+  businessName:      string
+  slug:              string
+  ownerName:         string
+  ownerEmail:        string
+  password:          string
+  industry:          string
+  channelPreference: string
+  primaryGoal:       string
+}
+
+export interface SignupResult {
+  tenantId:                   string
+  slug:                       string
+  businessName:               string
+  ownerUserId:                string
+  ownerEmail:                 string
+  accessToken:                string
+  refreshToken:               string
+  emailVerificationRequired:  boolean
+  emailVerificationMode:      string
+  emailSent:                  boolean
+  nextRoute:                  string
+  onboardingDraftCreated:     boolean
+  channelDraftCreated:        boolean
+  starterKbCreated:           boolean
+  safety: {
+    realSendEnabled:    boolean
+    broadcastEnabled:   boolean
+    realMetaSendEnabled: boolean
+    waSessionEnabled:   boolean
+  }
+  note: string
+}
+
+export async function tenantSignup(input: SignupInput): Promise<SignupResult> {
+  const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
+  const res = await fetch(`${API}/tenants/signup`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(err.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<SignupResult>
+}
+
 // ── SSE transport mode (from connected event) ─────────────────────────────────
 export type SseTransport = 'redis' | 'memory' | 'unknown'
 

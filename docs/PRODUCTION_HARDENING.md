@@ -216,3 +216,11 @@ New endpoints:
 
 New page: `/activation/monitoring` — unified dashboard.
 See `docs/ACTIVATION_MONITORING.md`.
+
+## Phase 17A: Tenant Self-service Signup
+
+- `POST /tenants/signup` — public endpoint, creates tenant + owner + OnboardingDraft + ChannelSetupDraft + starter KB + AiConfig + default rules; issues access/refresh tokens
+- `POST /tenants/signup/verify-email-dry-run` — stub only, dryRun=true, emailSent=false
+- `/signup` web page — polished enterprise SaaS signup form
+
+See `docs/TENANT_ONBOARDING_SELF_SERVICE.md` for full documentation.
