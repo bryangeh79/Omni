@@ -4688,7 +4688,8 @@ async function smoke() {
   // Audit endpoint is tenant-scoped by JWT — use the R9B tenant's own token
   // (after reset-password-stub we still have the prior r9bNewPwdLogin response).
   const r9bAuditTok = (await (await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bReset.temporaryPassword as string })).json() as Record<string, unknown>).accessToken as string
-  const r9bAuditRes = await get(`/audit/logs?entityType=Tenant&pageSize=50`, r9bAuditTok)
+  // Don't filter by entityType — TENANT_PASSWORD_RESET_STUB targets the User row, not Tenant.
+  const r9bAuditRes = await get(`/audit/logs?pageSize=50`, r9bAuditTok)
   check('audit list → 200', r9bAuditRes.status === 200)
   const r9bAudit = await r9bAuditRes.json() as Record<string, unknown>
   const r9bAuditItems = (r9bAudit.logs ?? r9bAudit.data ?? []) as Array<Record<string, unknown>>
