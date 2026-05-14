@@ -759,6 +759,10 @@ export async function onboardingRoutes(app: FastifyInstance) {
       }
 
       const trimmedProduct = productName.trim()
+      // Stored questions are prefixed `[ProductName] ` for tenant-visible context (no schema migration).
+      // For dedupe we compare the FULL stored form so the same incoming question can be saved
+      // separately under a different product (correct per-product scoping).
+      const productPrefix = `[${trimmedProduct}] `
 
       // Fetch existing active PRODUCT_FAQ questions for duplicate detection
       const existing = await prisma.knowledgeItem.findMany({
@@ -773,17 +777,17 @@ export async function onboardingRoutes(app: FastifyInstance) {
 
       for (const f of faqs) {
         const q = f.question!.trim()
-        const norm = q.toLowerCase()
+        const fullQ = `${productPrefix}${q}`
+        const norm = fullQ.toLowerCase()
         if (existingQs.has(norm) || seenInBatch.has(norm)) {
           skippedDuplicates++
           continue
         }
         seenInBatch.add(norm)
-        // Prefix question with product tag so 知识库 list shows context without schema migration.
         toCreate.push({
           tenantId,
           type:     KnowledgeItemType.PRODUCT_FAQ,
-          question: `[${trimmedProduct}] ${q}`,
+          question: fullQ,
           answer:   f.answer!.trim(),
           language: f.language?.trim() || 'zh',
           isActive: true,
