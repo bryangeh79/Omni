@@ -4533,6 +4533,180 @@ async function smoke() {
   // Final billing-state reset so this smoke run leaves the demo tenant clean.
   await prismaResetBillingState('demo-tenant-001')
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9B: SaaS Admin Tenant Provisioning + Service Access
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n250. Round-9B: /account/service-status auth + shape')
+  check('service-status no token → 401', (await get('/account/service-status')).status === 401)
+  const r9bSvcRes = await get('/account/service-status', accessToken)
+  check('service-status → 200', r9bSvcRes.status === 200)
+  const r9bSvc = await r9bSvcRes.json() as Record<string, unknown>
+  for (const key of ['serviceStatus', 'contractStartAt', 'contractEndAt', 'licenseCode', 'daysRemaining', 'isActiveLike', 'isBlocked', 'renewalWarning', 'tenantFacingBanner']) {
+    check(`service-status has "${key}"`, key in r9bSvc)
+  }
+  check('demo tenant defaults to active-like (TRIAL/ACTIVE)', r9bSvc.isActiveLike === true && r9bSvc.isBlocked === false)
+  check('service-status has no real flags', r9bSvc.realAiProviderCalled === false && r9bSvc.realEmailSent === false)
+
+  console.log('\n251. Round-9B: admin tenants list — auth required')
+  check('list no token → 401', (await get('/admin/tenants')).status === 401)
+  const r9bListRes = await get('/admin/tenants', accessToken)
+  check('list → 200', r9bListRes.status === 200)
+  const r9bList = await r9bListRes.json() as Record<string, unknown>
+  check('list returns tenants[]', Array.isArray(r9bList.tenants))
+  check('list realEmailSent=false', r9bList.realEmailSent === false)
+
+  console.log('\n252. Round-9B: admin create tenant — validation')
+  check('create no token → 401', (await post('/admin/tenants', { name: 'x' })).status === 401)
+  check('create missing name → 400',
+    (await post('/admin/tenants', { slug: 'x-test', ownerName: 'a', ownerEmail: 'a@b.test', generateTemporaryPassword: true }, accessToken)).status === 400)
+  check('create invalid slug → 400',
+    (await post('/admin/tenants', { name: 'X', slug: 'AB', ownerName: 'a', ownerEmail: 'a@b.test', generateTemporaryPassword: true }, accessToken)).status === 400)
+  check('create no password → 400',
+    (await post('/admin/tenants', { name: 'X', slug: 'r9b-fail-1', ownerName: 'a', ownerEmail: 'a@b.test' }, accessToken)).status === 400)
+
+  console.log('\n253. Round-9B: admin create tenant — success returns temp password ONCE')
+  const r9bSlug = `r9b-smoke-${Date.now().toString(36).slice(-6)}`
+  const r9bCreateRes = await post('/admin/tenants', {
+    name:                       'R9B Smoke Co',
+    slug:                       r9bSlug,
+    ownerName:                  'R9B Owner',
+    ownerEmail:                 `owner-${r9bSlug}@omni-smoke.test`,
+    plan:                       'starter',
+    serviceStatus:              'ACTIVE',
+    contractStartAt:            new Date().toISOString(),
+    contractEndAt:              new Date(Date.now() + 30 * 86400000).toISOString(),
+    generateTemporaryPassword:  true,
+    internalNotes:              'smoke test tenant',
+  }, accessToken)
+  check('create → 201', r9bCreateRes.status === 201)
+  const r9bCreated = await r9bCreateRes.json() as Record<string, unknown>
+  check('returns tenantId', typeof r9bCreated.tenantId === 'string')
+  check('returns temporaryPassword (once)', typeof r9bCreated.temporaryPassword === 'string' && (r9bCreated.temporaryPassword as string).length >= 8)
+  check('temporaryPasswordShownOnce=true', r9bCreated.temporaryPasswordShownOnce === true)
+  check('returns plan=starter', r9bCreated.plan === 'starter')
+  check('returns serviceStatus=ACTIVE', r9bCreated.serviceStatus === 'ACTIVE')
+  check('returns licenseCode prefix OMNI-', typeof r9bCreated.licenseCode === 'string' && (r9bCreated.licenseCode as string).startsWith('OMNI-'))
+  check('create realEmailSent=false',           r9bCreated.realEmailSent           === false)
+  check('create realPaymentGatewayCalled=false',r9bCreated.realPaymentGatewayCalled=== false)
+  const r9bTenantId = r9bCreated.tenantId as string
+  const r9bOwnerEmail = `owner-${r9bSlug}@omni-smoke.test`
+  const r9bTempPwd    = r9bCreated.temporaryPassword as string
+
+  console.log('\n254. Round-9B: response has no passwordHash / secrets')
+  const r9bCreatedJson = JSON.stringify(r9bCreated)
+  const R9B_FORBIDDEN = ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'apiKeyRef', 'JWT_SECRET', 'DATABASE_URL', 'metadataJson']
+  for (const pat of R9B_FORBIDDEN) {
+    check(`create response has no "${pat}"`, !r9bCreatedJson.includes(pat))
+  }
+
+  console.log('\n255. Round-9B: duplicate slug → 409')
+  const r9bDupRes = await post('/admin/tenants', {
+    name: 'Dup', slug: r9bSlug, ownerName: 'd', ownerEmail: 'd@x.test', generateTemporaryPassword: true,
+  }, accessToken)
+  check('duplicate slug → 409', r9bDupRes.status === 409)
+
+  console.log('\n256. Round-9B: created tenant owner can login with temp password')
+  const r9bLogin = await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bTempPwd })
+  check('owner login → 200', r9bLogin.status === 200)
+  const r9bLoginBody = await r9bLogin.json() as Record<string, unknown>
+  check('login returns accessToken', typeof r9bLoginBody.accessToken === 'string')
+  const r9bNewTok = r9bLoginBody.accessToken as string
+  // New tenant should see ACTIVE service status
+  const r9bNewSvcRes = await get('/account/service-status', r9bNewTok)
+  const r9bNewSvc    = await r9bNewSvcRes.json() as Record<string, unknown>
+  check('new tenant serviceStatus=ACTIVE', r9bNewSvc.serviceStatus === 'ACTIVE')
+
+  console.log('\n257. Round-9B: ACTIVE tenant can generate (within quota)')
+  const r9bGenActive = await post('/onboarding/products/generate-sales-config',
+    { productName: 'R9B Active Product', desiredFaqCount: 30 }, r9bNewTok)
+  check('ACTIVE generate → 200', r9bGenActive.status === 200)
+
+  console.log('\n258. Round-9B: PATCH /admin/tenants/:id/service-status — validation + suspend')
+  check('change no token → 401',
+    (await fetch(`${BASE}/admin/tenants/${r9bTenantId}/service-status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serviceStatus: 'SUSPENDED' }) })).status === 401)
+  check('invalid status → 400',
+    (await patch(`/admin/tenants/${r9bTenantId}/service-status`, { serviceStatus: 'BOGUS' }, accessToken)).status === 400)
+  const r9bSuspend = await patch(`/admin/tenants/${r9bTenantId}/service-status`, { serviceStatus: 'SUSPENDED', suspensionReason: 'smoke test suspend' }, accessToken)
+  check('suspend → 200',       r9bSuspend.status === 200)
+  const r9bSuspendBody = await r9bSuspend.json() as Record<string, unknown>
+  check('serviceStatus=SUSPENDED',           r9bSuspendBody.serviceStatus === 'SUSPENDED')
+  check('serviceStatusLabel = 已暂停',       r9bSuspendBody.serviceStatusLabel === '已暂停')
+
+  console.log('\n259. Round-9B: SUSPENDED tenant can login + read but cannot generate')
+  const r9bSuspLogin = await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bTempPwd })
+  check('SUSPENDED login still succeeds → 200',           r9bSuspLogin.status === 200)
+  const r9bSuspLoginBody = await r9bSuspLogin.json() as Record<string, unknown>
+  const r9bSuspTok = r9bSuspLoginBody.accessToken as string
+  // /account remains readable
+  check('SUSPENDED /account/service-status → 200',        (await get('/account/service-status', r9bSuspTok)).status === 200)
+  const r9bSuspSvc = await (await get('/account/service-status', r9bSuspTok)).json() as Record<string, unknown>
+  check('SUSPENDED isBlocked=true',                       r9bSuspSvc.isBlocked === true)
+  check('SUSPENDED tenantFacingBanner present',           typeof r9bSuspSvc.tenantFacingBanner === 'string')
+  // Generation blocked → 403
+  const r9bSuspGen = await post('/onboarding/products/generate-sales-config',
+    { productName: 'R9B Suspended Product', desiredFaqCount: 30 }, r9bSuspTok)
+  check('SUSPENDED generate → 403',                       r9bSuspGen.status === 403)
+  const r9bSuspGenBody = await r9bSuspGen.json() as Record<string, unknown>
+  check('403 serviceBlocked=true',                        r9bSuspGenBody.serviceBlocked === true)
+  check('403 serviceStatus=SUSPENDED',                    r9bSuspGenBody.serviceStatus === 'SUSPENDED')
+  check('403 realAiProviderCalled=false',                 r9bSuspGenBody.realAiProviderCalled === false)
+  check('403 cta is string',                              typeof r9bSuspGenBody.cta === 'string')
+
+  console.log('\n260. Round-9B: reactivate restores generation')
+  const r9bReact = await patch(`/admin/tenants/${r9bTenantId}/service-status`, { serviceStatus: 'ACTIVE' }, accessToken)
+  check('reactivate → 200', r9bReact.status === 200)
+  const r9bReactGen = await post('/onboarding/products/generate-sales-config',
+    { productName: 'R9B Reactivated Product', desiredFaqCount: 30 }, r9bSuspTok)
+  check('reactivated generate → 200', r9bReactGen.status === 200)
+
+  console.log('\n261. Round-9B: PATCH /admin/tenants/:id/contract — extend')
+  const r9bNewEnd = new Date(Date.now() + 365 * 86400000).toISOString()
+  const r9bContract = await patch(`/admin/tenants/${r9bTenantId}/contract`, { contractEndAt: r9bNewEnd }, accessToken)
+  check('extend contract → 200', r9bContract.status === 200)
+  const r9bContractBody = await r9bContract.json() as Record<string, unknown>
+  check('contractEndAt returned',
+    typeof r9bContractBody.contractEndAt === 'string' && (r9bContractBody.contractEndAt as string).startsWith(r9bNewEnd.slice(0, 10)))
+
+  console.log('\n262. Round-9B: reset-password-stub')
+  const r9bResetRes = await post(`/admin/tenants/${r9bTenantId}/reset-password-stub`, {}, accessToken)
+  check('reset → 200', r9bResetRes.status === 200)
+  const r9bReset = await r9bResetRes.json() as Record<string, unknown>
+  check('reset returns new temp password',     typeof r9bReset.temporaryPassword === 'string' && (r9bReset.temporaryPassword as string).length >= 8)
+  check('reset shownOnce=true',                r9bReset.temporaryPasswordShownOnce === true)
+  check('reset realEmailSent=false',           r9bReset.realEmailSent === false)
+  // No passwordHash leaked
+  check('reset no passwordHash leak',          !JSON.stringify(r9bReset).includes('passwordHash'))
+  // Old temp pwd should now fail
+  const r9bOldPwdLogin = await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bTempPwd })
+  check('old password no longer works → 401',  r9bOldPwdLogin.status === 401)
+  // New temp pwd should login
+  const r9bNewPwdLogin = await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bReset.temporaryPassword as string })
+  check('new temp password works → 200',       r9bNewPwdLogin.status === 200)
+
+  console.log('\n263. Round-9B: audit log captures provisioning + status change')
+  const r9bAuditRes = await get(`/audit/logs?entityType=Tenant&entityId=${r9bTenantId}&pageSize=20`, accessToken)
+  check('audit list → 200', r9bAuditRes.status === 200)
+  const r9bAudit = await r9bAuditRes.json() as Record<string, unknown>
+  const r9bAuditItems = (r9bAudit.logs ?? r9bAudit.data ?? []) as Array<Record<string, unknown>>
+  const r9bAuditJson = JSON.stringify(r9bAuditItems)
+  check('audit contains TENANT_PROVISIONED_BY_ADMIN', r9bAuditJson.includes('TENANT_PROVISIONED_BY_ADMIN'))
+  check('audit contains TENANT_SUSPENDED',            r9bAuditJson.includes('TENANT_SUSPENDED'))
+  check('audit contains TENANT_REACTIVATED',          r9bAuditJson.includes('TENANT_REACTIVATED'))
+  check('audit contains TENANT_CONTRACT_EXTENDED',    r9bAuditJson.includes('TENANT_CONTRACT_EXTENDED'))
+  check('audit contains TENANT_PASSWORD_RESET_STUB',  r9bAuditJson.includes('TENANT_PASSWORD_RESET_STUB'))
+  check('audit has no passwordHash',                  !r9bAuditJson.includes('passwordHash'))
+  check('audit has no plain temporaryPassword',       !r9bAuditJson.includes(r9bTempPwd) && !r9bAuditJson.includes(r9bReset.temporaryPassword as string))
+
+  console.log('\n264. Round-9B: signup route still works for back-compat (not removed)')
+  // Old smoke depends on /auth/signup creating a smoke tenant; we DO NOT break it here.
+  // Just verify the route is still reachable (will 400 without body, not 404).
+  const r9bSignupProbe = await post('/auth/signup', {})
+  check('signup route still mounted (400 not 404)', r9bSignupProbe.status === 400)
+
+  // ── Clean up Round-9B created tenant
+  await prismaCleanupRound9bTenant(r9bTenantId)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -4558,6 +4732,22 @@ async function smoke() {
 }
 
 // ── DB helpers ─────────────────────────────────────────────────────────────
+
+async function prismaCleanupRound9bTenant(tenantId: string): Promise<void> {
+  const { PrismaClient } = await import('@omni/db')
+  const p = new PrismaClient()
+  try {
+    await p.auditLog.deleteMany({ where: { tenantId } })
+    await p.tenantBillingState.deleteMany({ where: { tenantId } })
+    await p.user.deleteMany({ where: { tenantId } })
+    await p.tenant.deleteMany({ where: { id: tenantId } })
+    console.log(`  🗑️  Round-9B tenant ${tenantId} cleaned`)
+  } catch (e) {
+    console.warn(`  ⚠ Round-9B tenant cleanup warning: ${(e as Error).message}`)
+  } finally {
+    await p.$disconnect()
+  }
+}
 
 async function prismaResetBillingState(tenantId: string): Promise<void> {
   const { PrismaClient } = await import('@omni/db')

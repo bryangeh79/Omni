@@ -1,5 +1,38 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 Round-9B — SaaS Admin Tenant Provisioning + License/Contract + Service Access
+
+继 Round-9A 之后，Round-9B 确认 Omni 当前商业模式为 **SaaS Admin 开户制** — 普通租户不再做"自助注册"，由 SaaS 公司线下签约 / 收款 / 审核后由 SaaS Admin 创建租户：
+
+- **Schema migration** `20260516000000_add_tenant_service_access`：在 `Tenant` 表新增 6 个字段（`serviceStatus TEXT DEFAULT 'TRIAL'` / `contractStartAt` / `contractEndAt` / `licenseCode` UNIQUE / `suspensionReason` / `internalNotes`）。无对其它表的破坏性修改。
+- **新增 helper `apps/api/src/lib/service-access.ts`**：6 个 `serviceStatus` 枚举（TRIAL / ACTIVE / PAST_DUE / SUSPENDED / EXPIRED / CANCELLED）+ 中文 label；`getTenantServiceAccess(tenantId)` 计算 `daysRemaining` / `isActiveLike` / `isBlocked` / `renewalWarning` / `tenantFacingBanner`；`requireServiceActive` 抛 `ServiceAccessBlockedError`；`suggestLicenseCode(plan, ordinal)` 输出 `OMNI-{PLAN}-{YYYY}-{NNNNN}` 格式
+- **新增 routes 模块** `apps/api/src/routes/admin-tenants.ts` (registered at `/admin/tenants`)：
+  - `GET /admin/tenants` — 列表，支持 `serviceStatus` 与 `q` 过滤
+  - `GET /admin/tenants/:id` — 详情（含 internalNotes，仅 admin 路径可见）
+  - `POST /admin/tenants` — 创建（必填 name / slug / ownerName / ownerEmail；可选 plan / serviceStatus / contractStartAt / contractEndAt / licenseCode / internalNotes / generateTemporaryPassword）。slug 必须 `^[a-z0-9-]{3,40}$`，已用返回 409。临时密码生成 12-char `base64url`；返回 `{ tenantId, tenantSlug, plan, serviceStatus, contractEndAt, licenseCode, loginEmail, temporaryPassword, temporaryPasswordShownOnce: true }`。**绝不存储明文密码**，bcrypt 哈希后存 User.passwordHash。
+  - `PATCH /admin/tenants/:id/service-status` — 状态切换，校验枚举；SUSPENDED 触发 `TENANT_SUSPENDED` 审计、SUSPENDED→ACTIVE 触发 `TENANT_REACTIVATED`，其它走 `TENANT_SERVICE_STATUS_CHANGED`
+  - `PATCH /admin/tenants/:id/contract` — 合约期 / 授权码更新，触发 `TENANT_CONTRACT_EXTENDED` 审计
+  - `POST /admin/tenants/:id/reset-password-stub` — 给 owner 重置 12-char 临时密码，更新 passwordHash；旧密码立即失效；返回新密码（仅一次）+ `realEmailSent: false`；触发 `TENANT_PASSWORD_RESET_STUB` 审计（metadata 不含 passwordHash 或明文密码）
+  - 所有 endpoint 当前用 `requireRole('OWNER', 'ADMIN')` 守门，加 `TODO(platform-rbac)` 标注未来切换到真正的 platform-admin role
+- **新增 endpoint** `GET /account/service-status` — 租户侧只读视图，返回 `serviceStatus / contractStartAt / contractEndAt / licenseCode / suspensionReason / daysRemaining / isActiveLike / isBlocked / renewalWarning / tenantFacingBanner`。**不暴露 internalNotes**。
+- **服务接入门控**（Round-9B core enforcement）：在 `/onboarding/products/generate-sales-config` 与 `/onboarding/products/save-sales-config`（仅新增产品场景，靠 productId 对比已存在集合）增加 service-access guard — SUSPENDED / EXPIRED / CANCELLED 直接 403 + `{ error, serviceStatus, serviceBlocked: true, cta, tenantFacingBanner, realAiProviderCalled: false }`。ACTIVE / TRIAL / PAST_DUE 正常通过。**不删除任何已有数据**，管理 inbox / 知识库 / 客户数据全部仍可读。
+- **AppNav IA 重排**（`apps/web/src/components/AppNav.tsx`）：
+  - 移除「新建账号」（不再作为普通租户日常入口）
+  - 组名「新客户上线」→「开始使用」
+  - 子项「上线向导」→「配置 AI 客服」、「渠道设置」→「连接 WhatsApp」、新增「上线检查」(/launch-checklist)
+  - 「套餐与计费」→「套餐与额度」
+  - SaaS Admin 分组顶部新增「租户管理」(/admin/tenants)、「创建租户」(/admin/tenants/new)、「套餐 / 授权」(/admin/tenants?tab=license)、「到期 / 暂停管理」(/admin/tenants?filter=expired)
+  - `localStorage` 键升级 `omni.nav.expanded.v3`；旧 v2 键自然失效
+- **新 web 页**：
+  - `apps/web/src/app/admin/tenants/page.tsx` — 完整 list 视图（过滤 / 搜索 / 暂停 / 恢复 / 延长 / 重置密码 操作；临时密码通过 `alert()` 仅显示一次）
+  - `apps/web/src/app/admin/tenants/new/page.tsx` — 创建表单 + 成功页（临时密码 emerald banner + "发送给客户的登录资料"显示一次）
+- **`/signup` 重新定位**：保留路由（smoke 仍依赖），前置黄色 banner "**SaaS Admin 内部 / 测试入口**：此页面用于 SaaS Admin 创建租户测试账号 / 内部开通，不是普通租户日常功能。"
+- **`/account` 服务状态横幅**：fetch `/account/service-status`，TRIAL ≤7 天剩余 / PAST_DUE / SUSPENDED / EXPIRED / CANCELLED 自动显示对应中文文案与 CTA
+- **`/onboarding` 顶部 copy 改为**："配置 AI 客服" / "上传产品资料，Omni 自动生成 FAQ、销售话术、标签、评分、跟进与转人工规则。完成后再连接 WhatsApp。"
+- **审计事件**（全部经 `createAuditLog`，metadata 经 secret 过滤）：TENANT_PROVISIONED_BY_ADMIN / TENANT_SERVICE_STATUS_CHANGED / TENANT_SUSPENDED / TENANT_REACTIVATED / TENANT_CONTRACT_EXTENDED / TENANT_PASSWORD_RESET_STUB
+- **Smoke 新增 14 个 block / 60+ check**（test 250–264）：service-status auth/shape + admin list auth + create validation + create success + 临时密码仅返回一次 + 无 passwordHash 泄漏 + 重复 slug 409 + 创建租户 owner 可登录 + ACTIVE 可生成 + service-status validation/suspend + SUSPENDED 仍可登录读但生成 403 + reactivate 恢复生成 + extend contract + reset-password-stub 旧密码失效新密码可用 + audit 含所有 6 个事件且无 passwordHash/明文 + signup 路由仍可达
+- **未触碰**：现有 API contract、Round-8 / Round-9A 响应 shape、smoke 旧用例；真实支付 / 真实邮件 / 真实 AI / 真实 Meta / 真实 WhatsApp / 广播 / 群发均**未启用**
+
 ## Post-v1 Round-9A — Starter / Pro Quota + AI Smart Reply + Add-on Foundation
 
 继 Round-8 之后，Round-9A 是 Omni 第一次真正落地的"商业基础层"——把套餐 / 配额 / Add-on / 付款 / Ledger 从 UI 静态文案升级为后端可执行、可计费、可审计的 foundation：

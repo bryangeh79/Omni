@@ -425,8 +425,8 @@ export default function OnboardingPage() {
             <span className="text-white text-sm font-bold">O</span>
           </div>
           <div>
-            <h1 className="text-base font-bold text-gray-900">上线向导</h1>
-            <p className="text-xs text-gray-400">配置您的 WhatsApp AI 客服</p>
+            <h1 className="text-base font-bold text-gray-900">配置 AI 客服</h1>
+            <p className="text-xs text-gray-400">上传产品资料，Omni 自动生成 FAQ、销售话术、标签、评分、跟进与转人工规则。完成后再连接 WhatsApp。</p>
           </div>
         </div>
         <a href="/boss" className="text-xs text-blue-600 hover:text-blue-700">← 返回工作台</a>

@@ -150,6 +150,9 @@ export default function SignupPage() {
 
       {/* Form card */}
       <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '2rem', width: '100%', maxWidth: 480 }}>
+        <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: '1rem', fontSize: '0.8125rem', color: '#92400e' }}>
+          <strong>SaaS Admin 内部 / 测试入口：</strong>此页面用于 SaaS Admin 创建租户测试账号 / 内部开通，**不是普通租户日常功能**。正常租户由 SaaS Admin 在 <a href="/admin/tenants/new" style={{ color: '#92400e', textDecoration: 'underline' }}>租户管理 → 创建租户</a> 中创建后获得登录资料。
+        </div>
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
           创建您的 Omni 账号
         </h2>

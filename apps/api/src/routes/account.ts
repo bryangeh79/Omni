@@ -26,6 +26,21 @@ const VALID_LANGUAGES = ['zh', 'en', 'ms'] as const
 
 export async function accountRoutes(app: FastifyInstance) {
 
+  // ── GET /account/service-status (Round-9B) ────────────────────────────────
+  // Tenant-facing view of own service access state (no internalNotes leaked).
+  app.get('/service-status', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const { getTenantServiceAccess } = await import('../lib/service-access')
+    const access = await getTenantServiceAccess(tenantId)
+    return {
+      ...access,
+      // Explicit safety flags for cross-endpoint scanners
+      realAiProviderCalled:       false,
+      realPaymentGatewayCalled:   false,
+      realEmailSent:              false,
+    }
+  })
+
   // ── GET /account/overview ─────────────────────────────────────────────────
   app.get('/overview', { preHandler: requireAuth }, async (req) => {
     const { tenantId, userId } = getAuthUser(req)

@@ -42,14 +42,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/knowledge', label: '知识库' },
     ],
   },
+  // Round-9B: rename "新客户上线" → "开始使用". Remove customer-facing "新建账号" —
+  // tenants are provisioned by SaaS Admin (see Admin group). /signup route still
+  // exists for SaaS Admin internal use and existing smoke compatibility.
   {
-    key: 'setup',
-    label: '新客户上线',
+    key: 'getStarted',
+    label: '开始使用',
     icon: '🧙',
     items: [
-      { href: '/signup',         label: '新建账号' },
-      { href: '/onboarding',     label: '上线向导' },
-      { href: '/channels/setup', label: '渠道设置' },
+      { href: '/onboarding',       label: '配置 AI 客服' },
+      { href: '/channels/setup',   label: '连接 WhatsApp' },
+      { href: '/launch-checklist', label: '上线检查' },
     ],
   },
   {
@@ -59,22 +62,26 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/account',  label: '我的账户' },
       { href: '/team',     label: '团队成员' },
-      { href: '/billing',  label: '套餐与计费' },
+      { href: '/billing',  label: '套餐与额度' },
       { href: '/settings', label: '设置' },
     ],
   },
   // ── SaaS Admin / 平台运维 ───────────────────────────────────────────────
   // Future: hide SaaS Admin group for non-platform roles when platform RBAC is available.
   // For now this is visual separation only — all tenants can still reach these routes.
+  // Round-9B: add tenant provisioning entries at the top of the admin group.
   {
     key: 'admin',
     label: '平台运维',
     icon: '🛡️',
     admin: true,
     items: [
+      { href: '/admin/tenants',         label: '租户管理' },
+      { href: '/admin/tenants/new',     label: '创建租户' },
+      { href: '/admin/tenants?tab=license', label: '套餐 / 授权' },
+      { href: '/admin/tenants?filter=expired', label: '到期 / 暂停管理' },
       { href: '/activation-guide',      label: '上线激活指南' },
       { href: '/activation/monitoring', label: '激活监控' },
-      { href: '/launch-checklist',      label: '上线清单' },
       { href: '/audit',                 label: '审计日志' },
       { href: '/production-qa',         label: '生产 QA' },
       { href: '/ops/runbook',           label: '运维手册' },
@@ -93,8 +100,8 @@ const TEXT_LIGHT = '#e0e7ff'
 const HOVER_BG   = 'rgba(99,102,241,0.18)'
 const ACTIVE_BG  = 'rgba(99,102,241,0.32)'
 
-// v2 — keyspace changed when Round-7 reorganized groups; old v1 keys (e.g. "ops") are ignored.
-const STORAGE_KEY = 'omni.nav.expanded.v2'
+// v3 — Round-9B renamed group "setup" → "getStarted"; older v2 keys are ignored harmlessly.
+const STORAGE_KEY = 'omni.nav.expanded.v3'
 
 function findActiveGroup(pathname: string): string | null {
   for (const g of NAV_GROUPS) {

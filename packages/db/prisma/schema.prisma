@@ -21,6 +21,14 @@ model Tenant {
   defaultLanguage String   @default("zh") // zh | en | ms
   plan            String   @default("trial")
   isActive        Boolean  @default(true)
+  // Round-9B: SaaS Admin tenant provisioning + license/contract foundation.
+  // serviceStatus: TRIAL | ACTIVE | PAST_DUE | SUSPENDED | EXPIRED | CANCELLED
+  serviceStatus    String    @default("TRIAL")
+  contractStartAt  DateTime?
+  contractEndAt    DateTime?
+  licenseCode      String?   @unique
+  suspensionReason String?
+  internalNotes    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

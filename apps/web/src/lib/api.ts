@@ -643,6 +643,93 @@ export async function fetchPlanDefinitions(): Promise<{
   return apiFetch('/billing/plan-definitions')
 }
 
+// ── Round-9B: SaaS Admin Tenant Provisioning + Service Access ────────────────
+export type ServiceStatus = 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED'
+
+export interface TenantServiceAccess {
+  serviceStatus:    ServiceStatus
+  contractStartAt:  string | null
+  contractEndAt:    string | null
+  licenseCode:      string | null
+  suspensionReason: string | null
+  daysRemaining:    number | null
+  isActiveLike:     boolean
+  isBlocked:        boolean
+  renewalWarning:   string | null
+  tenantFacingBanner: string | null
+}
+
+export interface AdminTenantRow {
+  id:                  string
+  name:                string
+  slug:                string
+  plan:                string
+  serviceStatus:       ServiceStatus
+  serviceStatusLabel:  string
+  contractStartAt:     string | null
+  contractEndAt:       string | null
+  daysRemaining:       number | null
+  licenseCode:         string | null
+  suspensionReason:    string | null
+  ownerEmail:          string | null
+  createdAt:           string
+  isActive:            boolean
+}
+
+export async function fetchTenantServiceStatus(): Promise<TenantServiceAccess> {
+  return apiFetch('/account/service-status')
+}
+
+export async function adminListTenants(params?: { serviceStatus?: ServiceStatus; q?: string }): Promise<{ tenants: AdminTenantRow[]; total: number }> {
+  const p = new URLSearchParams()
+  if (params?.serviceStatus) p.set('serviceStatus', params.serviceStatus)
+  if (params?.q)             p.set('q', params.q)
+  const qs = p.toString()
+  return apiFetch(`/admin/tenants${qs ? '?' + qs : ''}`)
+}
+
+export interface AdminCreateTenantInput {
+  name:               string
+  slug:               string
+  ownerName:          string
+  ownerEmail:         string
+  temporaryPassword?: string
+  generateTemporaryPassword?: boolean
+  plan?:              string
+  serviceStatus?:     ServiceStatus
+  contractStartAt?:   string
+  contractEndAt?:     string
+  licenseCode?:       string
+  internalNotes?:     string
+}
+
+export async function adminCreateTenant(input: AdminCreateTenantInput): Promise<{
+  tenantId:           string
+  tenantSlug:         string
+  plan:               string
+  serviceStatus:      ServiceStatus
+  contractEndAt:      string | null
+  licenseCode:        string
+  loginEmail:         string
+  temporaryPassword:  string
+  temporaryPasswordShownOnce: boolean
+  note:               string
+}> {
+  return apiFetch('/admin/tenants', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function adminUpdateTenantServiceStatus(id: string, args: { serviceStatus: ServiceStatus; suspensionReason?: string }): Promise<{ id: string; serviceStatus: ServiceStatus; serviceStatusLabel: string }> {
+  return apiFetch(`/admin/tenants/${id}/service-status`, { method: 'PATCH', body: JSON.stringify(args) })
+}
+
+export async function adminUpdateTenantContract(id: string, args: { contractStartAt?: string | null; contractEndAt?: string | null; licenseCode?: string | null }): Promise<{ contractStartAt: string | null; contractEndAt: string | null; licenseCode: string | null }> {
+  return apiFetch(`/admin/tenants/${id}/contract`, { method: 'PATCH', body: JSON.stringify(args) })
+}
+
+export async function adminResetTenantPasswordStub(id: string): Promise<{ tenantId: string; ownerEmail: string; temporaryPassword: string; temporaryPasswordShownOnce: boolean; note: string }> {
+  return apiFetch(`/admin/tenants/${id}/reset-password-stub`, { method: 'POST' })
+}
+
 // ── Knowledge Base (Phase 12A) ────────────────────────────────────────────────
 export interface KnowledgeItem {
   id:        string

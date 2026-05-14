@@ -27,6 +27,7 @@ import type { AiProvider, AiAgentInput } from '@omni/shared'
 import { requireAuth, getAuthUser } from '../auth'
 import { generateProductSalesConfig, type ProductSetupInput, type ProductSalesConfig } from '../lib/product-sales-config-generator'
 import { tryDeductFaqGeneration } from '../lib/quota'
+import { getTenantServiceAccess } from '../lib/service-access'
 
 // ── Type: enriched preview shape ────────────────────────────────────────────
 interface FaqSample { question: string; answer: string }
@@ -628,6 +629,20 @@ export async function onboardingRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Raw file bytes are not accepted. Send metadata + extractedText only.' })
       }
 
+      // Round-9B service-access guard: SUSPENDED / EXPIRED / CANCELLED tenants
+      // cannot generate new product configs. Manual data viewing remains allowed.
+      const access = await getTenantServiceAccess(tenantId)
+      if (access.isBlocked) {
+        return reply.status(403).send({
+          error: 'Service is paused or expired',
+          serviceStatus:       access.serviceStatus,
+          serviceBlocked:      true,
+          cta:                 '请联系服务商续费 / 恢复服务',
+          tenantFacingBanner:  access.tenantFacingBanner,
+          realAiProviderCalled: false,
+        })
+      }
+
       // Round-9A quota: 1 click = 1 FAQ generation. Monthly first, then purchased credits.
       const tenantRow = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true } })
       const quota = await tryDeductFaqGeneration(tenantId, tenantRow?.plan ?? 'trial')
@@ -693,6 +708,28 @@ export async function onboardingRoutes(app: FastifyInstance) {
       for (const p of products) {
         if (!p.productId || !p.productName) {
           return reply.status(400).send({ error: 'Each product needs productId + productName' })
+        }
+      }
+
+      // Round-9B service-access guard: SUSPENDED / EXPIRED / CANCELLED tenants cannot
+      // add new products. Detected by comparing incoming product ids against the
+      // already-persisted set in the draft. Editing existing products is allowed.
+      const accessSave = await getTenantServiceAccess(tenantId)
+      if (accessSave.isBlocked) {
+        const existing = await prisma.onboardingDraft.findUnique({ where: { tenantId }, select: { generatedPreview: true } })
+        const existingProducts = ((existing?.generatedPreview as Record<string, unknown> | null)?.products as Array<{ productId?: string }> | undefined) ?? []
+        const existingIds = new Set(existingProducts.map(p => p.productId).filter(Boolean) as string[])
+        const newOnes = products.filter(p => !existingIds.has(p.productId))
+        if (newOnes.length > 0) {
+          return reply.status(403).send({
+            error: 'Service is paused or expired — cannot add new products',
+            serviceStatus:       accessSave.serviceStatus,
+            serviceBlocked:      true,
+            blockedNewProductIds: newOnes.map(p => p.productId),
+            cta:                 '请联系服务商续费 / 恢复服务',
+            tenantFacingBanner:  accessSave.tenantFacingBanner,
+            realAiProviderCalled: false,
+          })
         }
       }
 

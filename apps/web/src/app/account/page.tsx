@@ -4,7 +4,7 @@
 // All data is local/DB-derived. No real provider calls.
 
 import { useEffect, useState, useCallback } from 'react'
-import { getToken } from '@/lib/api'
+import { getToken, fetchTenantServiceStatus, type TenantServiceAccess } from '@/lib/api'
 import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel, planLabel } from '@/lib/enumLabels'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
@@ -50,6 +50,7 @@ const inputCss: React.CSSProperties = { display: 'block', width: '100%', padding
 export default function AccountPage() {
   const [authed,   setAuthed]   = useState<boolean | null>(null)
   const [data,     setData]     = useState<AnyData | null>(null)
+  const [serviceAccess, setServiceAccess] = useState<TenantServiceAccess | null>(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
   const [editing,  setEditing]  = useState(false)
@@ -150,6 +151,8 @@ export default function AccountPage() {
       const t = (body.tenant ?? {}) as AnyData
       setEditName(String(t.name ?? ''))
       setEditLang(String(t.defaultLanguage ?? 'zh'))
+      // Round-9B: pull tenant-facing service access state so we can show banner.
+      try { setServiceAccess(await fetchTenantServiceStatus()) } catch { /* ignore */ }
     } catch (e) { setError((e as Error).message) }
     finally { setLoading(false) }
   }, [])
@@ -192,6 +195,13 @@ export default function AccountPage() {
 
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 920, margin: '0 auto', padding: '2rem 1rem' }}>
+      {/* Round-9B service-access banner */}
+      {serviceAccess?.tenantFacingBanner && (
+        <div style={{ background: serviceAccess.isBlocked ? '#fef2f2' : '#fffbeb', border: serviceAccess.isBlocked ? '1px solid #fca5a5' : '1px solid #fcd34d', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem', fontSize: '0.875rem', color: serviceAccess.isBlocked ? '#991b1b' : '#92400e' }}>
+          <strong>服务状态：</strong>{serviceAccess.tenantFacingBanner}
+          {serviceAccess.daysRemaining !== null && <span style={{ marginLeft: 8, opacity: 0.85 }}>（剩余 {serviceAccess.daysRemaining} 天）</span>}
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div>
