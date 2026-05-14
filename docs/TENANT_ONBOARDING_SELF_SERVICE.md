@@ -166,3 +166,13 @@ Example: "Sunrise Property Sdn Bhd" → "sunrise-property-sdn-bhd"
 - `/activation/monitoring` — activation readiness dashboard
 - `/release-checklist` — SaaS v1 release status
 - `/channels/setup` — channel configuration
+
+
+## Phase 17B: Account Management Hub
+
+- `/account` web page: self-service tenant management hub for OWNER/ADMIN
+- `GET /account/overview`: safe tenant + user + onboarding + channel + checklist summary
+- `PATCH /account/profile`: update businessName + defaultLanguage (OWNER/ADMIN only)
+- Audit event `ACCOUNT_PROFILE_UPDATE` logged on successful update
+
+See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full documentation.

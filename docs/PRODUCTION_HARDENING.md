@@ -224,3 +224,13 @@ See `docs/ACTIVATION_MONITORING.md`.
 - `/signup` web page — polished enterprise SaaS signup form
 
 See `docs/TENANT_ONBOARDING_SELF_SERVICE.md` for full documentation.
+
+## Phase 17B: Account Management Hub
+
+New endpoints + page:
+- `GET /account/overview` — safe local read of tenant/user/onboarding/channel/checklist
+- `PATCH /account/profile` — OWNER/ADMIN only, updates name + defaultLanguage
+- `/account` web page — self-service management hub
+
+No new permission tiers added. Existing RBAC (OWNER/ADMIN/MANAGER/AGENT/VIEWER) used.
+See `docs/TENANT_ACCOUNT_MANAGEMENT.md`.

@@ -3596,6 +3596,111 @@ async function smoke() {
   check('new tenant realMetaSendEnabled=false',      pfAfterFlags.realMetaSendEnabled  === false)
   check('new tenant realSendCurrentlyOff=true',      pfAfterFlags.realSendCurrentlyOff === true)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 17B — Self-service Tenant Management Hub
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n186. Phase 17B: GET /account/overview — auth + shape')
+  check('GET /account/overview without auth → 401', (await get('/account/overview')).status === 401)
+
+  const accRes  = await get('/account/overview', accessToken)
+  const accBody = await accRes.json() as Record<string, unknown>
+  check('GET /account/overview → 200',                accRes.status === 200)
+  check('overview has tenant object',                 typeof accBody.tenant === 'object')
+  check('overview has currentUser object',            typeof accBody.currentUser === 'object')
+  check('overview has onboarding object',             typeof accBody.onboarding === 'object')
+  check('overview has channel object',                typeof accBody.channel === 'object')
+  check('overview has setupChecklist array',          Array.isArray(accBody.setupChecklist))
+  check('overview has setupProgress object',          typeof accBody.setupProgress === 'object')
+  check('overview has safety object',                 typeof accBody.safety === 'object')
+  check('overview has links object',                  typeof accBody.links === 'object')
+
+  console.log('\n187. Phase 17B: overview safety — no secrets in response')
+  check('overview no passwordHash',                   !JSON.stringify(accBody).includes('passwordHash'))
+  check('overview no JWT_SECRET',                     !JSON.stringify(accBody).includes('JWT_SECRET'))
+  check('overview no DATABASE_URL',                   !JSON.stringify(accBody).includes('DATABASE_URL'))
+  check('overview no credentialRef',                  !JSON.stringify(accBody).includes('credentialRef'))
+  check('overview no metaAccessTokenRef',             !JSON.stringify(accBody).includes('metaAccessTokenRef'))
+  check('overview no webhookVerifyTokenRef',          !JSON.stringify(accBody).includes('webhookVerifyTokenRef'))
+
+  console.log('\n188. Phase 17B: tenant/user safe fields only')
+  const accTenant = (accBody.tenant ?? {}) as Record<string, unknown>
+  check('tenant has id',                              typeof accTenant.id === 'string')
+  check('tenant has slug',                            typeof accTenant.slug === 'string')
+  check('tenant has name',                            typeof accTenant.name === 'string')
+  check('tenant has defaultLanguage',                 typeof accTenant.defaultLanguage === 'string')
+  check('tenant has plan',                            typeof accTenant.plan === 'string')
+  check('tenant has isActive (bool)',                 typeof accTenant.isActive === 'boolean')
+  const accUser = (accBody.currentUser ?? {}) as Record<string, unknown>
+  check('currentUser has id',                         typeof accUser.id === 'string')
+  check('currentUser has email',                      typeof accUser.email === 'string')
+  check('currentUser has role',                       typeof accUser.role === 'string')
+  check('currentUser no passwordHash key',            !Object.keys(accUser).includes('passwordHash'))
+
+  console.log('\n189. Phase 17B: setup checklist + safety flags')
+  const accChecklist = (accBody.setupChecklist ?? []) as Record<string, unknown>[]
+  check('checklist has onboarding_complete item',     accChecklist.some(i => i.key === 'onboarding_complete'))
+  check('checklist has channel_configured item',      accChecklist.some(i => i.key === 'channel_configured'))
+  check('checklist has team_setup item',              accChecklist.some(i => i.key === 'team_setup'))
+  check('checklist has activation_review item',       accChecklist.some(i => i.key === 'activation_review'))
+  const accSafety = (accBody.safety ?? {}) as Record<string, unknown>
+  check('safety.realSendEnabled=false',               accSafety.realSendEnabled === false)
+  check('safety.broadcastEnabled=false',              accSafety.broadcastEnabled === false)
+  check('safety.realSendCurrentlyOff=true',           accSafety.realSendCurrentlyOff === true)
+
+  console.log('\n190. Phase 17B: PATCH /account/profile — auth + RBAC + validation')
+  check('PATCH /account/profile without auth → 401',
+    (await patch('/account/profile', { businessName: 'No Auth' })).status === 401)
+  check('PATCH /account/profile no fields → 400',
+    (await patch('/account/profile', {}, accessToken)).status === 400)
+  check('PATCH /account/profile invalid language → 400',
+    (await patch('/account/profile', { defaultLanguage: 'fr' }, accessToken)).status === 400)
+  check('PATCH /account/profile short businessName → 400',
+    (await patch('/account/profile', { businessName: 'X' }, accessToken)).status === 400)
+
+  console.log('\n191. Phase 17B: PATCH /account/profile (ADMIN) updates successfully')
+  // Demo user is OWNER/ADMIN — should succeed
+  const originalName = String(accTenant.name ?? 'Omni Demo')
+  const originalLang = String(accTenant.defaultLanguage ?? 'zh')
+
+  const accPatchRes  = await patch('/account/profile', { businessName: 'Omni Demo Updated 17B', defaultLanguage: 'en' }, accessToken)
+  const accPatchBody = await accPatchRes.json() as Record<string, unknown>
+  check('PATCH /account/profile → 200',               accPatchRes.status === 200)
+  check('profile saved=true',                         accPatchBody.saved === true)
+  const patchedTenant = (accPatchBody.tenant ?? {}) as Record<string, unknown>
+  check('profile tenant.name updated',                patchedTenant.name === 'Omni Demo Updated 17B')
+  check('profile tenant.defaultLanguage=en',          patchedTenant.defaultLanguage === 'en')
+  check('profile response no passwordHash',           !JSON.stringify(accPatchBody).includes('passwordHash'))
+  check('profile response no credentialRef',          !JSON.stringify(accPatchBody).includes('credentialRef'))
+
+  // Verify via re-fetch
+  const accAfterRes  = await get('/account/overview', accessToken)
+  const accAfterBody = await accAfterRes.json() as Record<string, unknown>
+  const tenantAfter = (accAfterBody.tenant ?? {}) as Record<string, unknown>
+  check('overview reflects update — name',            tenantAfter.name === 'Omni Demo Updated 17B')
+  check('overview reflects update — language',        tenantAfter.defaultLanguage === 'en')
+
+  // Restore
+  await patch('/account/profile', { businessName: originalName, defaultLanguage: originalLang }, accessToken)
+
+  console.log('\n192. Phase 17B: ACCOUNT_PROFILE_UPDATE audit event created')
+  await new Promise(r => setTimeout(r, 200))
+  const accAuditRes  = await get('/audit/logs?action=ACCOUNT_PROFILE_UPDATE', accessToken)
+  const accAuditBody = await accAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs?action=ACCOUNT_PROFILE_UPDATE → 200', accAuditRes.status === 200)
+  const accAuditLogs = (accAuditBody.logs ?? []) as Record<string, unknown>[]
+  check('ACCOUNT_PROFILE_UPDATE audit event created', accAuditLogs.some(l => l.action === 'ACCOUNT_PROFILE_UPDATE'))
+
+  console.log('\n193. Phase 17B: safety invariants — real send still off after all 17B tests')
+  const finalAccRes  = await get('/account/overview', accessToken)
+  const finalAccBody = await finalAccRes.json() as Record<string, unknown>
+  const finalSafety = (finalAccBody.safety ?? {}) as Record<string, unknown>
+  check('POST-17B realWaSessionEnabled still false',  finalSafety.realWaSessionEnabled === false)
+  check('POST-17B realMetaSendEnabled still false',   finalSafety.realMetaSendEnabled  === false)
+  check('POST-17B realSendCurrentlyOff still true',   finalSafety.realSendCurrentlyOff === true)
+  check('POST-17B realSendEnabled still false',       finalSafety.realSendEnabled      === false)
+  check('POST-17B broadcastEnabled still false',      finalSafety.broadcastEnabled     === false)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -3867,7 +3972,7 @@ async function prismaCleanupAuditLogs(): Promise<void> {
     const { PrismaClient } = await import('@omni/db')
     const p = new PrismaClient()
     const deleted = await p.auditLog.deleteMany({
-      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACTIVATION_DRY_RUN', 'ACTIVATION_TEST_MESSAGE_DRY_RUN'] } },
+      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACTIVATION_DRY_RUN', 'ACTIVATION_TEST_MESSAGE_DRY_RUN', 'ACCOUNT_PROFILE_UPDATE'] } },
     })
     await p.$disconnect()
     console.log(`  🗑️  ${deleted.count} audit log records deleted`)

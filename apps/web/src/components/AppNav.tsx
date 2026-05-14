@@ -33,8 +33,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/audit',            label: 'Audit Logs',      icon: '🔍', group: 'Ops' },
   { href: '/production-qa',    label: 'Production QA',   icon: '✅', group: 'Ops' },
   { href: '/ops/runbook',      label: 'Ops Runbook',     icon: '📋', group: 'Ops' },
-  // Signup / Onboarding
+  // Signup / Onboarding / Account
   { href: '/signup',                  label: 'New Account',          icon: '✨', group: 'Setup' },
+  { href: '/account',                 label: 'My Account',           icon: '👤', group: 'Admin' },
   // Demo / Release / Activation
   { href: '/demo-flow',               label: 'Demo Flow',            icon: '🎯', group: 'Release' },
   { href: '/release-checklist',       label: 'Release Checklist',    icon: '📦', group: 'Release' },

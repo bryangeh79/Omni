@@ -30,6 +30,7 @@ import { teamRoutes }            from './team'
 import { auditRoutes }             from './audit'
 import { releaseChecklistRoutes }   from './release-checklist'
 import { activationRoutes }         from './activation'
+import { accountRoutes }            from './account'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -76,4 +77,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(releaseChecklistRoutes, { prefix: '/release-checklist' })
   // Production activation guide API — Phase 16A
   await app.register(activationRoutes,       { prefix: '/activation' })
+  // Self-service account hub — Phase 17B
+  await app.register(accountRoutes,          { prefix: '/account' })
 }
