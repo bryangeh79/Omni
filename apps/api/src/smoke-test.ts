@@ -4685,7 +4685,10 @@ async function smoke() {
   check('new temp password works → 200',       r9bNewPwdLogin.status === 200)
 
   console.log('\n263. Round-9B: audit log captures provisioning + status change')
-  const r9bAuditRes = await get(`/audit/logs?entityType=Tenant&entityId=${r9bTenantId}&pageSize=20`, accessToken)
+  // Audit endpoint is tenant-scoped by JWT — use the R9B tenant's own token
+  // (after reset-password-stub we still have the prior r9bNewPwdLogin response).
+  const r9bAuditTok = (await (await post('/auth/login', { tenantSlug: r9bSlug, email: r9bOwnerEmail, password: r9bReset.temporaryPassword as string })).json() as Record<string, unknown>).accessToken as string
+  const r9bAuditRes = await get(`/audit/logs?entityType=Tenant&pageSize=50`, r9bAuditTok)
   check('audit list → 200', r9bAuditRes.status === 200)
   const r9bAudit = await r9bAuditRes.json() as Record<string, unknown>
   const r9bAuditItems = (r9bAudit.logs ?? r9bAudit.data ?? []) as Array<Record<string, unknown>>
@@ -4699,9 +4702,9 @@ async function smoke() {
   check('audit has no plain temporaryPassword',       !r9bAuditJson.includes(r9bTempPwd) && !r9bAuditJson.includes(r9bReset.temporaryPassword as string))
 
   console.log('\n264. Round-9B: signup route still works for back-compat (not removed)')
-  // Old smoke depends on /auth/signup creating a smoke tenant; we DO NOT break it here.
+  // Old smoke depends on /tenants/signup creating a smoke tenant; we DO NOT break it here.
   // Just verify the route is still reachable (will 400 without body, not 404).
-  const r9bSignupProbe = await post('/auth/signup', {})
+  const r9bSignupProbe = await post('/tenants/signup', {})
   check('signup route still mounted (400 not 404)', r9bSignupProbe.status === 400)
 
   // ── Clean up Round-9B created tenant
