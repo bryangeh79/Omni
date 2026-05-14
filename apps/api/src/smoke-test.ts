@@ -4410,8 +4410,9 @@ async function smoke() {
   check('faq.monthlyUsed incremented by exactly 1', r9FaqAfter === r9FaqBefore + 1)
 
   console.log('\n240. Round-9A: FAQ quota exhaustion blocks regenerate')
-  // trial plan = 3 generations. We've used 1 so far. Bring up to 3 then expect 429.
-  await prismaForceFaqUsage('demo-tenant-001', 3)
+  // Force usage above any plan's monthly limit (Starter=10, Pro=50, Business=200) so this
+  // test is plan-agnostic and exhausts both monthly + credits=0 from the helper.
+  await prismaForceFaqUsage('demo-tenant-001', 9999)
   const r9FaqBlocked = await post('/onboarding/products/generate-sales-config',
     { productName: 'Smoke R9 Blocked', desiredFaqCount: 30 }, accessToken)
   check('blocked when exhausted → 429',     r9FaqBlocked.status === 429)
