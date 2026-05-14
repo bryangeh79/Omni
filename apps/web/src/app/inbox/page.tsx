@@ -10,8 +10,33 @@ import {
   type ConversationSummary, type ConversationDetail, type Message, type ConversationFilter,
   type SseTransport,
 } from '@/lib/api'
+import { toChineseError } from '@/lib/errorText'
 
 const STAGES = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST','AFTER_SALES'] as const
+
+// Stage / status / channel / sender enum → 中文 label
+const STAGE_LABEL: Record<string, string> = {
+  NEW: '新客户', INTERESTED: '已确认需求', HIGH_INTENT: '高意向',
+  QUOTED: '已报价', BOOKED: '已预约', WON: '已成交', LOST: '已流失', AFTER_SALES: '售后',
+}
+const STATUS_LABEL: Record<string, string> = {
+  AI_HANDLING:     'AI 处理中',
+  PENDING_HANDOFF: '待人工接管',
+  HUMAN_HANDLING:  '人工处理中',
+  CLOSED:          '已关闭',
+}
+// Reserved for future use in message bubble metadata
+const _SENDER_LABEL: Record<string, string> = {
+  AI:          'AI 客服',
+  HUMAN_AGENT: '人工客服',
+  CUSTOMER:    '客户',
+  SYSTEM:      '系统',
+}
+const _DIRECTION_LABEL: Record<string, string> = {
+  INBOUND:  '客户消息',
+  OUTBOUND: '已发送',
+}
+void _SENDER_LABEL; void _DIRECTION_LABEL;
 
 // ── Login Form ────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -28,7 +53,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       await login(slug, email, pass)
       onLogin()
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : '登录失败')
+      setErr(toChineseError(ex, '登录失败'))
     } finally {
       setBusy(false)
     }
@@ -61,7 +86,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           disabled={busy}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded py-2 text-sm font-medium disabled:opacity-50"
         >
-          {busy ? 'Signing in...' : '登录'}
+          {busy ? '登录中…' : '登录'}
         </button>
       </form>
     </div>
@@ -100,7 +125,7 @@ function ConvItem({
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-gray-800 truncate">{name}</span>
         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-          <span className={`w-2 h-2 rounded-full ${statusColor}`} title={conv.status} />
+          <span className={`w-2 h-2 rounded-full ${statusColor}`} title={STATUS_LABEL[conv.status] ?? conv.status} />
           {conv.unreadCount > 0 && (
             <span className="bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
               {conv.unreadCount}
@@ -112,7 +137,7 @@ function ConvItem({
       <p className="text-xs text-gray-500 truncate">{preview}</p>
       {conv.needsHuman && (
         <span className="text-xs bg-amber-100 text-amber-700 rounded px-1 mt-1 inline-block">
-          Needs human
+          需要人工
         </span>
       )}
     </button>
@@ -124,8 +149,8 @@ function MsgBubble({ msg }: { msg: Message }) {
   const isOutbound = msg.direction === 'OUTBOUND'
   const isSystem   = msg.senderType === 'SYSTEM'
   const isAi       = msg.senderType === 'AI'
-  const ts         = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const label      = isAi ? 'AI' : msg.senderType === 'HUMAN_AGENT' ? 'You' : ''
+  const ts         = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const label      = isAi ? 'AI 客服' : msg.senderType === 'HUMAN_AGENT' ? '我' : ''
 
   if (isSystem) {
     return (
@@ -187,7 +212,7 @@ function CustomerCard({
       await updateCustomerStage(c.id, stage)
       setEditStage(false)
       onCustomerChanged()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    } catch (ex) { alert(toChineseError(ex, '更新阶段失败')) }
     finally { setBusy(false) }
   }
 
@@ -198,7 +223,7 @@ function CustomerCard({
       const res = await setCustomerTags(c.id, tags)
       setLocalTags(res.tags)
       onCustomerChanged()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    } catch (ex) { alert(toChineseError(ex, '保存标签失败')) }
     finally { setBusy(false) }
   }
 
@@ -210,12 +235,12 @@ function CustomerCard({
       {/* Stage with edit */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-gray-400 font-medium">Stage</span>
+          <span className="text-xs text-gray-500 font-medium">客户阶段</span>
           <button
             onClick={() => setEditStage(!editStage)}
-            className="text-xs text-blue-500 hover:text-blue-700"
+            className="text-xs text-blue-600 hover:text-blue-700"
           >
-            {editStage ? 'cancel' : 'edit'}
+            {editStage ? '取消' : '编辑'}
           </button>
         </div>
         {editStage ? (
@@ -227,25 +252,25 @@ function CustomerCard({
                 onClick={() => handleStageChange(s)}
                 className={`text-xs rounded px-2 py-0.5 font-medium cursor-pointer transition-opacity ${STAGE_COLORS[s] ?? 'bg-gray-100 text-gray-600'} ${c.stage === s ? 'ring-2 ring-offset-1 ring-blue-400' : 'opacity-60 hover:opacity-100'}`}
               >
-                {s}
+                {STAGE_LABEL[s] ?? s}
               </button>
             ))}
           </div>
         ) : (
           <span className={`text-xs rounded px-2 py-0.5 font-medium ${STAGE_COLORS[c.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-            {c.stage}
+            {STAGE_LABEL[c.stage] ?? c.stage}
           </span>
         )}
       </div>
 
       <div className="text-xs text-gray-500">
-        Score: <span className="font-medium text-gray-700">{c.score}</span>
+        意向评分：<span className="font-medium text-gray-700">{c.score}</span>
       </div>
 
       {/* Tags with edit */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-gray-400 font-medium">Tags</span>
+          <span className="text-xs text-gray-500 font-medium">标签</span>
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5">
           {localTags.map((tag) => (
@@ -257,23 +282,23 @@ function CustomerCard({
             type="text"
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
-            placeholder="tag1, tag2"
+            placeholder="标签1, 标签2"
             className="flex-1 border rounded text-xs px-2 py-1 outline-none focus:ring-1 focus:ring-blue-400"
           />
           <button
             onClick={handleTagsSave} disabled={busy}
             className="text-xs bg-blue-500 text-white rounded px-2 py-1 disabled:opacity-50"
           >
-            Save
+            保存
           </button>
         </div>
       </div>
 
       <div className="border-t pt-3 space-y-1 text-xs text-gray-500">
-        <div><span className="font-medium">Channel:</span> {detail.channel.type}</div>
-        <div><span className="font-medium">Status:</span> {detail.status}</div>
+        <div><span className="font-medium">渠道：</span>{detail.channel.type}</div>
+        <div><span className="font-medium">对话状态：</span>{STATUS_LABEL[detail.status] ?? detail.status}</div>
         {detail.assignedUserId && (
-          <div><span className="font-medium">Assigned:</span> {detail.assignedUserId.slice(0, 8)}...</div>
+          <div><span className="font-medium">负责人：</span>{detail.assignedUserId.slice(0, 8)}…</div>
         )}
       </div>
     </div>
@@ -315,7 +340,7 @@ export default function InboxPage() {
       const res = await fetchConversations(filter, search)
       setConversations(res.data)
     } catch (e) {
-      setListError(e instanceof Error ? e.message : 'Failed to load')
+      setListError(toChineseError(e, '加载对话列表失败'))
     }
   }, [filter, search])
 
@@ -336,7 +361,7 @@ export default function InboxPage() {
       setTotalMsgs(msgs.pagination.total)
       setMsgPage(1)
     } catch (e) {
-      setThreadError(e instanceof Error ? e.message : 'Failed to load')
+      setThreadError(toChineseError(e, '加载对话失败'))
     }
   }, [])
 
@@ -384,7 +409,7 @@ export default function InboxPage() {
       await loadThread(selectedId)
       await loadList()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      alert(toChineseError(e, '接管失败'))
     } finally { setActionBusy(false) }
   }
 
@@ -396,20 +421,20 @@ export default function InboxPage() {
       await loadThread(selectedId)
       await loadList()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      alert(toChineseError(e, '释放 AI 失败'))
     } finally { setActionBusy(false) }
   }
 
   async function handleClose() {
     if (!selectedId || actionBusy) return
-    if (!confirm('Close this conversation? This cannot be undone.')) return
+    if (!confirm('确认关闭此对话？此操作不可撤销。')) return
     setActionBusy(true)
     try {
       await closeConversation(selectedId)
       await loadThread(selectedId)
       await loadList()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed')
+      alert(toChineseError(e, '关闭对话失败'))
     } finally { setActionBusy(false) }
   }
 
@@ -433,7 +458,7 @@ export default function InboxPage() {
       setComposer('')
       await loadList()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Send failed')
+      alert(toChineseError(e, '发送失败'))
     } finally { setSending(false) }
   }
 
@@ -452,10 +477,10 @@ export default function InboxPage() {
   }
 
   const FILTERS: { key: ConversationFilter; label: string }[] = [
-    { key: 'all',         label: 'All' },
-    { key: 'needs_human', label: 'Needs Human' },
-    { key: 'ai_handling', label: 'AI Handling' },
-    { key: 'high_intent', label: 'High Intent' },
+    { key: 'all',         label: '全部' },
+    { key: 'needs_human', label: '需要人工' },
+    { key: 'ai_handling', label: 'AI 处理中' },
+    { key: 'high_intent', label: '高意向' },
   ]
 
   const canTakeover = detail && detail.status !== 'HUMAN_HANDLING' && detail.status !== 'CLOSED'
@@ -474,16 +499,16 @@ export default function InboxPage() {
                 title={
                   sseStatus === 'connected'
                     ? sseTransport === 'redis'
-                      ? 'Live (Redis pub/sub)'
-                      : 'Live (in-memory — worker events may not appear)'
-                    : 'Disconnected'
+                      ? '实时（Redis pub/sub）'
+                      : '实时（本地内存 — Worker 事件可能延迟）'
+                    : '已断开'
                 }
               />
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-400 hover:text-gray-600"
               >
-                Sign out
+                退出
               </button>
             </div>
           </div>
@@ -491,7 +516,7 @@ export default function InboxPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search customers..."
+            placeholder="搜索客户姓名 / 手机号…"
             className="w-full border rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-400"
           />
           <div className="flex gap-1 flex-wrap">
@@ -516,7 +541,7 @@ export default function InboxPage() {
             <p className="text-xs text-red-500 px-4 py-2">{listError}</p>
           )}
           {conversations.length === 0 && !listError && (
-            <p className="text-xs text-gray-400 px-4 py-4 text-center">No conversations</p>
+            <p className="text-xs text-gray-400 px-4 py-4 text-center">暂无对话</p>
           )}
           {conversations.map((conv) => (
             <ConvItem
@@ -533,7 +558,7 @@ export default function InboxPage() {
       <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
         {!selectedId ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-            Select a conversation
+            请选择左侧对话开始处理
           </div>
         ) : (
           <>
@@ -543,10 +568,10 @@ export default function InboxPage() {
                 <span className="font-medium text-gray-800">
                   {detail
                     ? (detail.customer.name ?? detail.customer.whatsappName ?? detail.customer.phone)
-                    : '...'}
+                    : '…'}
                 </span>
                 {detail && (
-                  <span className="ml-2 text-xs text-gray-400">{detail.status}</span>
+                  <span className="ml-2 text-xs text-gray-400">{STATUS_LABEL[detail.status] ?? detail.status}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -556,7 +581,7 @@ export default function InboxPage() {
                     disabled={actionBusy}
                     className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded disabled:opacity-50"
                   >
-                    Take Over
+                    人工接管
                   </button>
                 )}
                 {canRelease && (
@@ -565,7 +590,7 @@ export default function InboxPage() {
                     disabled={actionBusy}
                     className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded disabled:opacity-50"
                   >
-                    Release to AI
+                    释放给 AI
                   </button>
                 )}
                 {detail && detail.status !== 'CLOSED' && (
@@ -574,7 +599,7 @@ export default function InboxPage() {
                     disabled={actionBusy}
                     className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded disabled:opacity-50"
                   >
-                    Close
+                    关闭对话
                   </button>
                 )}
               </div>
@@ -588,9 +613,9 @@ export default function InboxPage() {
                 <div className="flex justify-center mb-3">
                   <button
                     onClick={handleLoadOlder}
-                    className="text-xs text-blue-500 hover:text-blue-700 bg-white border border-blue-200 rounded-full px-4 py-1"
+                    className="text-xs text-blue-600 hover:text-blue-700 bg-white border border-blue-200 rounded-full px-4 py-1"
                   >
-                    Load older messages
+                    加载更早消息
                   </button>
                 </div>
               )}
@@ -601,7 +626,7 @@ export default function InboxPage() {
             {/* Composer — disabled if closed */}
             {detail?.status === 'CLOSED' ? (
               <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 text-center text-xs text-gray-400">
-                Conversation closed — reply not available
+                对话已关闭 — 不可回复
               </div>
             ) : (
             <form
@@ -614,7 +639,7 @@ export default function InboxPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(e) }
                 }}
-                placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                placeholder="输入回复…（Enter 发送，Shift+Enter 换行）"
                 rows={2}
                 className="flex-1 border rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-400"
               />
@@ -623,7 +648,7 @@ export default function InboxPage() {
                 disabled={sending || !composer.trim()}
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0"
               >
-                {sending ? '...' : 'Send'}
+                {sending ? '发送中…' : '发送'}
               </button>
             </form>
             )}
@@ -637,7 +662,7 @@ export default function InboxPage() {
           <CustomerCard detail={detail} onCustomerChanged={() => selectedId && loadThread(selectedId)} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 text-xs p-4">
-            Select a conversation to see customer details
+            选择一条对话以查看客户详情
           </div>
         )}
       </div>

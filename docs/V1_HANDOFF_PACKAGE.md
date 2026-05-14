@@ -4,7 +4,9 @@ This is the canonical handoff document. If you are receiving Omni v1, **start he
 
 > **Post-v1 UAT Polish (applied 2026-05)：** UI 已切换到 **中文优先**（Chinese-first），AppNav 重构为 **可折叠分组式导航**，Boss Dashboard 视觉对齐企业级 SaaS 风格。API 注册了 `@fastify/cors`（origin 由 `OMNI_CORS_ORIGINS` env 控制）。
 >
-> **Post-v1 UAT Round-2 (2026-05)：** 完成深度中文化 — onboarding wizard 内部步骤、channels setup 子页、knowledge / launch / release / production-qa / ops / activation 全部内部清单、account/audit/billing/team/settings 内部 section header。装饰 emoji 替换为文字徽章。多语言支持仍延后到 post-v1 i18n。产品定位（**非**广播 / **非**广告 / **非**群发）未改变。真实发送门控仍默认关闭。
+> **Post-v1 UAT Round-2 (2026-05)：** 完成深度中文化 — onboarding wizard 内部步骤、channels setup 子页、knowledge / launch / release / production-qa / ops / activation 全部内部清单、account/audit/billing/team/settings 内部 section header。装饰 emoji 替换为文字徽章。
+>
+> **Post-v1 UAT Round-3 (2026-05)：** Inbox / PWA / Signup 工作流全面中文化（对话气泡 / 阶段徽章 / 接管按钮 / 跟进卡片 / 注册表单），并新增 `apps/web/src/lib/errorText.ts` 前端错误文案中文映射工具。多语言切换框架仍延后到 post-v1 i18n。产品定位（**非**广播 / **非**广告 / **非**群发）未改变。真实发送门控仍默认关闭。
 
 ---
 

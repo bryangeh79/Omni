@@ -12,9 +12,22 @@ import {
   type ConversationSummary, type ConversationDetail, type Message,
   type CustomerDetail, type FollowUpTask, type SseTransport, type BossToday,
 } from '@/lib/api'
+import { toChineseError } from '@/lib/errorText'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STAGES = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST','AFTER_SALES'] as const
+
+const STAGE_LABEL: Record<string, string> = {
+  NEW: '新客户', INTERESTED: '已确认需求', HIGH_INTENT: '高意向',
+  QUOTED: '已报价', BOOKED: '已预约', WON: '已成交', LOST: '已流失', AFTER_SALES: '售后',
+}
+const STATUS_LABEL: Record<string, string> = {
+  AI_HANDLING:     'AI 处理中',
+  PENDING_HANDOFF: '待人工接管',
+  HUMAN_HANDLING:  '人工处理中',
+  CLOSED:          '已关闭',
+}
+
 const STAGE_COLORS: Record<string, string> = {
   NEW:         'bg-gray-100 text-gray-600',
   INTERESTED:  'bg-blue-100 text-blue-700',
@@ -41,7 +54,7 @@ function MobileLoginForm({ onLogin }: { onLogin: () => void }) {
       await login(slug, email, pass)
       onLogin()
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : '登录失败')
+      setErr(toChineseError(ex, '登录失败'))
     } finally { setBusy(false) }
   }
 
@@ -126,19 +139,19 @@ function ConvCard({ conv, onTap }: { conv: ConversationSummary; onTap: () => voi
               <span className="text-xs text-gray-400">{ts}</span>
             </div>
           </div>
-          <p className="text-xs text-gray-500 truncate">{conv.lastMessage?.content ?? 'No messages yet'}</p>
+          <p className="text-xs text-gray-500 truncate">{conv.lastMessage?.content ?? '暂无消息'}</p>
           <div className="flex items-center gap-1.5 mt-1">
             <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${STAGE_COLORS[conv.customer.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-              {conv.customer.stage}
+              {STAGE_LABEL[conv.customer.stage] ?? conv.customer.stage}
             </span>
             {conv.needsHuman && (
               <span className="text-xs bg-amber-100 text-amber-700 rounded-md px-1.5 py-0.5 font-medium">
-                Needs Human
+                需要人工
               </span>
             )}
             {conv.customer.score >= 60 && (
               <span className="text-xs bg-orange-50 text-orange-600 rounded-md px-1.5 py-0.5">
-                Score {conv.customer.score}
+                评分 {conv.customer.score}
               </span>
             )}
           </div>
@@ -166,7 +179,7 @@ function MsgBubble({ msg }: { msg: Message }) {
   return (
     <div className={`flex ${isOut ? 'justify-end' : 'justify-start'} px-4 mb-2`}>
       <div className={`max-w-[78%] ${isOut ? 'items-end' : 'items-start'} flex flex-col`}>
-        {isAi && <span className="text-xs text-purple-500 mb-0.5 px-1">AI</span>}
+        {isAi && <span className="text-xs text-purple-500 mb-0.5 px-1">AI 客服</span>}
         <div
           className={`px-3.5 py-2.5 text-sm rounded-2xl leading-relaxed ${
             isOut
@@ -226,13 +239,13 @@ function ThreadView({
       await sendMessage(conv.id, composer.trim())
       setComposer('')
       onRefresh()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Send failed') }
+    } catch (ex) { alert(toChineseError(ex, '发送失败')) }
     finally { setSending(false) }
   }
 
   async function handleAction(action: 'takeover' | 'release' | 'close') {
     if (actionBusy) return
-    if (action === 'close' && !confirm('Close this conversation?')) return
+    if (action === 'close' && !confirm('确认关闭此对话？')) return
     setActionBusy(true)
     try { onAction(action) } finally { setActionBusy(false) }
   }
@@ -254,7 +267,7 @@ function ThreadView({
       setCustomerDetail(updated)
       setStageEdit(false)
       onRefresh()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Update failed') }
+    } catch (ex) { alert(toChineseError(ex, '更新阶段失败')) }
   }
 
   async function handleTagsSave() {
@@ -265,7 +278,7 @@ function ThreadView({
       const res = await setCustomerTags(conv.customer.id, tags)
       setCustomerDetail(prev => prev ? { ...prev, tags: res.tags } : prev)
       onRefresh()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Tag update failed') }
+    } catch (ex) { alert(toChineseError(ex, '保存标签失败')) }
     finally { setTagBusy(false) }
   }
 
@@ -273,16 +286,16 @@ function ThreadView({
     <div className="fixed inset-0 bg-gray-50 flex flex-col z-20">
       {/* Top bar */}
       <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onBack} className="text-blue-500 font-medium text-sm flex-shrink-0">← Back</button>
+        <button onClick={onBack} className="text-blue-600 font-medium text-sm flex-shrink-0">← 返回</button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
-          <p className="text-xs text-gray-500">{conv.status} · {conv.channel.type}</p>
+          <p className="text-xs text-gray-500">{STATUS_LABEL[conv.status] ?? conv.status} · {conv.channel.type}</p>
         </div>
         <button
           onClick={loadCustomer}
-          className="text-xs text-blue-500 font-medium flex-shrink-0"
+          className="text-xs text-blue-600 font-medium flex-shrink-0"
         >
-          Profile
+          客户资料
         </button>
       </div>
 
@@ -294,7 +307,7 @@ function ThreadView({
               onClick={() => handleAction('takeover')} disabled={actionBusy}
               className="flex-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg py-2 text-xs font-semibold active:bg-amber-100"
             >
-              Take Over
+              人工接管
             </button>
           )}
           {canRelease && (
@@ -302,14 +315,14 @@ function ThreadView({
               onClick={() => handleAction('release')} disabled={actionBusy}
               className="flex-1 bg-green-50 text-green-700 border border-green-200 rounded-lg py-2 text-xs font-semibold active:bg-green-100"
             >
-              Release to AI
+              释放给 AI
             </button>
           )}
           <button
             onClick={() => handleAction('close')} disabled={actionBusy}
             className="px-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg py-2 text-xs font-medium active:bg-gray-100"
           >
-            Close
+            关闭
           </button>
         </div>
       )}
@@ -320,9 +333,9 @@ function ThreadView({
           <div className="flex justify-center mb-3">
             <button
               onClick={onLoadOlder}
-              className="text-xs text-blue-500 bg-white border border-blue-200 rounded-full px-4 py-1.5"
+              className="text-xs text-blue-600 bg-white border border-blue-200 rounded-full px-4 py-1.5"
             >
-              Load older messages
+              加载更早消息
             </button>
           </div>
         )}
@@ -337,7 +350,7 @@ function ThreadView({
             value={composer}
             onChange={(e) => setComposer(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(e) } }}
-            placeholder="Type a message…"
+            placeholder="输入回复…"
             rows={2}
             className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-colors"
           />
@@ -350,7 +363,7 @@ function ThreadView({
         </form>
       ) : (
         <div className="bg-gray-50 border-t border-gray-100 px-4 py-3 text-center text-xs text-gray-400 flex-shrink-0 safe-bottom">
-          Conversation closed
+          对话已关闭
         </div>
       )}
 
@@ -376,9 +389,9 @@ function ThreadView({
             {/* Stage selector */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Stage</span>
-                <button onClick={() => setStageEdit(!stageEdit)} className="text-xs text-blue-500">
-                  {stageEdit ? 'Cancel' : 'Edit'}
+                <span className="text-sm font-semibold text-gray-700">客户阶段</span>
+                <button onClick={() => setStageEdit(!stageEdit)} className="text-xs text-blue-600">
+                  {stageEdit ? '取消' : '编辑'}
                 </button>
               </div>
               {stageEdit ? (
@@ -389,20 +402,20 @@ function ThreadView({
                       onClick={() => handleStageChange(s)}
                       className={`py-2 px-3 rounded-xl text-xs font-medium text-left ${customerDetail.stage === s ? 'ring-2 ring-blue-400' : ''} ${STAGE_COLORS[s] ?? 'bg-gray-100 text-gray-600'}`}
                     >
-                      {s}
+                      {STAGE_LABEL[s] ?? s}
                     </button>
                   ))}
                 </div>
               ) : (
                 <span className={`inline-block px-3 py-1.5 rounded-xl text-sm font-medium ${STAGE_COLORS[customerDetail.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {customerDetail.stage}
+                  {STAGE_LABEL[customerDetail.stage] ?? customerDetail.stage}
                 </span>
               )}
             </div>
 
             {/* Score */}
             <div className="mb-5">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Lead Score</span>
+              <span className="text-sm font-semibold text-gray-700 block mb-2">意向评分</span>
               <div className="flex items-center gap-3">
                 <div className="flex-1 bg-gray-100 rounded-full h-2">
                   <div
@@ -416,7 +429,7 @@ function ThreadView({
 
             {/* Tags */}
             <div className="mb-5">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Tags</span>
+              <span className="text-sm font-semibold text-gray-700 block mb-2">标签</span>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {customerDetail.tags.map((t) => (
                   <span key={t} className="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full">#{t}</span>
@@ -427,14 +440,14 @@ function ThreadView({
                   type="text"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
-                  placeholder="tag1, tag2, tag3"
+                  placeholder="标签1, 标签2, 标签3"
                   className="flex-1 bg-gray-100 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-400"
                 />
                 <button
                   onClick={handleTagsSave} disabled={tagBusy}
                   className="bg-blue-500 text-white rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-40"
                 >
-                  Save
+                  保存
                 </button>
               </div>
             </div>
@@ -442,7 +455,7 @@ function ThreadView({
             {/* Notes */}
             {customerDetail.notes && (
               <div className="mb-5">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Notes</span>
+                <span className="text-sm font-semibold text-gray-700 block mb-2">备注</span>
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{customerDetail.notes}</p>
               </div>
             )}
@@ -451,7 +464,7 @@ function ThreadView({
               onClick={() => setShowCustomer(false)}
               className="w-full bg-gray-100 text-gray-700 rounded-2xl py-3 text-sm font-medium mt-2"
             >
-              Close
+              关闭
             </button>
           </div>
         </div>
@@ -485,21 +498,21 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
   async function handleComplete(id: string) {
     setActionId(id)
     try { await completeFollowUp(id); await load() }
-    catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    catch (ex) { alert(toChineseError(ex, '操作失败')) }
     finally { setActionId(null) }
   }
 
   async function handleCancel(id: string) {
     setActionId(id)
     try { await cancelFollowUp(id); await load() }
-    catch (ex) { alert(ex instanceof Error ? ex.message : 'Failed') }
+    catch (ex) { alert(toChineseError(ex, '操作失败')) }
     finally { setActionId(null) }
   }
 
   const TaskCard = ({ task }: { task: FollowUpTask }) => {
     const name      = task.customer.name ?? task.customer.phone
     const isOverdue = new Date(task.dueAt) < new Date()
-    const dueStr    = new Date(task.dueAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const dueStr    = new Date(task.dueAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     return (
       <div className={`bg-white rounded-2xl border p-4 mb-3 ${isOverdue ? 'border-red-200' : 'border-gray-100'}`}>
         <div className="flex items-start justify-between mb-2">
@@ -510,17 +523,17 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
           <div className="text-right">
             {task.requiresHuman && (
               <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium block mb-1">
-                Human
+                需人工
               </span>
             )}
             <span className={`text-xs ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-              {isOverdue ? 'Overdue · ' : ''}{dueStr}
+              {isOverdue ? '已逾期 · ' : ''}{dueStr}
             </span>
           </div>
         </div>
         {task.suggestedMessage && (
           <p className="text-xs text-gray-500 italic mb-3 bg-gray-50 rounded-xl px-3 py-2 leading-relaxed">
-            "{task.suggestedMessage}"
+            “{task.suggestedMessage}”
           </p>
         )}
         <div className="flex gap-2">
@@ -528,19 +541,19 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
             onClick={() => onOpenConversation(task.conversationId)}
             className="flex-1 bg-blue-50 text-blue-600 rounded-xl py-2 text-xs font-medium active:bg-blue-100"
           >
-            Open Chat
+            打开对话
           </button>
           <button
             onClick={() => handleComplete(task.id)} disabled={actionId === task.id}
             className="flex-1 bg-green-50 text-green-700 rounded-xl py-2 text-xs font-medium active:bg-green-100 disabled:opacity-40"
           >
-            Done
+            已完成
           </button>
           <button
             onClick={() => handleCancel(task.id)} disabled={actionId === task.id}
             className="px-3 bg-gray-50 text-gray-500 rounded-xl py-2 text-xs active:bg-gray-100 disabled:opacity-40"
           >
-            Skip
+            跳过
           </button>
         </div>
       </div>
@@ -567,8 +580,8 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
 
       {overdue.length > 0 && (
         <div className="mb-2">
-          <p className="text-xs font-bold text-red-500 uppercase tracking-wide mb-2">
-            Overdue ({overdue.length})
+          <p className="text-xs font-semibold text-red-500 mb-2">
+            已逾期（{overdue.length}）
           </p>
         </div>
       )}
@@ -576,8 +589,8 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
       {allTasks.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">
           <p className="text-3xl mb-2">✓</p>
-          <p className="text-sm font-medium">No follow-ups due today</p>
-          <p className="text-xs mt-1 text-gray-300">Great work — all caught up!</p>
+          <p className="text-sm font-medium">今日无跟进任务</p>
+          <p className="text-xs mt-1 text-gray-300">全部已处理完毕，干得漂亮！</p>
         </div>
       ) : (
         allTasks.map(task => <TaskCard key={task.id} task={task} />)
@@ -617,19 +630,19 @@ function BossTodayTab({ conversations, onSelect }: { conversations: Conversation
       <div className="px-4 pt-4 pb-2">
         <h1 className="text-xl font-bold text-gray-900">老板今日</h1>
         <p className="text-sm text-gray-400 mt-0.5">
-          {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+          {new Date().toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
       </div>
 
       {/* Stats row — from Boss API when available, conversation list as fallback */}
       <div className="flex gap-3 px-4 py-3 overflow-x-auto">
         {[
-          { label: 'Needs Human',    value: data?.needHuman        ?? urgent.length,    color: 'bg-amber-50 text-amber-700 border-amber-200' },
-          { label: 'High Intent',    value: data?.highIntentCustomers ?? highScore.length, color: 'bg-orange-50 text-orange-700 border-orange-200' },
-          { label: 'Active',         value: data?.openConversations ?? conversations.length, color: 'bg-blue-50 text-blue-700 border-blue-200' },
+          { label: '需要人工',     value: data?.needHuman           ?? urgent.length,        color: 'bg-amber-50 text-amber-700 border-amber-200' },
+          { label: '高意向',       value: data?.highIntentCustomers ?? highScore.length,     color: 'bg-orange-50 text-orange-700 border-orange-200' },
+          { label: '进行中',       value: data?.openConversations   ?? conversations.length, color: 'bg-blue-50 text-blue-700 border-blue-200' },
           ...(data ? [
-            { label: 'Overdue F/U', value: data.overdueFollowUps,  color: data.overdueFollowUps > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200' },
-            { label: 'New Today',   value: data.newCustomers,       color: 'bg-green-50 text-green-700 border-green-200' },
+            { label: '逾期跟进', value: data.overdueFollowUps,  color: data.overdueFollowUps > 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200' },
+            { label: '今日新增', value: data.newCustomers,      color: 'bg-green-50 text-green-700 border-green-200' },
           ] : []),
         ].map(({ label, value, color }) => (
           <div key={label} className={`flex-shrink-0 rounded-2xl border px-4 py-3 min-w-[100px] ${color}`}>
@@ -650,14 +663,14 @@ function BossTodayTab({ conversations, onSelect }: { conversations: Conversation
         </div>
       )}
 
-      <Section title="Needs Human" items={urgent} badge={urgent.length > 0 ? String(urgent.length) : undefined} />
-      <Section title="High Intent" items={highScore} />
-      <Section title="Recent"     items={recent} />
+      <Section title="需要人工" items={urgent} badge={urgent.length > 0 ? String(urgent.length) : undefined} />
+      <Section title="高意向"   items={highScore} />
+      <Section title="最新对话" items={recent} />
 
       {conversations.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <p className="text-3xl mb-2">✓</p>
-          <p className="text-sm font-medium">All clear — no pending conversations</p>
+          <p className="text-sm font-medium">全部已处理 — 暂无待办对话</p>
         </div>
       )}
     </div>
@@ -680,7 +693,6 @@ function ListTab({
       </div>
       {conversations.length === 0 ? (
         <div className="text-center py-16 text-gray-400 px-8">
-          <p className="text-3xl mb-2">📭</p>
           <p className="text-sm">{emptyMsg}</p>
         </div>
       ) : (
@@ -694,11 +706,11 @@ function ListTab({
 type TabId = 'boss' | 'inbox' | 'human' | 'intent' | 'followup'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'boss',    label: 'Today',    icon: '⚡' },
-  { id: 'inbox',   label: '收件箱',    icon: '💬' },
-  { id: 'human',   label: 'Human',    icon: '🙋' },
-  { id: 'intent',  label: 'Intent',   icon: '🎯' },
-  { id: 'followup',label: 'Follow-up', icon: '📅' },
+  { id: 'boss',     label: '今日',     icon: '⚡' },
+  { id: 'inbox',    label: '收件箱',   icon: '💬' },
+  { id: 'human',    label: '人工',     icon: '🙋' },
+  { id: 'intent',   label: '高意向',   icon: '🎯' },
+  { id: 'followup', label: '跟进',     icon: '📅' },
 ]
 
 // ── Main PWA ──────────────────────────────────────────────────────────────────
@@ -789,7 +801,7 @@ export default function PwaPage() {
       else await closeConversation(selectedId)
       await loadThread(selectedId)
       await loadAll()
-    } catch (ex) { alert(ex instanceof Error ? ex.message : 'Action failed') }
+    } catch (ex) { alert(toChineseError(ex, '操作失败')) }
   }
 
   async function handleLoadOlder() {
@@ -842,7 +854,7 @@ export default function PwaPage() {
         <div className="flex items-center gap-3">
           <div
             className={`w-2 h-2 rounded-full ${sseTransport === 'redis' ? 'bg-green-400' : sseTransport === 'memory' ? 'bg-yellow-400' : 'bg-gray-300'}`}
-            title={sseTransport === 'redis' ? 'Live (Redis)' : sseTransport === 'memory' ? 'Live (local)' : 'Disconnected'}
+            title={sseTransport === 'redis' ? '实时（Redis）' : sseTransport === 'memory' ? '实时（本地）' : '已断开'}
           />
           <button onClick={handleLogout} className="text-xs text-gray-400">退出登录</button>
         </div>
@@ -856,23 +868,23 @@ export default function PwaPage() {
         <ListTab
           title="对话收件箱"
           conversations={allConvs}
-          emptyMsg="No active conversations"
+          emptyMsg="暂无进行中的对话"
           onSelect={setSelectedId}
         />
       )}
       {tab === 'human' && (
         <ListTab
-          title="Needs Human"
+          title="需要人工"
           conversations={humanConvs}
-          emptyMsg="No conversations need human attention"
+          emptyMsg="暂无需要人工介入的对话"
           onSelect={setSelectedId}
         />
       )}
       {tab === 'intent' && (
         <ListTab
-          title="High Intent"
+          title="高意向客户"
           conversations={intentConvs.filter(c => c.customer.score >= 60)}
-          emptyMsg="No high-intent customers right now"
+          emptyMsg="当前暂无高意向客户"
           onSelect={setSelectedId}
         />
       )}

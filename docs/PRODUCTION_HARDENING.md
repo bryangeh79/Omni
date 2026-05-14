@@ -1,6 +1,17 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
-## Post-v1 UAT Round-2 — Deep Chinese UI Polish
+## Post-v1 UAT Round-3 — Inbox / PWA / Signup + Error Mapping
+
+继 Round-2 之后，Round-3 完成 Inbox 工作流、PWA 移动端与 Signup 注册流的深度中文化，并引入前端错误文案中文映射工具：
+
+- **Inbox 全流程中文化**：login 表单、对话列表、状态徽章、消息气泡、composer placeholder、人工接管 / 释放 AI / 关闭对话按钮、客户卡片（阶段 / 意向评分 / 标签 / 渠道 / 状态）、阶段编辑器、空状态、错误提示
+- **PWA 全流程中文化**：移动登录、Boss Today（KPI 卡片 / Sections）、Inbox / Human / Intent / Follow-up tabs、对话气泡 + 接管按钮、客户资料 sheet、跟进卡片（已逾期 / 打开对话 / 已完成 / 跳过）、底部导航、状态指示
+- **Signup 注册流中文化**：industry 9 项、AI 目标 6 项、channelPreference 选项（普通 WhatsApp / Meta WhatsApp Business 官方 API）、表单 label / placeholder / hint、密码切换、安全说明、注册成功页（移除 🎉，使用 ✓ 圆形徽章）、登录链接、底部声明
+- **错误文案中文映射** (`apps/web/src/lib/errorText.ts`)：`toChineseError()` 工具将常见 API / 网络错误（Failed to fetch / 401 / 403 / 404 / 409 / 422 / 429 / 5xx / real send disabled / broadcast blocked）映射为友好中文。Inbox / PWA / Signup 已接入。已含中文的消息原样返回，避免双重转换。
+- **未触碰**：API 字段名、env、route paths、enum value、smoke test 已存的 1494 项。
+- **真实发送门控、产品定位（非广播 / 非广告 / 非群发）不变。**
+
+
 
 继 Round-1 之后，Round-2 完成更深层的中文化与企业级 SaaS 一致性优化：
 

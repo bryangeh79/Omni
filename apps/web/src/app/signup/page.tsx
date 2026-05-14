@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { setToken } from '@/lib/api'
+import { toChineseError } from '@/lib/errorText'
 
 const API_BASE   = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
 const ACCENT     = '#6366f1'
@@ -13,24 +14,24 @@ const DANGER     = '#b91c1c'
 const NEUTRAL    = '#6b7280'
 
 const INDUSTRIES = [
-  { value: 'real-estate',     label: 'Real Estate / Property' },
-  { value: 'education',       label: 'Education & Training' },
-  { value: 'retail',          label: 'Retail / E-commerce' },
-  { value: 'food-beverage',   label: 'Food & Beverage' },
-  { value: 'beauty-wellness', label: 'Beauty & Wellness' },
-  { value: 'automotive',      label: 'Automotive' },
-  { value: 'healthcare',      label: 'Healthcare & Clinic' },
-  { value: 'finance',         label: 'Finance & Insurance' },
-  { value: 'other',           label: 'Other / General Business' },
+  { value: 'real-estate',     label: '房地产 / 物业' },
+  { value: 'education',       label: '教育与培训' },
+  { value: 'retail',          label: '零售 / 电商' },
+  { value: 'food-beverage',   label: '餐饮' },
+  { value: 'beauty-wellness', label: '美容与养生' },
+  { value: 'automotive',      label: '汽车' },
+  { value: 'healthcare',      label: '医疗 / 诊所' },
+  { value: 'finance',         label: '金融与保险' },
+  { value: 'other',           label: '其他 / 通用业务' },
 ]
 
 const GOALS = [
-  { value: 'sales',          label: 'Convert leads to customers' },
-  { value: 'appointment',    label: 'Book appointments / meetings' },
-  { value: 'support',        label: 'Customer support & after-sales' },
-  { value: 'qualification',  label: 'Pre-sales lead qualification' },
-  { value: 'demo',           label: 'Schedule demos / free trials' },
-  { value: 'other',          label: 'Other' },
+  { value: 'sales',          label: '引导成交（潜客转化）' },
+  { value: 'appointment',    label: '引导预约（约见 / 会议）' },
+  { value: 'support',        label: '客户支持与售后' },
+  { value: 'qualification',  label: '售前资格筛选' },
+  { value: 'demo',           label: '安排演示 / 免费试用' },
+  { value: 'other',          label: '其他' },
 ]
 
 function slugify(s: string): string {
@@ -88,8 +89,9 @@ export default function SignupPage() {
       })
       const body = await res.json() as SignupResult
       if (!res.ok) {
-        const msg = String(body.error ?? `Error ${res.status}`)
-        if (body.suggestion) setError(`${msg} — try: ${body.suggestion}`)
+        const rawMsg = String(body.error ?? `HTTP ${res.status}`)
+        const msg = toChineseError(rawMsg, '注册失败，请稍后再试')
+        if (body.suggestion) setError(`${msg} — 建议：${body.suggestion}`)
         else setError(msg)
         return
       }
@@ -99,7 +101,7 @@ export default function SignupPage() {
       // Auto-redirect to onboarding after brief pause
       setTimeout(() => { window.location.href = body.nextRoute ?? '/onboarding' }, 1800)
     } catch (err) {
-      setError((err as Error).message)
+      setError(toChineseError(err, '注册失败，请稍后再试'))
     } finally {
       setLoading(false)
     }
@@ -109,20 +111,22 @@ export default function SignupPage() {
     return (
       <div style={{ fontFamily: 'system-ui', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
         <div style={{ textAlign: 'center', maxWidth: 440, padding: '2rem' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
+          <div style={{ width: 56, height: 56, margin: '0 auto 1rem', borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: SUCCESS, fontSize: '1.75rem', fontWeight: 700 }}>✓</span>
+          </div>
           <h2 style={{ color: SUCCESS, fontSize: '1.375rem', fontWeight: 700, margin: '0 0 0.5rem' }}>
-            Account created!
+            账号创建成功！
           </h2>
           <p style={{ color: NEUTRAL, marginBottom: '0.875rem', lineHeight: 1.6 }}>
-            Welcome to Omni! Your tenant <strong>{success.slug}</strong> is ready.<br />
-            Redirecting to the onboarding wizard…
+            欢迎使用 Omni！您的租户 <strong>{success.slug}</strong> 已就绪。<br />
+            即将跳转到上线向导…
           </p>
           <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '0.75rem 1rem', color: SUCCESS, fontSize: '0.875rem', marginBottom: '1rem' }}>
-            Real WhatsApp sending is <strong>disabled by default</strong>.<br />
-            Follow the activation guide when you are ready to go live.
+            真实 WhatsApp 发送默认<strong>关闭</strong>。<br />
+            正式上线前请先按「上线激活指南」完成所有检查。
           </div>
           <a href="/onboarding" style={{ display: 'inline-block', padding: '0.625rem 1.5rem', background: ACCENT, color: '#fff', borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>
-            Continue Setup →
+            继续设置 →
           </a>
         </div>
       </div>
@@ -134,23 +138,23 @@ export default function SignupPage() {
       {/* Brand header */}
       <div style={{ textAlign: 'center', marginBottom: '1.75rem', maxWidth: 480 }}>
         <div style={{ fontWeight: 800, fontSize: '1.5rem', color: '#111827', letterSpacing: '-0.5px', marginBottom: '0.375rem' }}>
-          🤖 Omni
+          Omni
         </div>
         <div style={{ fontSize: '1rem', color: NEUTRAL, lineHeight: 1.5 }}>
           WhatsApp AI 客服 · CRM · 自动跟进 · 成交转化
         </div>
         <div style={{ fontSize: '0.8125rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-          Not a broadcast or ads platform — 1:1 AI customer service only
+          不是广播 / 广告 / 群发平台 — 仅提供 1:1 AI 客服
         </div>
       </div>
 
       {/* Form card */}
       <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '2rem', width: '100%', maxWidth: 480 }}>
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
-          Create your Omni account
+          创建您的 Omni 账号
         </h2>
         <p style={{ margin: '0 0 1.5rem', color: NEUTRAL, fontSize: '0.875rem' }}>
-          Set up your WhatsApp AI customer service system in minutes.
+          只需几分钟即可搭建您的 WhatsApp AI 客服系统。
         </p>
 
         {error && (
@@ -161,24 +165,24 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit}>
           {/* Business name */}
-          <FormField label="Business Name" required>
+          <FormField label="商家名称" required>
             <input
               type="text" required minLength={2} maxLength={120}
               value={form.businessName}
               onChange={e => handleField('businessName', e.target.value)}
-              placeholder="e.g. Sunrise Property"
+              placeholder="例如：阳光地产"
               style={inputCss}
             />
           </FormField>
 
           {/* Tenant slug */}
-          <FormField label="Account ID (slug)" required hint="Used for login. Lowercase, letters, numbers, dashes only.">
+          <FormField label="账号标识（slug）" required hint="用于登录。仅允许小写字母、数字与短横线。">
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <input
                 type="text" required minLength={3} maxLength={40}
                 value={form.slug}
                 onChange={e => handleField('slug', slugify(e.target.value))}
-                placeholder="e.g. sunrise-property"
+                placeholder="例如：sunrise-property"
                 style={{ ...inputCss, fontFamily: 'monospace', flex: 1 }}
               />
             </div>
@@ -186,17 +190,17 @@ export default function SignupPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             {/* Owner name */}
-            <FormField label="Your Name" required>
+            <FormField label="您的姓名" required>
               <input
                 type="text" required minLength={2}
                 value={form.ownerName}
                 onChange={e => handleField('ownerName', e.target.value)}
-                placeholder="Full name"
+                placeholder="全名"
                 style={inputCss}
               />
             </FormField>
             {/* Owner email */}
-            <FormField label="Email Address" required>
+            <FormField label="邮箱地址" required>
               <input
                 type="email" required
                 value={form.ownerEmail}
@@ -208,38 +212,38 @@ export default function SignupPage() {
           </div>
 
           {/* Password */}
-          <FormField label="Password" required hint="Min 8 characters">
+          <FormField label="密码" required hint="至少 8 位字符">
             <div style={{ position: 'relative' }}>
               <input
                 type={pwVisible ? 'text' : 'password'} required minLength={8}
                 value={form.password}
                 onChange={e => handleField('password', e.target.value)}
-                placeholder="Min 8 characters"
+                placeholder="至少 8 位字符"
                 style={{ ...inputCss, paddingRight: '2.5rem' }}
               />
               <button
                 type="button"
                 onClick={() => setPwVisible(v => !v)}
-                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: NEUTRAL, fontSize: '0.875rem' }}
+                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: NEUTRAL, fontSize: '0.75rem' }}
               >
-                {pwVisible ? '🙈' : '👁️'}
+                {pwVisible ? '隐藏' : '显示'}
               </button>
             </div>
           </FormField>
 
           {/* Industry */}
-          <FormField label="Industry">
+          <FormField label="所属行业">
             <select value={form.industry} onChange={e => handleField('industry', e.target.value)} style={inputCss}>
               {INDUSTRIES.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
             </select>
           </FormField>
 
           {/* Channel preference */}
-          <FormField label="WhatsApp Connection Type">
+          <FormField label="WhatsApp 接入方式">
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               {[
-                { value: 'WA_WEB', label: 'Ordinary WhatsApp', note: 'QR scan, best-effort stability' },
-                { value: 'META_WA_BUSINESS', label: 'Meta WhatsApp Business', note: 'Official API, production-grade' },
+                { value: 'WA_WEB', label: '普通 WhatsApp / WhatsApp Web', note: '扫码接入，稳定性尽力而为' },
+                { value: 'META_WA_BUSINESS', label: 'Meta WhatsApp Business 官方 API', note: '官方 API，生产级稳定性' },
               ].map(ch => (
                 <label key={ch.value} style={{
                   flex: '1 1 180px',
@@ -265,7 +269,7 @@ export default function SignupPage() {
           </FormField>
 
           {/* Primary goal */}
-          <FormField label="Primary Goal">
+          <FormField label="主要使用目标">
             <select value={form.primaryGoal} onChange={e => handleField('primaryGoal', e.target.value)} style={inputCss}>
               {GOALS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
@@ -273,7 +277,7 @@ export default function SignupPage() {
 
           {/* Safety notice */}
           <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: NEUTRAL, marginBottom: '1.25rem', lineHeight: 1.5 }}>
-            <strong>Note:</strong> Real WhatsApp sending is disabled by default. No messages are sent until you complete the activation guide. This platform is for 1:1 AI customer service — not broadcast, ads, or bulk messaging.
+            <strong>提示：</strong>真实 WhatsApp 发送默认关闭，需完成「上线激活指南」后方可发送消息。本平台仅提供 1:1 AI 客服，<strong>不支持广播、广告或群发</strong>。注册阶段不会发送真实邮件（邮件验证为占位实现）。
           </div>
 
           <button
@@ -281,19 +285,19 @@ export default function SignupPage() {
             disabled={loading}
             style={{ width: '100%', padding: '0.75rem', background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
-            {loading ? 'Creating your account…' : 'Create Account'}
+            {loading ? '正在创建账号…' : '创建账号'}
           </button>
         </form>
 
         <div style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.875rem', color: NEUTRAL }}>
-          Already have an account?{' '}
+          已有账号？{' '}
           <a href="/inbox" style={{ color: ACCENT, textDecoration: 'none', fontWeight: 600 }}>登录</a>
         </div>
       </div>
 
       {/* Bottom note */}
       <div style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', maxWidth: 480 }}>
-        By creating an account, you understand that Omni provides WhatsApp AI customer service tools only — no broadcast, ads, or bulk messaging on any plan.
+        创建账号即表示您理解 Omni 仅提供 WhatsApp AI 客服工具；所有套餐均不支持广播、广告或群发。
       </div>
     </div>
   )
