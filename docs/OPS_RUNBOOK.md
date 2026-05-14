@@ -106,3 +106,12 @@ Operators should note:
 - `GET /account/export` is a tenant-scoped safe summary — NOT a backup substitute
 - Production backup procedure remains `pg_dump` (see Backup & Restore above)
 - The export is intended for tenant data portability, audit review, and customer-facing transparency
+
+
+## Phase 17D: Security Events Observability
+
+Operators should note:
+- `/account` page now includes a Security tab (OWNER/ADMIN only) with severity counts and recent events
+- Severity classification is local and deterministic — no SIEM integration yet
+- Production SIEM/alerting still relies on external monitoring of `/ops/health` and `/audit/logs`
+- The Security tab supplements (not replaces) the audit log review process

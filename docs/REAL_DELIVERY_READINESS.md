@@ -203,3 +203,13 @@ The new `/account/activity` and `/account/export` endpoints continue the no-real
 - Export explicitly redacts: passwordHash, credentialRef, metaAccessTokenRef, webhookVerifyTokenRef, apiKeyRef, encrypted blobs, raw tokens
 - Export does not include full customer conversations or KB answers in this phase
 - Activity summaries filter metadata to a safe whitelist only
+
+
+## Phase 17D: Activity Filtering + Security Events
+
+The new `/account/activity` filters and `/account/security-events` endpoint continue the no-real-send boundary:
+- Both endpoints are tenant-scoped and audit-log derived
+- Neither calls WhatsApp, Meta, AI, email, or payment providers
+- Both filter metadata through the same safe whitelist
+- Security events do NOT include raw tokens, credential refs, encrypted blobs, actorUserId, ip, or userAgent
+- The 7-day security window is deterministic and based on existing AuditLog records

@@ -207,3 +207,83 @@ The response includes an explicit `redaction` block with `passwordHashExcluded`,
 Three tabs: Overview / Activity / Export.
 - Activity tab: live audit feed with action, role, timestamp, summary, safeMetadata.
 - Export tab: clear "included" / "excluded" lists, Generate button, JSON preview, Download JSON button.
+
+
+## Phase 17D: Activity Filtering + Security Events
+
+### GET /account/activity (extended)
+
+New optional query parameters:
+- `actionGroup` — one of `account` / `team` / `billing` / `settings` / `activation` / `security`
+- `action` — specific action name (must be a recognized account action)
+- `from` — ISO 8601 timestamp (lower bound on createdAt)
+- `to` — ISO 8601 timestamp (upper bound on createdAt)
+- `limit` — 1–100 (default 20)
+
+Invalid values return HTTP 400 with a safe error message. The response now also includes:
+- `filters`: echo of the applied filters
+- `availableActionGroups`: list of valid action group keys for client UIs
+
+Action group mapping:
+| Group | Actions included |
+|---|---|
+| account | ACCOUNT_PROFILE_UPDATE, TENANT_SIGNUP |
+| team | TEAM_INVITE_DRAFT, TEAM_ROLE_UPDATE, TEAM_STATUS_UPDATE |
+| billing | BILLING_PLAN_SELECTED |
+| settings | SETTINGS_PROFILE_UPDATE |
+| activation | ACTIVATION_DRY_RUN, ACTIVATION_TEST_MESSAGE_DRY_RUN |
+| security | TEAM_ROLE_UPDATE, TEAM_STATUS_UPDATE, ACCOUNT_PROFILE_UPDATE |
+
+### GET /account/security-events (OWNER/ADMIN only)
+
+Returns a tenant-scoped security-focused event summary over the last 7 days.
+
+Severity classification (deterministic):
+- `info`: routine profile/billing/plan changes
+- `warning`: privilege escalation (promote to OWNER/ADMIN), member deactivation, activation dry-run with blockers
+- `critical`: reserved for future use; currently not assigned
+
+Response shape:
+```json
+{
+  "tenantId": "...",
+  "asOf": "...",
+  "windowDays": 7,
+  "last24h": { "total": 0, "info": 0, "warning": 0, "critical": 0 },
+  "severityCounts": { "info": 0, "warning": 0, "critical": 0 },
+  "events": [
+    {
+      "id": "...",
+      "action": "TEAM_ROLE_UPDATE",
+      "actorRole": "OWNER",
+      "createdAt": "...",
+      "severity": "warning",
+      "reason": "Member promoted to elevated role",
+      "summary": "Team member role updated",
+      "safeMetadata": { "newRole": "ADMIN" },
+      "within24h": true
+    }
+  ],
+  "recommendedActions": [ "..." ],
+  "safetyFlags": { ... }
+}
+```
+
+**Never includes:** `passwordHash`, `credentialRef`, raw tokens, encrypted blobs, raw provider data, `actorUserId`, `ip`, `userAgent`.
+
+### /account UI
+
+Tabs now: **Overview** / **Activity** / **Security** / **Export**.
+
+Activity tab adds:
+- Action group dropdown (all groups + "All groups")
+- From / To datetime pickers
+- Apply / Clear buttons
+
+Security tab includes:
+- Three severity summary cards (critical / warning / info, 7-day window) with red/yellow/green styling
+- Last-24h breakdown row
+- Recommended operator actions list
+- Recent events list with severity badge, reason, action code, role, timestamp
+- Footer showing live `realSendEnabled` / `realWaSessionEnabled` / `realMetaSendEnabled` flags
+- OWNER/ADMIN gate — non-admin users see a restriction notice

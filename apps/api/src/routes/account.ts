@@ -242,27 +242,121 @@ export async function accountRoutes(app: FastifyInstance) {
     }
   })
 
-  // ── GET /account/activity — Phase 17C ─────────────────────────────────────
-  // Returns recent safe audit events for the current tenant.
-  // Never includes raw secrets, tokens, credential refs, or encrypted blobs.
-  app.get<{ Querystring: { limit?: string } }>('/activity', { preHandler: requireAuth }, async (req) => {
-    const { tenantId } = getAuthUser(req)
-    const take = Math.min(parseInt(req.query.limit ?? '20', 10) || 20, 100)
+  // ── Action group mapping (shared between activity + security events) ──────
+  const ACTION_GROUPS: Record<string, string[]> = {
+    account:    ['ACCOUNT_PROFILE_UPDATE', 'TENANT_SIGNUP'],
+    team:       ['TEAM_INVITE_DRAFT', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE'],
+    billing:    ['BILLING_PLAN_SELECTED'],
+    settings:   ['SETTINGS_PROFILE_UPDATE'],
+    activation: ['ACTIVATION_DRY_RUN', 'ACTIVATION_TEST_MESSAGE_DRY_RUN'],
+    security:   ['TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACCOUNT_PROFILE_UPDATE'],
+  }
 
-    const ACCOUNT_ACTIONS = [
-      'ACCOUNT_PROFILE_UPDATE',
-      'TENANT_SIGNUP',
-      'TEAM_INVITE_DRAFT',
-      'TEAM_ROLE_UPDATE',
-      'TEAM_STATUS_UPDATE',
-      'BILLING_PLAN_SELECTED',
-      'SETTINGS_PROFILE_UPDATE',
-      'ACTIVATION_DRY_RUN',
-      'ACTIVATION_TEST_MESSAGE_DRY_RUN',
-    ]
+  const ALL_GROUPS = ['account', 'team', 'billing', 'settings', 'activation', 'security']
+  const ALL_ACCOUNT_ACTIONS: string[] = Array.from(new Set([
+    ...ACTION_GROUPS.account,
+    ...ACTION_GROUPS.team,
+    ...ACTION_GROUPS.billing,
+    ...ACTION_GROUPS.settings,
+    ...ACTION_GROUPS.activation,
+  ]))
+
+  // Whitelist of safe metadata keys exposed in responses
+  const SAFE_META_KEYS = new Set([
+    'updatedFields', 'newRole', 'isActive', 'planId', 'priceRm',
+    'channelType', 'intendedMode', 'dryRunStatus', 'blockedCount',
+    'industry', 'goal', 'channelPreference', 'recipientLabel',
+  ])
+
+  function safeMeta(json: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(json) as Record<string, unknown>
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(parsed)) {
+        if (SAFE_META_KEYS.has(k)) out[k] = v
+      }
+      return out
+    } catch { return {} }
+  }
+
+  function summarizeAction(action: string): string {
+    switch (action) {
+      case 'ACCOUNT_PROFILE_UPDATE':          return 'Account profile updated'
+      case 'TENANT_SIGNUP':                    return 'Tenant signed up'
+      case 'TEAM_INVITE_DRAFT':                return 'Team invite drafted (no email sent)'
+      case 'TEAM_ROLE_UPDATE':                 return 'Team member role updated'
+      case 'TEAM_STATUS_UPDATE':               return 'Team member status changed'
+      case 'BILLING_PLAN_SELECTED':            return 'Billing plan selected (no charge)'
+      case 'SETTINGS_PROFILE_UPDATE':          return 'Settings profile updated'
+      case 'ACTIVATION_DRY_RUN':               return 'Activation dry-run executed (no real send)'
+      case 'ACTIVATION_TEST_MESSAGE_DRY_RUN':  return 'Test message dry-run (no real send)'
+      default:                                  return action
+    }
+  }
+
+  // ── GET /account/activity — Phase 17C + Phase 17D filters ────────────────
+  // Returns recent safe audit events for the current tenant. Supports filters.
+  // Never includes raw secrets, tokens, credential refs, or encrypted blobs.
+  app.get<{ Querystring: {
+    limit?:       string
+    actionGroup?: string
+    action?:      string
+    from?:        string
+    to?:          string
+  } }>('/activity', { preHandler: requireAuth }, async (req, reply) => {
+    const { tenantId } = getAuthUser(req)
+    const { actionGroup, action, from, to } = req.query
+
+    // limit: default 20, max 100, reject negative/non-numeric explicitly
+    const limitRaw = parseInt(req.query.limit ?? '20', 10)
+    if (req.query.limit !== undefined && (!Number.isFinite(limitRaw) || limitRaw < 1)) {
+      return reply.status(400).send({ error: 'limit must be a positive integer (1-100)' })
+    }
+    const take = Math.min(limitRaw || 20, 100)
+
+    // Resolve actions filter
+    let actionFilter: string[] = ALL_ACCOUNT_ACTIONS
+    if (actionGroup) {
+      if (!ALL_GROUPS.includes(actionGroup)) {
+        return reply.status(400).send({
+          error: `Invalid actionGroup. Valid: ${ALL_GROUPS.join(', ')}`,
+        })
+      }
+      actionFilter = [...(ACTION_GROUPS[actionGroup] ?? [])]
+    }
+    if (action) {
+      if (!ALL_ACCOUNT_ACTIONS.includes(action)) {
+        return reply.status(400).send({ error: 'Unknown action' })
+      }
+      actionFilter = [action]
+    }
+
+    // Date range parsing
+    const where: Record<string, unknown> = {
+      tenantId,
+      action: { in: actionFilter },
+    }
+    const createdAt: Record<string, Date> = {}
+    if (from) {
+      const d = new Date(from)
+      if (isNaN(d.getTime())) {
+        return reply.status(400).send({ error: 'Invalid from date (use ISO 8601)' })
+      }
+      createdAt.gte = d
+    }
+    if (to) {
+      const d = new Date(to)
+      if (isNaN(d.getTime())) {
+        return reply.status(400).send({ error: 'Invalid to date (use ISO 8601)' })
+      }
+      createdAt.lte = d
+    }
+    if (Object.keys(createdAt).length > 0) {
+      where.createdAt = createdAt
+    }
 
     const events = await prisma.auditLog.findMany({
-      where:   { tenantId, action: { in: ACCOUNT_ACTIONS } },
+      where,
       orderBy: { createdAt: 'desc' },
       take,
       select: {
@@ -276,56 +370,172 @@ export async function accountRoutes(app: FastifyInstance) {
       },
     })
 
-    // Generate safe one-line summary per action; never echo raw values
-    function summarize(action: string, _metaJson: string): string {
-      switch (action) {
-        case 'ACCOUNT_PROFILE_UPDATE':         return 'Account profile updated'
-        case 'TENANT_SIGNUP':                   return 'Tenant signed up'
-        case 'TEAM_INVITE_DRAFT':               return 'Team invite drafted (no email sent)'
-        case 'TEAM_ROLE_UPDATE':                return 'Team member role updated'
-        case 'TEAM_STATUS_UPDATE':              return 'Team member status changed'
-        case 'BILLING_PLAN_SELECTED':           return 'Billing plan selected (no charge)'
-        case 'SETTINGS_PROFILE_UPDATE':         return 'Settings profile updated'
-        case 'ACTIVATION_DRY_RUN':              return 'Activation dry-run executed (no real send)'
-        case 'ACTIVATION_TEST_MESSAGE_DRY_RUN': return 'Test message dry-run (no real send)'
-        default:                                return action
-      }
-    }
-
-    // Only return whitelisted metadata keys — never leak raw values
-    const SAFE_META_KEYS = new Set([
-      'updatedFields', 'newRole', 'isActive', 'planId', 'priceRm',
-      'channelType', 'intendedMode', 'dryRunStatus', 'blockedCount',
-      'industry', 'goal', 'channelPreference', 'recipientLabel',
-    ])
-
-    function safeMeta(json: string): Record<string, unknown> {
-      try {
-        const parsed = JSON.parse(json) as Record<string, unknown>
-        const out: Record<string, unknown> = {}
-        for (const [k, v] of Object.entries(parsed)) {
-          if (SAFE_META_KEYS.has(k)) out[k] = v
-        }
-        return out
-      } catch { return {} }
-    }
-
     const safeEvents = events.map(e => ({
       id:           e.id,
       action:       e.action,
       entityType:   e.entityType,
       actorRole:    e.actorRole,
       createdAt:    e.createdAt,
-      summary:      summarize(e.action, e.metadataJson),
+      summary:      summarizeAction(e.action),
       safeMetadata: safeMeta(e.metadataJson),
     }))
 
     return {
       tenantId,
       asOf:    new Date().toISOString(),
+      filters: {
+        actionGroup: actionGroup ?? null,
+        action:      action      ?? null,
+        from:        from        ?? null,
+        to:          to          ?? null,
+        limit:       take,
+      },
+      availableActionGroups: ALL_GROUPS,
       events:  safeEvents,
       counts:  { totalReturned: safeEvents.length, maxRequested: take },
       note: 'Activity history is audit-log derived and tenant-scoped. Raw metadata values are filtered to a safe whitelist. No secrets/tokens/credentials are included.',
+    }
+  })
+
+  // ── GET /account/security-events — Phase 17D ─────────────────────────────
+  // Security-focused event summary with severity classification.
+  // Restricted to OWNER/ADMIN. Local audit-derived data only — no real provider calls.
+  app.get('/security-events', { preHandler: requireRole('OWNER', 'ADMIN') }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    const now      = new Date()
+    const last24h  = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const last7d   = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+    // Pull recent security-relevant audit events (up to last 7 days, max 100)
+    const SECURITY_ACTIONS = [
+      'TEAM_ROLE_UPDATE',
+      'TEAM_STATUS_UPDATE',
+      'ACCOUNT_PROFILE_UPDATE',
+      'SETTINGS_PROFILE_UPDATE',
+      'BILLING_PLAN_SELECTED',
+      'ACTIVATION_DRY_RUN',
+      'ACTIVATION_TEST_MESSAGE_DRY_RUN',
+    ]
+    const rawEvents = await prisma.auditLog.findMany({
+      where:   { tenantId, action: { in: SECURITY_ACTIONS }, createdAt: { gte: last7d } },
+      orderBy: { createdAt: 'desc' },
+      take:    100,
+      select: {
+        id:           true,
+        action:       true,
+        entityType:   true,
+        actorRole:    true,
+        createdAt:    true,
+        metadataJson: true,
+      },
+    })
+
+    type Severity = 'info' | 'warning' | 'critical'
+
+    function classify(action: string, meta: Record<string, unknown>): { severity: Severity; reason: string } {
+      // Role changes — warning (could be privilege escalation)
+      if (action === 'TEAM_ROLE_UPDATE') {
+        const newRole = String(meta.newRole ?? '')
+        if (newRole === 'OWNER' || newRole === 'ADMIN') {
+          return { severity: 'warning', reason: 'Member promoted to elevated role' }
+        }
+        return { severity: 'info', reason: 'Member role updated' }
+      }
+      // Status change — info, but flag if deactivating
+      if (action === 'TEAM_STATUS_UPDATE') {
+        if (meta.isActive === false) return { severity: 'warning', reason: 'Member deactivated' }
+        return { severity: 'info', reason: 'Member status changed' }
+      }
+      // Account profile change — info
+      if (action === 'ACCOUNT_PROFILE_UPDATE' || action === 'SETTINGS_PROFILE_UPDATE') {
+        return { severity: 'info', reason: 'Profile updated' }
+      }
+      // Billing plan — info
+      if (action === 'BILLING_PLAN_SELECTED') {
+        return { severity: 'info', reason: 'Billing plan selected (no charge)' }
+      }
+      // Activation dry-run with blockers — warning
+      if (action === 'ACTIVATION_DRY_RUN') {
+        const blockedCount = Number(meta.blockedCount ?? 0)
+        const dryRunStatus = String(meta.dryRunStatus ?? '')
+        if (dryRunStatus === 'BLOCKED' || blockedCount > 0) {
+          return { severity: 'warning', reason: `Activation dry-run blocked (${blockedCount} issue${blockedCount === 1 ? '' : 's'})` }
+        }
+        return { severity: 'info', reason: 'Activation dry-run executed' }
+      }
+      // Test message dry-run — info (never sends)
+      if (action === 'ACTIVATION_TEST_MESSAGE_DRY_RUN') {
+        return { severity: 'info', reason: 'Test message dry-run (no real send)' }
+      }
+      return { severity: 'info', reason: action }
+    }
+
+    const classified = rawEvents.map(e => {
+      const meta = safeMeta(e.metadataJson)
+      const { severity, reason } = classify(e.action, meta)
+      return {
+        id:           e.id,
+        action:       e.action,
+        entityType:   e.entityType,
+        actorRole:    e.actorRole,
+        createdAt:    e.createdAt,
+        severity,
+        reason,
+        summary:      summarizeAction(e.action),
+        safeMetadata: meta,
+        within24h:    e.createdAt >= last24h,
+      }
+    })
+
+    // Severity counts (across the full 7-day window)
+    const severityCounts = {
+      info:     classified.filter(c => c.severity === 'info').length,
+      warning:  classified.filter(c => c.severity === 'warning').length,
+      critical: classified.filter(c => c.severity === 'critical').length,
+    }
+    // Last-24h summary
+    const last24hEvents = classified.filter(c => c.within24h)
+    const last24hSummary = {
+      total:    last24hEvents.length,
+      info:     last24hEvents.filter(c => c.severity === 'info').length,
+      warning:  last24hEvents.filter(c => c.severity === 'warning').length,
+      critical: last24hEvents.filter(c => c.severity === 'critical').length,
+    }
+
+    // Recommended actions based on what's been observed
+    const recommendedActions: string[] = []
+    if (severityCounts.warning > 0) {
+      recommendedActions.push('Review recent warning-level events for unexpected privilege changes or activation blockers')
+    }
+    if (last24hSummary.warning > 0) {
+      recommendedActions.push('At least one warning-severity event occurred in the last 24 hours — investigate')
+    }
+    if (severityCounts.warning === 0 && severityCounts.critical === 0) {
+      recommendedActions.push('No security warnings detected in the last 7 days')
+    }
+    recommendedActions.push('Real WhatsApp/Meta sends remain disabled by default — see /activation-guide before going live')
+    recommendedActions.push('Audit log is the source of truth — review /audit for the full trail')
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    return {
+      tenantId,
+      asOf: now.toISOString(),
+      windowDays: 7,
+      last24h: last24hSummary,
+      severityCounts,
+      events: classified,
+      recommendedActions,
+      safetyFlags: {
+        realSendEnabled:      false,
+        broadcastEnabled:     false,
+        realWaSessionEnabled: waSessionAllowed,
+        realMetaSendEnabled:  metaSendAllowed,
+        realSendCurrentlyOff: !waSessionAllowed && !metaSendAllowed,
+      },
+      note: 'Security events are local audit-log derived. No real provider calls. No secrets/tokens/credentials exposed.',
     }
   })
 

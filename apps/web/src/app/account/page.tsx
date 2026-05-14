@@ -58,25 +58,57 @@ export default function AccountPage() {
   const [saveOk,   setSaveOk]   = useState(false)
 
   // Phase 17C — tabs + activity + export
-  type Tab = 'overview' | 'activity' | 'export'
+  type Tab = 'overview' | 'activity' | 'export' | 'security'
   const [tab,         setTab]         = useState<Tab>('overview')
   const [activity,    setActivity]    = useState<AnyData | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [exportData,  setExportData]  = useState<AnyData | null>(null)
   const [exportLoading, setExportLoading] = useState(false)
 
+  // Phase 17D: activity filters + security tab state
+  const [filterGroup, setFilterGroup] = useState<string>('')
+  const [filterFrom,  setFilterFrom]  = useState<string>('')
+  const [filterTo,    setFilterTo]    = useState<string>('')
+  const [security,    setSecurity]    = useState<AnyData | null>(null)
+  const [securityLoading, setSecurityLoading] = useState(false)
+
   useEffect(() => { setAuthed(!!getToken()) }, [])
 
-  const loadActivity = useCallback(async () => {
+  const loadActivity = useCallback(async (group?: string, from?: string, to?: string) => {
     const tok = getToken()
     if (!tok) return
     setActivityLoading(true); setError('')
     try {
-      const r = await fetch(`${API_BASE}/account/activity?limit=20`, { headers: { Authorization: `Bearer ${tok}` } })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const params = new URLSearchParams({ limit: '50' })
+      const g = group ?? filterGroup
+      const f = from  ?? filterFrom
+      const t = to    ?? filterTo
+      if (g) params.set('actionGroup', g)
+      if (f) params.set('from', new Date(f).toISOString())
+      if (t) params.set('to',   new Date(t).toISOString())
+      const r = await fetch(`${API_BASE}/account/activity?${params}`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` })) as { error?: string }
+        throw new Error(err.error ?? `HTTP ${r.status}`)
+      }
       setActivity(await r.json() as AnyData)
     } catch (e) { setError((e as Error).message) }
     finally { setActivityLoading(false) }
+  }, [filterGroup, filterFrom, filterTo])
+
+  const loadSecurity = useCallback(async () => {
+    const tok = getToken()
+    if (!tok) return
+    setSecurityLoading(true); setError('')
+    try {
+      const r = await fetch(`${API_BASE}/account/security-events`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` })) as { error?: string }
+        throw new Error(err.error ?? `HTTP ${r.status}`)
+      }
+      setSecurity(await r.json() as AnyData)
+    } catch (e) { setError((e as Error).message) }
+    finally { setSecurityLoading(false) }
   }, [])
 
   const loadExport = useCallback(async () => {
@@ -177,6 +209,7 @@ export default function AccountPage() {
         {([
           { id: 'overview', label: 'Overview',  icon: '🏠' },
           { id: 'activity', label: 'Activity',  icon: '📜' },
+          { id: 'security', label: 'Security',  icon: '🛡️' },
           { id: 'export',   label: 'Export',    icon: '📦' },
         ] as { id: Tab; label: string; icon: string }[]).map(t => (
           <button
@@ -184,6 +217,7 @@ export default function AccountPage() {
             onClick={() => {
               setTab(t.id)
               if (t.id === 'activity' && !activity) void loadActivity()
+              if (t.id === 'security' && !security) void loadSecurity()
             }}
             style={{
               padding: '0.5rem 1rem',
@@ -344,11 +378,43 @@ export default function AccountPage() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>📜 Recent Account Activity</h2>
-            <button onClick={loadActivity} disabled={activityLoading} style={btnSecondary}>
+            <button onClick={() => loadActivity()} disabled={activityLoading} style={btnSecondary}>
               {activityLoading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
-          <p style={{ color: NEUTRAL, fontSize: '0.8125rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+
+          {/* Phase 17D: Activity filters */}
+          <Card title="Filters">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.625rem', alignItems: 'end' }}>
+              <Field label="Action group">
+                <select value={filterGroup} onChange={e => setFilterGroup(e.target.value)} style={inputCss}>
+                  <option value="">All groups</option>
+                  <option value="account">Account</option>
+                  <option value="team">Team</option>
+                  <option value="billing">Billing</option>
+                  <option value="settings">Settings</option>
+                  <option value="activation">Activation</option>
+                  <option value="security">Security</option>
+                </select>
+              </Field>
+              <Field label="From">
+                <input type="datetime-local" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} style={inputCss} />
+              </Field>
+              <Field label="To">
+                <input type="datetime-local" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={inputCss} />
+              </Field>
+              <div style={{ display: 'flex', gap: '0.375rem' }}>
+                <button onClick={() => loadActivity()} disabled={activityLoading} style={{ ...btnPrimary, flex: 1 }}>
+                  Apply
+                </button>
+                <button onClick={() => { setFilterGroup(''); setFilterFrom(''); setFilterTo(''); loadActivity('', '', '') }} style={btnSecondary}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          </Card>
+
+          <p style={{ color: NEUTRAL, fontSize: '0.8125rem', margin: '0.875rem 0', lineHeight: 1.5 }}>
             Audit-derived activity for your tenant. Raw metadata values are filtered to a safe whitelist; no secrets, tokens, or credentials are shown.
           </p>
           <Card title={`Events (${((activity?.events ?? []) as AnyData[]).length})`}>
@@ -384,6 +450,116 @@ export default function AccountPage() {
           </Card>
         </div>
       )}
+
+      {/* ── Security tab (Phase 17D) ─────────────────────────────────────── */}
+      {tab === 'security' && (() => {
+        const sev      = (security?.severityCounts ?? {}) as Record<string, number>
+        const last24h  = (security?.last24h        ?? {}) as Record<string, number>
+        const events   = (security?.events         ?? []) as AnyData[]
+        const recommended = (security?.recommendedActions ?? []) as string[]
+        const safety   = (security?.safetyFlags    ?? {}) as Record<string, unknown>
+        const sevColor = (s: string): string =>
+          s === 'critical' ? DANGER :
+          s === 'warning'  ? WARN_C :
+          SUCCESS
+        const sevBg = (s: string): string =>
+          s === 'critical' ? '#fef2f2' :
+          s === 'warning'  ? '#fffbeb' :
+          '#f0fdf4'
+        return (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>🛡️ Security Events</h2>
+              <button onClick={loadSecurity} disabled={securityLoading} style={btnSecondary}>
+                {securityLoading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+            <p style={{ color: NEUTRAL, fontSize: '0.8125rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+              Local audit-derived security view (last 7 days). No real provider calls. Restricted to OWNER and ADMIN.
+            </p>
+
+            {!isOwnerOrAdmin && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.625rem 0.875rem', color: DANGER, fontSize: '0.875rem', marginBottom: '1rem' }}>
+                Security view is restricted to OWNER and ADMIN.
+              </div>
+            )}
+
+            {/* Severity summary cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+              {[
+                { key: 'critical', label: 'Critical (7d)', count: sev.critical ?? 0 },
+                { key: 'warning',  label: 'Warning (7d)',  count: sev.warning  ?? 0 },
+                { key: 'info',     label: 'Info (7d)',     count: sev.info     ?? 0 },
+              ].map(s => (
+                <div key={s.key} style={{ background: sevBg(s.key), border: `1px solid ${sevColor(s.key)}33`, borderRadius: 10, padding: '0.875rem 1rem' }}>
+                  <div style={{ fontSize: '0.6875rem', color: NEUTRAL, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>{s.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.375rem', color: sevColor(s.key) }}>{s.count}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Last 24h summary */}
+            <Card title="Last 24 hours">
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+                <div><strong>{last24h.total ?? 0}</strong> total events</div>
+                <div style={{ color: DANGER }}><strong>{last24h.critical ?? 0}</strong> critical</div>
+                <div style={{ color: WARN_C }}><strong>{last24h.warning ?? 0}</strong> warning</div>
+                <div style={{ color: SUCCESS }}><strong>{last24h.info ?? 0}</strong> info</div>
+              </div>
+            </Card>
+
+            {/* Recommended actions */}
+            {recommended.length > 0 && (
+              <div style={{ marginTop: '1rem' }}>
+                <Card title="Recommended actions">
+                  <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
+                    {recommended.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </Card>
+              </div>
+            )}
+
+            {/* Event list */}
+            <div style={{ marginTop: '1rem' }}>
+              <Card title={`Recent events (${events.length})`}>
+                {events.length === 0 ? (
+                  <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>
+                    {securityLoading ? 'Loading security events…' : 'No security-relevant events in the last 7 days.'}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                    {events.map(e => (
+                      <div key={String(e.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', padding: '0.4375rem 0', borderBottom: '1px solid #f3f4f6', fontSize: '0.8125rem' }}>
+                        <span style={{ padding: '0.0625rem 0.4375rem', borderRadius: 4, background: sevBg(String(e.severity)), color: sevColor(String(e.severity)), fontWeight: 700, fontSize: '0.6875rem', flexShrink: 0, marginTop: 1 }}>
+                          {String(e.severity).toUpperCase()}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 600, color: '#111827' }}>{String(e.reason ?? e.summary ?? e.action)}</span>
+                            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                              {e.actorRole ? `${String(e.actorRole)} · ` : ''}{e.createdAt ? new Date(String(e.createdAt)).toLocaleString() : '—'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: NEUTRAL, marginTop: 2 }}>
+                            <code style={{ background: '#f9fafb', padding: '0 4px', borderRadius: 3 }}>{String(e.action)}</code>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Safety footer */}
+            <div style={{ marginTop: '1rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.75rem', color: NEUTRAL, lineHeight: 1.5 }}>
+              Safety status: realSendEnabled = <strong>{String(safety.realSendEnabled ?? false)}</strong> · realWaSessionEnabled = <strong>{String(safety.realWaSessionEnabled ?? false)}</strong> · realMetaSendEnabled = <strong>{String(safety.realMetaSendEnabled ?? false)}</strong>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Export tab (Phase 17C) ─────────────────────────────────────── */}
       {tab === 'export' && (

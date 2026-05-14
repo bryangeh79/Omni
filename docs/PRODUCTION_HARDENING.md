@@ -243,3 +243,13 @@ See `docs/TENANT_ACCOUNT_MANAGEMENT.md`.
 - `/account` UI: three tabs (Overview / Activity / Export) with Generate + Download JSON button
 
 See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.
+
+
+## Phase 17D: Activity Filtering + Security Events
+
+- `GET /account/activity` extended with `actionGroup` / `action` / `from` / `to` / `limit` filters; invalid values rejected with 400
+- `GET /account/security-events` (OWNER/ADMIN only) returns severity-classified summary over last 7 days
+- /account UI adds Security tab and Activity filter controls
+- No new permission tiers introduced — uses existing OWNER/ADMIN gate via `requireRole`
+
+See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.

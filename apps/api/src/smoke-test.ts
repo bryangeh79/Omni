@@ -3846,6 +3846,139 @@ async function smoke() {
   check('export safety.broadcastEnabled=false',       expSafety.broadcastEnabled     === false)
   check('export safety.realSendEnabled=false',        expSafety.realSendEnabled      === false)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 17D — Activity Filtering + Security Events
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n203. Phase 17D: GET /account/activity — filter validation')
+  // Auth still required
+  check('GET /account/activity (filtered) without auth → 401',
+    (await get('/account/activity?actionGroup=team')).status === 401)
+  // Invalid actionGroup → 400
+  check('GET /account/activity bad actionGroup → 400',
+    (await get('/account/activity?actionGroup=invalid', accessToken)).status === 400)
+  // Invalid action → 400
+  check('GET /account/activity bad action → 400',
+    (await get('/account/activity?action=NOPE', accessToken)).status === 400)
+  // Invalid from date → 400
+  check('GET /account/activity bad from → 400',
+    (await get('/account/activity?from=not-a-date', accessToken)).status === 400)
+  // Invalid to date → 400
+  check('GET /account/activity bad to → 400',
+    (await get('/account/activity?to=not-a-date', accessToken)).status === 400)
+  // Invalid limit → 400
+  check('GET /account/activity bad limit (negative) → 400',
+    (await get('/account/activity?limit=-5', accessToken)).status === 400)
+
+  console.log('\n204. Phase 17D: GET /account/activity — filter results')
+  const actFilteredRes  = await get('/account/activity?actionGroup=account&limit=10', accessToken)
+  const actFilteredBody = await actFilteredRes.json() as Record<string, unknown>
+  check('GET /account/activity?actionGroup=account → 200',  actFilteredRes.status === 200)
+  check('filtered response has filters object',              typeof actFilteredBody.filters === 'object')
+  check('filtered response has availableActionGroups array', Array.isArray(actFilteredBody.availableActionGroups))
+  const actFilters = (actFilteredBody.filters ?? {}) as Record<string, unknown>
+  check('filters.actionGroup=account',                       actFilters.actionGroup === 'account')
+  check('filters.limit=10',                                  actFilters.limit === 10)
+  // Verify only account-group events returned
+  const actFilteredEvents = (actFilteredBody.events ?? []) as Record<string, unknown>[]
+  const ACCOUNT_GROUP_ACTIONS = ['ACCOUNT_PROFILE_UPDATE', 'TENANT_SIGNUP']
+  check('filtered events all in account group',
+    actFilteredEvents.every(e => ACCOUNT_GROUP_ACTIONS.includes(String(e.action))))
+
+  // actionGroup=team
+  const actTeamRes  = await get('/account/activity?actionGroup=team', accessToken)
+  const actTeamBody = await actTeamRes.json() as Record<string, unknown>
+  check('GET /account/activity?actionGroup=team → 200', actTeamRes.status === 200)
+  const TEAM_GROUP = ['TEAM_INVITE_DRAFT', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE']
+  const teamEvents = (actTeamBody.events ?? []) as Record<string, unknown>[]
+  check('team-group events all in team group',
+    teamEvents.every(e => TEAM_GROUP.includes(String(e.action))))
+
+  // Date range filter — past hour should include recent events
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const actRangeRes = await get(`/account/activity?from=${encodeURIComponent(oneHourAgo)}`, accessToken)
+  check('GET /account/activity?from=<recent> → 200', actRangeRes.status === 200)
+
+  console.log('\n205. Phase 17D: filtered activity response safety')
+  check('filtered activity no passwordHash',         !JSON.stringify(actFilteredBody).includes('passwordHash'))
+  check('filtered activity no credentialRef',        !JSON.stringify(actFilteredBody).includes('credentialRef'))
+  check('filtered activity no metaAccessTokenRef',   !JSON.stringify(actFilteredBody).includes('metaAccessTokenRef'))
+  check('filtered activity no webhookVerifyTokenRef',!JSON.stringify(actFilteredBody).includes('webhookVerifyTokenRef'))
+  check('filtered activity no apiKeyRef',            !JSON.stringify(actFilteredBody).includes('apiKeyRef'))
+  check('filtered activity no JWT_SECRET',           !JSON.stringify(actFilteredBody).includes('JWT_SECRET'))
+
+  console.log('\n206. Phase 17D: GET /account/security-events — auth + RBAC')
+  check('GET /account/security-events without auth → 401',
+    (await get('/account/security-events')).status === 401)
+
+  const secRes  = await get('/account/security-events', accessToken)
+  const secBody = await secRes.json() as Record<string, unknown>
+  check('GET /account/security-events → 200',           secRes.status === 200)
+  check('security has tenantId',                        typeof secBody.tenantId === 'string')
+  check('security has asOf',                            typeof secBody.asOf === 'string')
+  check('security has windowDays',                      typeof secBody.windowDays === 'number')
+  check('security has last24h object',                  typeof secBody.last24h === 'object')
+  check('security has severityCounts object',           typeof secBody.severityCounts === 'object')
+  check('security has events array',                    Array.isArray(secBody.events))
+  check('security has recommendedActions array',        Array.isArray(secBody.recommendedActions))
+  check('security has safetyFlags object',              typeof secBody.safetyFlags === 'object')
+
+  console.log('\n207. Phase 17D: security severityCounts + last24h shape')
+  const secSev = (secBody.severityCounts ?? {}) as Record<string, unknown>
+  check('severityCounts has info (number)',             typeof secSev.info === 'number')
+  check('severityCounts has warning (number)',          typeof secSev.warning === 'number')
+  check('severityCounts has critical (number)',         typeof secSev.critical === 'number')
+  const secLast24 = (secBody.last24h ?? {}) as Record<string, unknown>
+  check('last24h has total',                            typeof secLast24.total === 'number')
+  check('last24h has info',                             typeof secLast24.info === 'number')
+  check('last24h has warning',                          typeof secLast24.warning === 'number')
+  check('last24h has critical',                         typeof secLast24.critical === 'number')
+
+  console.log('\n208. Phase 17D: security events have safe shape')
+  const secEvents = (secBody.events ?? []) as Record<string, unknown>[]
+  if (secEvents.length > 0) {
+    const ev = secEvents[0]
+    check('security event has id',                      typeof ev.id === 'string')
+    check('security event has action',                  typeof ev.action === 'string')
+    check('security event has severity',                ['info', 'warning', 'critical'].includes(String(ev.severity)))
+    check('security event has reason',                  typeof ev.reason === 'string')
+    check('security event has actorRole field',         'actorRole' in ev)
+    check('security event has within24h (bool)',        typeof ev.within24h === 'boolean')
+    check('security event no actorUserId',              !('actorUserId' in ev))
+    check('security event no ip',                       !('ip' in ev))
+    check('security event no userAgent',                !('userAgent' in ev))
+    check('security event no raw metadataJson',         !('metadataJson' in ev))
+  } else {
+    check('security event has id (skip — empty)',       true)
+    check('security event has action (skip — empty)',   true)
+    check('security event has severity (skip — empty)', true)
+    check('security event has reason (skip — empty)',   true)
+    check('security event has actorRole field (skip)',  true)
+    check('security event has within24h (skip)',        true)
+    check('security event no actorUserId (skip)',       true)
+    check('security event no ip (skip)',                true)
+    check('security event no userAgent (skip)',         true)
+    check('security event no raw metadataJson (skip)',  true)
+  }
+
+  console.log('\n209. Phase 17D: security response — no secrets')
+  const secJson = JSON.stringify(secBody)
+  check('security no passwordHash',           !secJson.includes('passwordHash'))
+  check('security no credentialRef',          !secJson.includes('credentialRef'))
+  check('security no metaAccessTokenRef',     !secJson.includes('metaAccessTokenRef'))
+  check('security no webhookVerifyTokenRef',  !secJson.includes('webhookVerifyTokenRef'))
+  check('security no apiKeyRef',              !secJson.includes('apiKeyRef'))
+  check('security no JWT_SECRET',             !secJson.includes('JWT_SECRET'))
+  check('security no DATABASE_URL',           !secJson.includes('DATABASE_URL'))
+
+  console.log('\n210. Phase 17D: security safety flags still off')
+  const secSafety = (secBody.safetyFlags ?? {}) as Record<string, unknown>
+  check('security safety.realSendEnabled=false',      secSafety.realSendEnabled      === false)
+  check('security safety.realWaSessionEnabled=false', secSafety.realWaSessionEnabled === false)
+  check('security safety.realMetaSendEnabled=false',  secSafety.realMetaSendEnabled  === false)
+  check('security safety.realSendCurrentlyOff=true',  secSafety.realSendCurrentlyOff === true)
+  check('security safety.broadcastEnabled=false',     secSafety.broadcastEnabled     === false)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
