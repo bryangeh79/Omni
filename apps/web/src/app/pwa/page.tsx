@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
@@ -41,7 +41,7 @@ function MobileLoginForm({ onLogin }: { onLogin: () => void }) {
       await login(slug, email, pass)
       onLogin()
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : 'Login failed')
+      setErr(ex instanceof Error ? ex.message : '登录失败')
     } finally { setBusy(false) }
   }
 
@@ -53,7 +53,7 @@ function MobileLoginForm({ onLogin }: { onLogin: () => void }) {
             <span className="text-white text-xl font-bold">O</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Omni</h1>
-          <p className="text-sm text-gray-500 mt-1">Operator Inbox</p>
+          <p className="text-sm text-gray-500 mt-1">客服工作台</p>
         </div>
         {err && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
@@ -63,26 +63,26 @@ function MobileLoginForm({ onLogin }: { onLogin: () => void }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Tenant slug"
+            placeholder="租户标识"
             value={slug} onChange={(e) => setSlug(e.target.value)} required
           />
           <input
             type="email"
             className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Email"
+            placeholder="邮箱"
             value={email} onChange={(e) => setEmail(e.target.value)} required
           />
           <input
             type="password"
             className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Password"
+            placeholder="密码"
             value={pass} onChange={(e) => setPass(e.target.value)} required
           />
           <button
             type="submit" disabled={busy}
             className="w-full bg-blue-600 active:bg-blue-700 text-white rounded-xl py-3.5 text-sm font-semibold disabled:opacity-50"
           >
-            {busy ? 'Signing in…' : 'Sign In'}
+            {busy ? '登录中…' : '登录'}
           </button>
         </form>
       </div>
@@ -550,8 +550,8 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
   if (loading) {
     return (
       <div className="pb-24 px-4 pt-4">
-        <h1 className="text-lg font-bold text-gray-900 mb-3">Follow-up</h1>
-        <p className="text-xs text-gray-400 text-center py-8">Loading…</p>
+        <h1 className="text-lg font-bold text-gray-900 mb-3">跟进任务</h1>
+        <p className="text-xs text-gray-400 text-center py-8">加载中…</p>
       </div>
     )
   }
@@ -561,8 +561,8 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
   return (
     <div className="pb-24 px-4 pt-4">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-bold text-gray-900">Follow-up</h1>
-        <button onClick={load} className="text-xs text-blue-500">Refresh</button>
+        <h1 className="text-lg font-bold text-gray-900">跟进任务</h1>
+        <button onClick={load} className="text-xs text-blue-500">刷新</button>
       </div>
 
       {overdue.length > 0 && (
@@ -615,7 +615,7 @@ function BossTodayTab({ conversations, onSelect }: { conversations: Conversation
   return (
     <div className="pb-24">
       <div className="px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold text-gray-900">Boss Today</h1>
+        <h1 className="text-xl font-bold text-gray-900">老板今日</h1>
         <p className="text-sm text-gray-400 mt-0.5">
           {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
@@ -695,7 +695,7 @@ type TabId = 'boss' | 'inbox' | 'human' | 'intent' | 'followup'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'boss',    label: 'Today',    icon: '⚡' },
-  { id: 'inbox',   label: 'Inbox',    icon: '💬' },
+  { id: 'inbox',   label: '收件箱',    icon: '💬' },
   { id: 'human',   label: 'Human',    icon: '🙋' },
   { id: 'intent',  label: 'Intent',   icon: '🎯' },
   { id: 'followup',label: 'Follow-up', icon: '📅' },
@@ -844,7 +844,7 @@ export default function PwaPage() {
             className={`w-2 h-2 rounded-full ${sseTransport === 'redis' ? 'bg-green-400' : sseTransport === 'memory' ? 'bg-yellow-400' : 'bg-gray-300'}`}
             title={sseTransport === 'redis' ? 'Live (Redis)' : sseTransport === 'memory' ? 'Live (local)' : 'Disconnected'}
           />
-          <button onClick={handleLogout} className="text-xs text-gray-400">Sign out</button>
+          <button onClick={handleLogout} className="text-xs text-gray-400">退出登录</button>
         </div>
       </div>
 
@@ -854,7 +854,7 @@ export default function PwaPage() {
       )}
       {tab === 'inbox' && (
         <ListTab
-          title="Inbox"
+          title="对话收件箱"
           conversations={allConvs}
           emptyMsg="No active conversations"
           onSelect={setSelectedId}

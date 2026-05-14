@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import {
@@ -23,7 +23,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true)
     try { await login(slug, email, pass); onLogin() }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : '登录失败') }
     finally { setBusy(false) }
   }
   return (
@@ -31,14 +31,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       <form onSubmit={submit} className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm space-y-4">
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600 mb-3"><span className="text-white text-xl">👥</span></div>
-          <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to manage your team</p>
+          <h1 className="text-2xl font-bold text-gray-900">团队管理</h1>
+          <p className="text-sm text-gray-400 mt-1">登录以管理团队成员</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
-        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
-        <button type="submit" disabled={busy} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? 'Signing in…' : 'Sign In'}</button>
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
+        <button type="submit" disabled={busy} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
       </form>
     </div>
   )
@@ -126,7 +126,7 @@ export default function TeamPage() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">Team Management</h1>
+              <h1 className="text-base font-bold text-gray-900">团队管理</h1>
               <p className="text-xs text-gray-400">{team ? `${team.active} active · ${team.total} total` : 'Loading…'}{myRole ? ` · Your role: ${myRole}` : ''}</p>
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function TeamPage() {
           <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-3">⏳</p><p>Loading team…</p></div>
         ) : (
           <>
-            {/* Member List */}
+            {/* 成员列表 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
               <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Team Members</h2>
               <div className="space-y-2">
@@ -190,7 +190,7 @@ export default function TeamPage() {
                                 onClick={() => { setEditingId(m.id); setEditingRole(m.role) }}
                                 className="text-xs text-indigo-500 hover:text-indigo-700 px-1"
                                 title="Change role"
-                              >Edit</button>
+                              >编辑</button>
                               <button
                                 onClick={() => { void handleToggleStatus(m) }}
                                 className={`text-xs px-1 ${m.isActive ? 'text-red-400 hover:text-red-600' : 'text-emerald-500 hover:text-emerald-700'}`}

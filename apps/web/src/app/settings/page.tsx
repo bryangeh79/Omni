@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchSettingsOverview, updateCompanyProfile, type SettingsOverview } from '@/lib/api'
@@ -9,7 +9,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true)
     try { await login(slug, email, pass); onLogin() }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : '登录失败') }
     finally { setBusy(false) }
   }
   return (
@@ -17,14 +17,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       <form onSubmit={submit} className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm space-y-4">
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-700 mb-3"><span className="text-white text-xl">⚙️</span></div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-bold text-gray-900">设置</h1>
           <p className="text-sm text-gray-400 mt-1">Sign in to manage your account</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
-        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
-        <button type="submit" disabled={busy} className="w-full bg-slate-700 hover:bg-slate-800 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? 'Signing in…' : 'Sign In'}</button>
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
+        <button type="submit" disabled={busy} className="w-full bg-slate-700 hover:bg-slate-800 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
       </form>
     </div>
   )
@@ -87,7 +87,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-slate-700 rounded-xl flex items-center justify-center"><span className="text-white text-sm">⚙️</span></div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">Settings</h1>
+              <h1 className="text-base font-bold text-gray-900">设置</h1>
               <p className="text-xs text-gray-400">{o?.company.name ?? 'Loading…'} · {o?.company.plan ?? 'trial'} plan</p>
             </div>
           </div>
@@ -144,7 +144,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { void handleSaveProfile() }} disabled={saving} className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
-                    <button onClick={() => setEditing(false)} className="bg-gray-100 text-gray-600 text-xs px-4 py-2 rounded-xl">Cancel</button>
+                    <button onClick={() => setEditing(false)} className="bg-gray-100 text-gray-600 text-xs px-4 py-2 rounded-xl">取消</button>
                   </div>
                 </div>
               )}

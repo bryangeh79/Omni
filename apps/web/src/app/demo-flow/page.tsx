@@ -168,14 +168,14 @@ export default function DemoFlowPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-              🎯 Omni SaaS v1 — Demo Flow
+              🎯 Omni SaaS v1 — 演示流程
             </h1>
             <p style={{ margin: '0.375rem 0 0', color: '#6b7280', fontSize: '0.9375rem', lineHeight: 1.5 }}>
-              Guided product demo and internal QA walkthrough. Step through the complete <strong>WhatsApp AI 客服 + CRM + Follow-up + Conversion</strong> product journey.
+              引导式产品演示与内部 QA 演练。完整走完 <strong>WhatsApp AI 客服 + CRM + 自动跟进 + 成交转化</strong> 的产品旅程。
             </p>
           </div>
           <a href="/release-checklist" style={{ padding: '0.4375rem 0.875rem', background: '#6366f1', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            Release Checklist →
+            发布检查清单 →
           </a>
         </div>
 
@@ -191,7 +191,7 @@ export default function DemoFlowPage() {
         {/* Progress bar */}
         <div style={{ marginTop: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.375rem' }}>
-            <span>Demo progress</span>
+            <span>演示进度</span>
             <span>{doneCount} / {DEMO_STEPS.length} steps</span>
           </div>
           <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>

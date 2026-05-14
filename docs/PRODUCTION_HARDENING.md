@@ -1,4 +1,17 @@
-# Omni Production Hardening — Phase 10A/10B → 15B
+# Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
+
+## Post-v1 UAT — UI Polish (Chinese-first + Collapsible Nav)
+
+Applied after the v1 final handoff:
+
+- **AppNav 重构为可折叠分组式导航。** 6 个顶级分组（工作台 / 客户与成交 / 启动配置 / 账户与团队 / 运维与安全 / 演示），点击展开子项，活动项高亮父分组，展开状态持久化到 `localStorage` 键 `omni.nav.expanded.v1`。
+- **UI 中文化（Chinese-first）。** 所有用户 / 操作者可见页面的导航标签、登录表单、页面标题、按钮、空状态已切到中文。后端 API 字段名、env var、技术标识符保持英文不变。
+- **CORS 已注册。** API 现注册 `@fastify/cors`，origin 由 `OMNI_CORS_ORIGINS` env 控制，默认 `http://localhost:43110,http://127.0.0.1:43110`，credentials 启用。这是浏览器跨端口（Web :43110 → API :43111）访问的必要条件。
+- **Boss Dashboard 排版优化。** Header / KPI / 跟进 / 建议动作 / 管道分区合并，字号 / 字重 / 间距对齐企业级 SaaS 风格（Intercom / Linear 风格借鉴），不复制任何第三方品牌资产。
+- **真实发送门控保持关闭。** `OMNI_ALLOW_WA_SESSION` 与 `OMNI_ENABLE_REAL_META_SEND` 均未触动。产品定位（**非**广播 / **非**广告 / **非**群发）未改变。
+- **i18n 多语言延后到 post-v1**（roadmap）。目前为中文优先单语，未引入 i18n 框架。
+
+
 
 ## Health Endpoints
 

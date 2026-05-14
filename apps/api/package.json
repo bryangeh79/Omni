@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
+    "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^9.0.0",
     "@omni/ai-core": "workspace:*",
     "@omni/channel-adapters": "workspace:*",

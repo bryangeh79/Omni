@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 // Production Monitoring & Backup Runbook — Phase 15C
 
 import { useState, useEffect } from 'react'
@@ -23,13 +23,13 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   }
   return (
     <form onSubmit={handleLogin} style={{ maxWidth: 360, margin: '4rem auto', padding: '2rem', border: '1px solid #e5e7eb', borderRadius: 12, fontFamily: 'system-ui' }}>
-      <h2 style={{ marginTop: 0 }}>Sign in to Omni</h2>
+      <h2 style={{ marginTop: 0 }}>登录到 Omni</h2>
       {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="Tenant slug"  required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
-      <input value={email}    onChange={e => setEmail(e.target.value)}    placeholder="Email"       type="email"    required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
-      <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password"    type="password" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem',   borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="租户标识"  required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={email}    onChange={e => setEmail(e.target.value)}    placeholder="邮箱"       type="email"    required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={password} onChange={e => setPassword(e.target.value)} placeholder="密码"    type="password" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem',   borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
       <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.625rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-        {loading ? 'Signing in…' : 'Sign In'}
+        {loading ? '登录中…' : '登录'}
       </button>
     </form>
   )
@@ -98,7 +98,7 @@ export default function RunbookPage() {
     <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 860, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Production Ops Runbook</h1>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>生产运维手册</h1>
           <p style={{ margin: '0.25rem 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
             Health checks, backup checklist, monitoring, incident response, and support readiness.
           </p>
@@ -226,8 +226,8 @@ export default function RunbookPage() {
       )}
 
       <footer style={{ marginTop: '2.5rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Omni AI Chatbot — Phase 15C Production Ops Runbook &nbsp;|&nbsp;
-        <a href="/audit" style={{ color: '#6366f1' }}>Audit Logs</a> &nbsp;|&nbsp;
+        Omni AI Chatbot — Phase 15C 生产运维手册 &nbsp;|&nbsp;
+        <a href="/audit" style={{ color: '#6366f1' }}>审计日志</a> &nbsp;|&nbsp;
         <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> &nbsp;|&nbsp;
         <a href="/activation-guide" style={{ color: '#6366f1' }}>Activation Guide</a> &nbsp;|&nbsp;
         <a href="/activation/monitoring" style={{ color: '#6366f1' }}>Activation Monitor</a>

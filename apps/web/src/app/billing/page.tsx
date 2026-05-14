@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchBillingPlans, fetchUsageSummary, selectPlanDraft, type BillingPlan, type UsageSummary } from '@/lib/api'
@@ -9,7 +9,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true)
     try { await login(slug, email, pass); onLogin() }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : '登录失败') }
     finally { setBusy(false) }
   }
   return (
@@ -20,10 +20,10 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <h1 className="text-2xl font-bold text-gray-900">Billing & Plans</h1>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
-        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
-        <button type="submit" disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? 'Signing in…' : 'Sign In'}</button>
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
+        <button type="submit" disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
       </form>
     </div>
   )
@@ -34,7 +34,7 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
   return (
     <div className={`rounded-2xl border-2 p-5 transition-all ${isActive ? 'border-blue-500 bg-blue-50' : plan.recommended ? 'border-blue-200 bg-white' : 'border-gray-200 bg-white'}`}>
       {plan.recommended && <div className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full inline-block mb-2">Most Popular</div>}
-      {isActive && <div className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-2">Current Plan</div>}
+      {isActive && <div className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-2">当前套餐</div>}
       <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
       <p className="text-2xl font-bold text-blue-700 my-2">RM{plan.priceRm}<span className="text-sm font-normal text-gray-400">/{plan.period}</span></p>
       <ul className="space-y-1.5 mb-4">
@@ -51,7 +51,7 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
         disabled={selecting || isActive}
         className={`w-full rounded-xl py-2 text-sm font-bold transition-all disabled:opacity-50 ${isActive ? 'bg-emerald-100 text-emerald-700 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
       >
-        {isActive ? 'Current Plan' : selecting ? 'Saving…' : 'Select Plan (Draft)'}
+        {isActive ? '当前套餐' : selecting ? 'Saving…' : 'Select Plan (Draft)'}
       </button>
     </div>
   )

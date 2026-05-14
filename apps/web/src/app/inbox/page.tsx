@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
@@ -28,7 +28,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       await login(slug, email, pass)
       onLogin()
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : 'Login failed')
+      setErr(ex instanceof Error ? ex.message : '登录失败')
     } finally {
       setBusy(false)
     }
@@ -37,23 +37,23 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-8 w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold text-gray-800">Omni — Sign In</h1>
+        <h1 className="text-xl font-semibold text-gray-800">登录到 Omni</h1>
         {err && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{err}</p>}
         <input
           className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="Tenant slug"
+          placeholder="租户标识"
           value={slug} onChange={(e) => setSlug(e.target.value)} required
         />
         <input
           type="email"
           className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="Email"
+          placeholder="邮箱"
           value={email} onChange={(e) => setEmail(e.target.value)} required
         />
         <input
           type="password"
           className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="Password"
+          placeholder="密码"
           value={pass} onChange={(e) => setPass(e.target.value)} required
         />
         <button
@@ -61,7 +61,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           disabled={busy}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded py-2 text-sm font-medium disabled:opacity-50"
         >
-          {busy ? 'Signing in...' : 'Sign In'}
+          {busy ? 'Signing in...' : '登录'}
         </button>
       </form>
     </div>
@@ -467,7 +467,7 @@ export default function InboxPage() {
       <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-3 border-b border-gray-200 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-gray-700">Inbox</span>
+            <span className="font-semibold text-gray-700">对话收件箱</span>
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${sseStatus === 'connected' ? (sseTransport === 'redis' ? 'bg-green-400' : 'bg-yellow-400') : 'bg-gray-300'}`}

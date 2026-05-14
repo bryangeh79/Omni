@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchProductionQa, type ProductionQaResult } from '@/lib/api'
@@ -23,7 +23,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true)
     try { await login(slug, email, pass); onLogin() }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : '登录失败') }
     finally { setBusy(false) }
   }
   return (
@@ -31,14 +31,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
       <form onSubmit={submit} className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-sm space-y-4">
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-800 mb-3"><span className="text-white text-xl">🔍</span></div>
-          <h1 className="text-2xl font-bold text-gray-900">Production QA</h1>
+          <h1 className="text-2xl font-bold text-gray-900">生产 QA</h1>
           <p className="text-sm text-gray-400 mt-1">Sign in to run launch checks</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
-        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
-        <button type="submit" disabled={busy} className="w-full bg-slate-800 hover:bg-slate-900 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? 'Signing in…' : 'Sign In'}</button>
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
+        <button type="submit" disabled={busy} className="w-full bg-slate-800 hover:bg-slate-900 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
       </form>
     </div>
   )

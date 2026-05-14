@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -30,7 +30,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true)
     try { await login(slug, email, pass); onLogin() }
-    catch (ex) { setErr(ex instanceof Error ? ex.message : 'Login failed') }
+    catch (ex) { setErr(ex instanceof Error ? ex.message : '登录失败') }
     finally { setBusy(false) }
   }
 
@@ -41,15 +41,15 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 mb-3">
             <span className="text-white text-lg font-bold">O</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900">Boss Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to your Omni workspace</p>
+          <h1 className="text-xl font-bold text-gray-900">老板工作台</h1>
+          <p className="text-sm text-gray-400 mt-1">登录到您的 Omni 工作空间</p>
         </div>
-        {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tenant slug" value={slug} onChange={e => setSlug(e.target.value)} required />
-        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} required />
+        {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err === 'Failed to fetch' ? '无法连接到服务器，请检查 API 是否在运行' : err}</p>}
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="租户标识 (Tenant Slug)" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
         <button type="submit" disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
-          {busy ? 'Signing in…' : 'Sign In'}
+          {busy ? '登录中…' : '登录'}
         </button>
       </form>
     </div>
@@ -80,7 +80,7 @@ function ActionCard({ action }: { action: ActionItem }) {
       </div>
       {action.link && (
         <a href={action.link} className="text-xs font-medium underline underline-offset-2 flex-shrink-0">
-          {action.link === '/inbox' ? 'Open Inbox →' : 'Open PWA →'}
+          {action.link === '/inbox' ? '打开收件箱 →' : '打开手机端 →'}
         </a>
       )}
     </div>
@@ -115,9 +115,9 @@ function PipelineSection({ pipeline }: { pipeline: BossPipeline }) {
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Lead Pipeline</h3>
+        <h3 className="text-sm font-semibold text-gray-700">成交管道</h3>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${pipeline.summary.pipelineHealthPct >= 50 ? 'bg-emerald-100 text-emerald-700' : pipeline.summary.pipelineHealthPct >= 20 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-          {pipeline.summary.pipelineHealthPct}% healthy
+          管道健康度 {pipeline.summary.pipelineHealthPct}%
         </span>
       </div>
 
@@ -150,14 +150,14 @@ function PipelineSection({ pipeline }: { pipeline: BossPipeline }) {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-50 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div><span className="text-gray-400">New ({pipeline.range})</span><br /><span className="font-semibold text-gray-800">{pipeline.summary.newSince}</span></div>
-          <div><span className="text-gray-400">Won ({pipeline.range})</span><br /><span className="font-semibold text-emerald-600">{pipeline.summary.wonSince}</span></div>
-          <div><span className="text-gray-400">Lost ({pipeline.range})</span><br /><span className="font-semibold text-red-600">{pipeline.summary.lostSince}</span></div>
-          <div><span className="text-gray-400">High Intent (no owner)</span><br /><span className={`font-semibold ${pipeline.summary.highIntentNoOwner > 0 ? 'text-orange-600' : 'text-gray-800'}`}>{pipeline.summary.highIntentNoOwner}</span></div>
+          <div><span className="text-gray-400">新增（{pipeline.range}）</span><br /><span className="font-semibold text-gray-800">{pipeline.summary.newSince}</span></div>
+          <div><span className="text-gray-400">成交（{pipeline.range}）</span><br /><span className="font-semibold text-emerald-600">{pipeline.summary.wonSince}</span></div>
+          <div><span className="text-gray-400">流失（{pipeline.range}）</span><br /><span className="font-semibold text-red-600">{pipeline.summary.lostSince}</span></div>
+          <div><span className="text-gray-400">高意向（无负责人）</span><br /><span className={`font-semibold ${pipeline.summary.highIntentNoOwner > 0 ? 'text-orange-600' : 'text-gray-800'}`}>{pipeline.summary.highIntentNoOwner}</span></div>
         </div>
 
         <p className="mt-3 text-xs text-gray-400 italic">{pipeline.summary.note}</p>
-        <p className="text-xs text-gray-300 mt-1">↑ red number = overdue follow-ups · Legend: higher bar = more leads at that stage</p>
+        <p className="text-xs text-gray-300 mt-1">↑ 红色数字代表逾期跟进数 · 条形长度越长代表该阶段客户越多</p>
       </div>
     </section>
   )
@@ -231,42 +231,40 @@ export default function BossDashboardPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
             <span className="text-white text-sm font-bold">O</span>
           </div>
           <div>
-            <h1 className="text-base font-bold text-gray-900">Boss Dashboard</h1>
-            {lastRefresh && (
-              <p className="text-xs text-gray-400">Updated {lastRefresh.toLocaleTimeString()}</p>
-            )}
+            <h1 className="text-base font-semibold text-gray-900 tracking-tight">老板工作台</h1>
+            <p className="text-xs text-gray-400 leading-tight">今日重点、成交机会与客服跟进状态{lastRefresh && ` · 更新于 ${lastRefresh.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <div
               className={`w-2 h-2 rounded-full ${sseTransport === 'redis' ? 'bg-green-400' : sseTransport === 'memory' ? 'bg-yellow-400' : 'bg-gray-300'}`}
-              title={sseTransport === 'redis' ? 'Real-time (Redis)' : sseTransport === 'memory' ? 'Real-time (local)' : 'Polling mode'}
+              title={sseTransport === 'redis' ? '实时（Redis）' : sseTransport === 'memory' ? '实时（本地）' : '轮询模式'}
             />
-            <span className="text-xs text-gray-400">{sseTransport !== 'unknown' ? 'Live' : 'Polling'}</span>
+            <span className="text-xs text-gray-400">{sseTransport !== 'unknown' ? '实时' : '轮询'}</span>
           </div>
-          <a href="/inbox" className="text-xs text-blue-500 hover:text-blue-700 font-medium">Inbox →</a>
-          <a href="/pwa" className="text-xs text-blue-500 hover:text-blue-700 font-medium">Mobile →</a>
-          <button onClick={() => { clearToken(); setAuthed(false); sseRef.current?.close() }} className="text-xs text-gray-400 hover:text-gray-600">Sign out</button>
+          <a href="/inbox" className="text-xs text-blue-600 hover:text-blue-700 font-medium">收件箱 →</a>
+          <a href="/pwa" className="text-xs text-blue-600 hover:text-blue-700 font-medium">手机端 →</a>
+          <button onClick={() => { clearToken(); setAuthed(false); sseRef.current?.close() }} className="text-xs text-gray-400 hover:text-gray-600">退出</button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-3 text-sm flex items-center justify-between">
-            {error}
-            <button onClick={() => { void load() }} className="font-medium underline">Retry</button>
+            <span>{error === 'Failed to fetch' ? '无法连接到服务器，请检查 API 是否在运行' : error}</span>
+            <button onClick={() => { void load() }} className="font-medium underline">重试</button>
           </div>
         )}
 
         {loading && !t && (
           <div className="text-center py-16 text-gray-400">
             <p className="text-3xl mb-2">⏳</p>
-            <p className="text-sm">Loading your command center…</p>
+            <p className="text-sm">正在加载工作台数据…</p>
           </div>
         )}
 
@@ -275,18 +273,20 @@ export default function BossDashboardPage() {
             {/* Date / summary bar */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">
-                  {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                <h2 className="text-lg font-semibold text-gray-900 tracking-tight">
+                  {new Date().toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </h2>
-                <p className="text-sm text-gray-400">Tenant {t.tenantId.slice(0, 12)}…</p>
+                <p className="text-xs text-gray-400 mt-0.5">租户 {t.tenantId.slice(0, 12)}…</p>
               </div>
-              <button onClick={() => { void load() }} className="text-sm text-blue-500 hover:text-blue-700 font-medium">↻ Refresh</button>
+              <button onClick={() => { void load() }} className="text-sm text-blue-600 hover:text-blue-700 font-medium">↻ 刷新</button>
             </div>
 
             {/* Urgent actions — if any */}
             {urgentActions.length > 0 && (
               <section>
-                <h3 className="text-xs font-bold text-red-600 uppercase tracking-wide mb-3">🚨 Urgent — Needs Immediate Action</h3>
+                <h3 className="text-sm font-semibold text-red-600 mb-3 flex items-center gap-1.5">
+                  <span>🚨</span><span>紧急处理 — 需要立即跟进</span>
+                </h3>
                 <div className="space-y-2">
                   {urgentActions.map((a, i) => <ActionCard key={i} action={a} />)}
                 </div>
@@ -295,41 +295,41 @@ export default function BossDashboardPage() {
 
             {/* Today stat cards */}
             <section>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Today at a Glance</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">今日概览</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <StatCard label="Needs Human"      value={t.today.needHuman}           color={t.today.needHuman > 0 ? 'text-amber-600' : 'text-gray-900'} />
-                <StatCard label="High Intent"      value={t.today.highIntentCustomers} color={t.today.highIntentCustomers > 0 ? 'text-orange-600' : 'text-gray-900'} />
-                <StatCard label="New Customers"    value={t.today.newCustomers} />
-                <StatCard label="Open Convs"       value={t.today.openConversations} />
-                <StatCard label="Closed Today"     value={t.today.closedToday} />
-                <StatCard label="AI Replies"       value={t.today.aiReplies} sub={`~$${t.today.aiCostUsd.toFixed(3)} USD`} />
+                <StatCard label="需要人工"   value={t.today.needHuman}           color={t.today.needHuman > 0 ? 'text-amber-600' : 'text-gray-900'} />
+                <StatCard label="高意向"     value={t.today.highIntentCustomers} color={t.today.highIntentCustomers > 0 ? 'text-orange-600' : 'text-gray-900'} />
+                <StatCard label="新客户"     value={t.today.newCustomers} />
+                <StatCard label="进行中对话" value={t.today.openConversations} />
+                <StatCard label="今日已关闭" value={t.today.closedToday} />
+                <StatCard label="AI 回复数"  value={t.today.aiReplies} sub={`约 $${t.today.aiCostUsd.toFixed(3)} USD`} />
               </div>
             </section>
 
             {/* Follow-up workload */}
             <section>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Follow-up Workload</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">跟进工作量</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="Overdue"          value={t.today.overdueFollowUps}       color={t.today.overdueFollowUps > 0 ? 'text-red-600' : 'text-gray-900'} />
-                <StatCard label="Due Today"        value={t.today.dueFollowUpsToday}      color={t.today.dueFollowUpsToday > 0 ? 'text-amber-600' : 'text-gray-900'} />
-                <StatCard label="Human Reminders"  value={t.today.humanRemindersPending}  color={t.today.humanRemindersPending > 0 ? 'text-orange-600' : 'text-gray-900'} />
-                {m && <StatCard label="Total Pending" value={m.followUps.pending} />}
+                <StatCard label="逾期跟进"   value={t.today.overdueFollowUps}       color={t.today.overdueFollowUps > 0 ? 'text-red-600' : 'text-gray-900'} />
+                <StatCard label="今日到期"   value={t.today.dueFollowUpsToday}      color={t.today.dueFollowUpsToday > 0 ? 'text-amber-600' : 'text-gray-900'} />
+                <StatCard label="人工提醒"   value={t.today.humanRemindersPending}  color={t.today.humanRemindersPending > 0 ? 'text-orange-600' : 'text-gray-900'} />
+                {m && <StatCard label="待处理总数" value={m.followUps.pending} />}
               </div>
             </section>
 
             {/* Urgent customers */}
             {t.urgentCustomers.length > 0 && (
               <section>
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Customers Needing Human Attention</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">需要人工介入的客户</h3>
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <thead className="bg-gray-50 text-xs text-gray-500">
                       <tr>
-                        <th className="text-left px-4 py-3 font-medium">Customer</th>
-                        <th className="text-left px-4 py-3 font-medium">Stage</th>
-                        <th className="text-left px-4 py-3 font-medium">Score</th>
-                        <th className="text-left px-4 py-3 font-medium">Status</th>
-                        <th className="text-left px-4 py-3 font-medium">Last Activity</th>
+                        <th className="text-left px-4 py-3 font-medium">客户</th>
+                        <th className="text-left px-4 py-3 font-medium">阶段</th>
+                        <th className="text-left px-4 py-3 font-medium">评分</th>
+                        <th className="text-left px-4 py-3 font-medium">状态</th>
+                        <th className="text-left px-4 py-3 font-medium">最近活动</th>
                         <th className="px-4 py-3" />
                       </tr>
                     </thead>
@@ -349,10 +349,10 @@ export default function BossDashboardPage() {
                             <span className="text-xs bg-amber-100 text-amber-700 rounded-lg px-2 py-0.5 font-medium">{c.status}</span>
                           </td>
                           <td className="px-4 py-3 text-gray-500 text-xs">
-                            {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </td>
                           <td className="px-4 py-3">
-                            <a href="/inbox" className="text-xs text-blue-500 font-medium hover:text-blue-700">Open →</a>
+                            <a href="/inbox" className="text-xs text-blue-600 font-medium hover:text-blue-700">打开 →</a>
                           </td>
                         </tr>
                       ))}
@@ -365,7 +365,7 @@ export default function BossDashboardPage() {
             {/* High + normal actions */}
             {(highActions.length > 0 || normalActions.length > 0) && (
               <section>
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Recommended Actions</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">今日建议动作</h3>
                 <div className="space-y-2">
                   {[...highActions, ...normalActions].map((a, i) => <ActionCard key={i} action={a} />)}
                 </div>
@@ -378,15 +378,19 @@ export default function BossDashboardPage() {
         {pipeline && (
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Lead Pipeline — Range</h3>
+              <h3 className="text-sm font-semibold text-gray-700">成交管道 — 时间范围</h3>
               <div className="flex gap-1">
-                {(['today', '7d', '30d'] as const).map((r) => (
+                {([
+                  { v: 'today', label: '今日' },
+                  { v: '7d',    label: '近 7 日' },
+                  { v: '30d',   label: '近 30 日' },
+                ] as const).map(({ v, label }) => (
                   <button
-                    key={r}
-                    onClick={() => { setPipeRange(r); load(r) }}
-                    className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${pipeRange === r ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    key={v}
+                    onClick={() => { setPipeRange(v); load(v) }}
+                    className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${pipeRange === v ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   >
-                    {r}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -398,18 +402,18 @@ export default function BossDashboardPage() {
         {/* 30-day metrics */}
         {m && (
           <section>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">30-Day Overview</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">近 30 日趋势</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Total Customers"   value={m.customers.total} sub={`+${m.customers.new30d} this month`} />
-              <StatCard label="High Intent"        value={m.customers.highIntent} sub="Score ≥ 60" color="text-orange-600" />
-              <StatCard label="Conversations Closed" value={m.conversations.closed30d} sub={`${m.conversations.closedToday} today`} />
-              <StatCard label="AI Replies (30d)"  value={m.usage30d.aiReplies} sub={`~$${m.usage30d.estimatedCostUsd.toFixed(2)} USD`} />
+              <StatCard label="客户总数"     value={m.customers.total} sub={`本月新增 +${m.customers.new30d}`} />
+              <StatCard label="高意向客户"   value={m.customers.highIntent} sub="评分 ≥ 60" color="text-orange-600" />
+              <StatCard label="已关闭对话"   value={m.conversations.closed30d} sub={`今日 ${m.conversations.closedToday}`} />
+              <StatCard label="AI 回复（30 日）" value={m.usage30d.aiReplies} sub={`约 $${m.usage30d.estimatedCostUsd.toFixed(2)} USD`} />
             </div>
 
             {/* Stage breakdown */}
             {Object.keys(m.customers.stageBreakdown).length > 0 && (
               <div className="mt-4 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Lead Stage Breakdown</p>
+                <p className="text-sm font-semibold text-gray-700 mb-3">客户阶段分布</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(m.customers.stageBreakdown).sort(([,a],[,b]) => b-a).map(([stage, count]) => (
                     <div key={stage} className={`text-sm rounded-xl px-3 py-1.5 font-medium ${STAGE_COLOR[stage] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -422,30 +426,30 @@ export default function BossDashboardPage() {
           </section>
         )}
 
-        {/* Channel Health Card (Phase 14A) */}
+        {/* Channel Health */}
         {channelHealth && (
           <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Channel Health</h3>
+              <h3 className="text-sm font-semibold text-gray-700">渠道健康度</h3>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                 channelHealth.healthLevel === 'OK'      ? 'bg-emerald-50 text-emerald-700' :
                 channelHealth.healthLevel === 'WARN'    ? 'bg-amber-50 text-amber-700' :
                 channelHealth.healthLevel === 'BLOCKED' ? 'bg-red-50 text-red-700' :
                 'bg-gray-100 text-gray-500'
               }`}>
-                {channelHealth.healthLevel === 'OK' ? '● OK' : channelHealth.healthLevel === 'WARN' ? '● WARN' : '● BLOCKED'}
+                {channelHealth.healthLevel === 'OK' ? '● 正常' : channelHealth.healthLevel === 'WARN' ? '● 警告' : '● 阻塞'}
               </span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               {[
-                { label: 'Channel',    value: channelHealth.channelType ?? '—' },
-                { label: 'Status',     value: channelHealth.setupStatus },
-                { label: 'Live',       value: channelHealth.liveStatus.replace(/_/g, ' ') },
-                { label: 'Real Send',  value: channelHealth.realSendEnabled ? 'ON' : 'OFF' },
+                { label: '渠道类型',  value: channelHealth.channelType ?? '—' },
+                { label: '配置状态',  value: channelHealth.setupStatus },
+                { label: '上线状态',  value: channelHealth.liveStatus.replace(/_/g, ' ') },
+                { label: '真实发送',  value: channelHealth.realSendEnabled ? '已开启' : '已关闭（安全）' },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
                   <p className="text-xs text-gray-400">{label}</p>
-                  <p className={`text-sm font-semibold mt-0.5 ${value === 'ON' ? 'text-red-600' : 'text-gray-700'}`}>{value}</p>
+                  <p className={`text-sm font-semibold mt-0.5 ${value === '已开启' ? 'text-red-600' : 'text-gray-700'}`}>{value}</p>
                 </div>
               ))}
             </div>
@@ -453,36 +457,36 @@ export default function BossDashboardPage() {
               <p className="text-xs text-gray-500 mb-2 italic">{channelHealth.nextAction}</p>
             )}
             <div className="flex gap-2 text-xs flex-wrap">
-              <a href="/channels/setup" className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-xl hover:bg-green-100 font-medium">Channel Setup →</a>
-              <a href="/launch-checklist" className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl hover:bg-emerald-100 font-medium">🚀 Launch Checklist →</a>
+              <a href="/channels/setup" className="bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-xl hover:bg-green-100 font-medium">渠道设置 →</a>
+              <a href="/launch-checklist" className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl hover:bg-emerald-100 font-medium">🚀 上线清单 →</a>
               {channelHealth.channelType === 'WA_WEB' && (
-                <a href="/channels/setup/wa-web/qr" className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 font-medium">📱 QR Setup →</a>
+                <a href="/channels/setup/wa-web/qr" className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl hover:bg-blue-100 font-medium">📱 二维码扫码 →</a>
               )}
               {channelHealth.channelType === 'META_WA_BUSINESS' && (
                 <a href="/channels/setup/meta-webhook" className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl hover:bg-indigo-100 font-medium">🔗 Meta Webhook →</a>
               )}
             </div>
             {channelHealth.lastCheckedAt && (
-              <p className="text-xs text-gray-400 mt-2">Checked: {new Date(channelHealth.lastCheckedAt).toLocaleTimeString()}</p>
+              <p className="text-xs text-gray-400 mt-2">最近检查：{new Date(channelHealth.lastCheckedAt).toLocaleTimeString('zh-CN')}</p>
             )}
           </section>
         )}
 
         {/* Quick links */}
         <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Quick Navigation</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">快速导航</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { href: '/inbox',                  label: '💬 Operator Inbox',        sub: 'Web dashboard' },
-              { href: '/pwa',                    label: '📱 Mobile PWA',             sub: 'On-the-go' },
-              { href: '/onboarding',             label: '🧙 Onboarding',             sub: 'Setup wizard' },
-              { href: '/knowledge',              label: '🧠 Knowledge Base',         sub: 'FAQ & content' },
-              { href: '/channels/setup',         label: '💬 Channel Setup',          sub: 'WA/Meta config' },
-              { href: '/launch-checklist',       label: '🚀 Launch Checklist',       sub: 'Readiness check' },
-              { href: '/settings',               label: '⚙️ Settings',               sub: 'Account & AI' },
-              { href: '/billing',                label: '💳 Billing & Plans',        sub: 'RM199/499/999+' },
-              { href: '/production-qa',          label: '🔍 Production QA',          sub: 'Launch readiness' },
-              { href: '/admin/cost-calculator',  label: '💰 Cost Calculator',        sub: 'Internal planning' },
+              { href: '/inbox',                  label: '💬 对话收件箱',  sub: 'Web 工作台' },
+              { href: '/pwa',                    label: '📱 手机工作台',  sub: '移动办公' },
+              { href: '/onboarding',             label: '🧙 上线向导',    sub: '一键启动配置' },
+              { href: '/knowledge',              label: '🧠 知识库',      sub: 'FAQ 与内容' },
+              { href: '/channels/setup',         label: '💬 渠道设置',    sub: 'WA / Meta 配置' },
+              { href: '/launch-checklist',       label: '🚀 上线清单',    sub: '准备度检查' },
+              { href: '/settings',               label: '⚙️ 设置',        sub: '账户与 AI 配置' },
+              { href: '/billing',                label: '💳 套餐与计费',  sub: 'RM199/499/999+' },
+              { href: '/production-qa',          label: '🔍 生产 QA',     sub: '上线准备度' },
+              { href: '/admin/cost-calculator',  label: '💰 成本计算器',  sub: '内部预算规划' },
             ].map(({ href, label, sub }) => (
               <a key={href} href={href} className="group rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50 p-4 transition-colors">
                 <p className="text-sm font-semibold text-gray-800 group-hover:text-blue-700">{label}</p>

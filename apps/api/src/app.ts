@@ -4,6 +4,7 @@ import './auth/types' // activate FastifyJWT type augmentation
 import Fastify          from 'fastify'
 import fastifyJwt       from '@fastify/jwt'
 import fastifyCookie    from '@fastify/cookie'
+import fastifyCors      from '@fastify/cors'
 
 import { registerRoutes }                  from './routes'
 import { initRealtimeBus, closeRealtimeBus } from './realtime-bus'
@@ -17,6 +18,15 @@ export async function buildApp() {
     throw new Error('JWT_SECRET or APP_SECRET must be set in environment')
   }
   await app.register(fastifyJwt, { secret: jwtSecret })
+
+  // ── CORS (browser dashboard at :43110 needs cross-origin to API :43111) ──
+  // Origin allowlist is env-driven; defaults cover local dev only.
+  const corsOrigins = (process.env.OMNI_CORS_ORIGINS ?? 'http://localhost:43110,http://127.0.0.1:43110')
+    .split(',').map(s => s.trim()).filter(Boolean)
+  await app.register(fastifyCors, {
+    origin: corsOrigins,
+    credentials: true,
+  })
 
   // ── Cookie plugin (httpOnly auth tokens) ─────────────────────────────────
   // CSRF protection is provided by SameSite=Strict on all auth cookies.

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 // Release Checklist — Phase 15D
 // SaaS v1 final release readiness view.
 // Pulls live data from /release-checklist/status and /production-qa/checklist.
@@ -23,13 +23,13 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   }
   return (
     <form onSubmit={handleLogin} style={{ maxWidth: 360, margin: '4rem auto', padding: '2rem', border: '1px solid #e5e7eb', borderRadius: 12, fontFamily: 'system-ui' }}>
-      <h2 style={{ marginTop: 0 }}>Sign in to Omni</h2>
+      <h2 style={{ marginTop: 0 }}>登录到 Omni</h2>
       {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="Tenant slug" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
-      <input value={email}    onChange={e => setEmail(e.target.value)}    placeholder="Email"    type="email"    required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
-      <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem',   borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="租户标识" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={email}    onChange={e => setEmail(e.target.value)}    placeholder="邮箱"    type="email"    required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '0.75rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+      <input value={password} onChange={e => setPassword(e.target.value)} placeholder="密码" type="password" required style={{ display: 'block', width: '100%', padding: '0.5rem', marginBottom: '1rem',   borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
       <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.625rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-        {loading ? 'Signing in…' : 'Sign In'}
+        {loading ? '登录中…' : '登录'}
       </button>
     </form>
   )
@@ -181,7 +181,7 @@ export default function ReleaseChecklistPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            📦 SaaS v1 Release Checklist
+            📦 SaaS v1 发布检查清单
           </h1>
           <p style={{ margin: '0.375rem 0 0', color: '#6b7280', fontSize: '0.875rem', lineHeight: 1.5 }}>
             Final readiness review before production activation. Items marked MANUAL require operator action.
@@ -276,7 +276,7 @@ export default function ReleaseChecklistPage() {
       </div>
 
       <footer style={{ marginTop: '1.5rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Omni SaaS v1 · <a href="/demo-flow" style={{ color: '#6366f1' }}>Demo Flow</a> · <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> · <a href="/ops/runbook" style={{ color: '#6366f1' }}>Ops Runbook</a> · <a href="/activation-guide" style={{ color: '#6366f1' }}>Activation Guide</a> · <a href="/activation/monitoring" style={{ color: '#6366f1' }}>Activation Monitor</a>
+        Omni SaaS v1 · <a href="/demo-flow" style={{ color: '#6366f1' }}>演示流程</a> · <a href="/production-qa" style={{ color: '#6366f1' }}>生产 QA</a> · <a href="/ops/runbook" style={{ color: '#6366f1' }}>运维手册</a> · <a href="/activation-guide" style={{ color: '#6366f1' }}>上线激活指南</a> · <a href="/activation/monitoring" style={{ color: '#6366f1' }}>激活监控</a>
       </footer>
     </main>
   )

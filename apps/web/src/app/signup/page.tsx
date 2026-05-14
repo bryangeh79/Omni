@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 // Tenant Self-service Signup — Phase 17A
 // Let operators/customers create a new Omni tenant account.
 // No real WhatsApp/Meta/email/payment calls made.
@@ -287,7 +287,7 @@ export default function SignupPage() {
 
         <div style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.875rem', color: NEUTRAL }}>
           Already have an account?{' '}
-          <a href="/inbox" style={{ color: ACCENT, textDecoration: 'none', fontWeight: 600 }}>Sign In</a>
+          <a href="/inbox" style={{ color: ACCENT, textDecoration: 'none', fontWeight: 600 }}>登录</a>
         </div>
       </div>
 

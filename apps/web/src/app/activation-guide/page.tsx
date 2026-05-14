@@ -233,15 +233,15 @@ export default function ActivationGuidePage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            🚦 Production Activation Operator Guide
+            🚦 上线激活操作指南
           </h1>
           <p style={{ margin: '0.375rem 0 0', color: '#6b7280', fontSize: '0.9375rem', lineHeight: 1.5, maxWidth: 640 }}>
-            Step-by-step guide for moving from demo/staging to controlled live activation.
-            <strong> Real send remains disabled until you manually change env flags and complete all checks.</strong>
+            从演示 / 预演环境过渡到受控真实激活的分步指南。
+            <strong> 真实发送默认关闭：必须手动修改 env 标志并完成所有检查后才会启用。</strong>
           </p>
         </div>
         <a href="/release-checklist" style={{ padding: '0.4375rem 0.875rem', background: ACCENT, color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          Release Checklist →
+          发布检查清单 →
         </a>
       </div>
 
