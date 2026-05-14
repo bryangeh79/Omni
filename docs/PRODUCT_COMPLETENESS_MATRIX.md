@@ -83,7 +83,8 @@ Positioning: **Omni Ai Chatbot｜WhatsApp AI 客服 CRM 成交系统** — 1:1 A
 | Multi-instance Redis-backed HMAC replay cache | Single-instance deployment is the current target | Medium |
 | Audit-safe whitelist write-side enforcement | Defensive-in-depth; current write-side already filters via `lib/audit.ts` | Medium |
 | Audit UI advanced filters (action group, date range) — already done in `/account/activity`; mirror to `/audit` | Tier-2 polish | Low |
-| i18n (zh / en / ms) full multilingual | UAT Round-1 ~ 5 已完成 **中文优先（Chinese-first）** 全量覆盖（onboarding / channels / knowledge / launch / release / qa / ops / activation / account / audit / billing / team / settings / inbox / pwa / signup / boss）；Round-3 新增 `lib/errorText.ts`、Round-4 新增 `lib/enumLabels.ts`；Round-5 扩展 plan / launch / release / qa 状态映射 + 套餐套餐 ID 中文显示 + 计费错误中文化；i18n 多语言切换框架延后到 post-v1 | Medium |
+| i18n (zh / en / ms) full multilingual | UAT Round-1 ~ 5 已完成 **中文优先（Chinese-first）** 全量覆盖（onboarding / channels / knowledge / launch / release / qa / ops / activation / account / audit / billing / team / settings / inbox / pwa / signup / boss）；Round-3 新增 `lib/errorText.ts`、Round-4 新增 `lib/enumLabels.ts`；Round-5 扩展 plan / launch / release / qa 状态映射 + 套餐套餐 ID 中文显示 + 计费错误中文化；Round-6 消除菜单切换时登录页闪烁（三态 authed）；Round-7 重组侧边栏 IA — 租户日常 4 组在顶部、SaaS Admin · 平台运维 1 组在底部分隔；i18n 多语言切换框架延后到 post-v1 | Medium |
+| Platform RBAC to hide SaaS Admin / 平台运维 sidebar group from non-platform tenants | Round-7 already separated the group visually with divider + muted styling and left a `Future:` code comment in `AppNav.tsx` near the admin group; needs a platform-role flag on tenant/user before hiding can ship safely | Medium |
 | Real email verification (link, SMTP) | Out of v1; current stub is intentional | Medium |
 | Real payment integration (Stripe / Razorpay / etc.) | Out of v1 | Medium |
 | Webhook delivery retry queue (BullMQ-backed) | Current path is synchronous in handler; works for v1 single-instance | Medium |

@@ -1,5 +1,31 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 UAT Round-7 — Sidebar IA Cleanup / SaaS Admin Separation
+
+继 Round-6 之后，Round-7 在 UAT 反馈基础上重组 `AppNav.tsx` 的信息架构，让租户日常功能与 SaaS Admin / 平台运维清晰分离：
+
+- **顶部租户日常分组（4 个）**：
+  1. **日常工作** — `/boss`, `/inbox`, `/pwa`
+  2. **客户与成交** — `/knowledge`
+  3. **新客户上线** — `/signup`, `/onboarding`, `/channels/setup`（子页 meta-webhook / wa-web-qr 仍由 `/channels/setup` 内部入口可达，避免菜单过长）
+  4. **账户管理** — `/account`, `/team`, `/billing`, `/settings`
+- **底部 SaaS Admin / 平台运维分组**（视觉分隔 + section label "SaaS Admin · 平台运维"）：
+  - `/activation-guide`, `/activation/monitoring`, `/launch-checklist`, `/audit`, `/production-qa`, `/ops/runbook`, `/release-checklist`, `/demo-flow`
+- **视觉层级**：admin 分组使用更小字号（0.75rem）、更暗颜色（TEXT_DIM）、`opacity: 0.85`，与顶部租户分组形成主次对比；分隔线 + uppercase letter-spacing 的小标签 "SaaS Admin · 平台运维" 前置。
+- **默认展开行为**：仅展开当前活跃分组；无活跃路由时回退到展开"日常工作"。`localStorage` 键升级为 `omni.nav.expanded.v2`，旧 v1 键（含 `ops`）自然失效。
+- **未实现 RBAC 隐藏**：组件源码包含 comment "Future: hide SaaS Admin group for non-platform roles when platform RBAC is available."；当前对所有租户均显示，仅做视觉分离，未变更 route 可达性。
+- **所有路由保留**：未删除任何页面或链接；mobile drawer / collapsible 行为 / active 高亮 / sticky / scroll 行为均不变。
+- **未触碰**：API 合约、route paths、enum value、smoke 用例、真实发送门控、产品定位（非广播 / 非广告 / 非群发）。
+
+## Post-v1 UAT Round-6 — Eliminate Login Form Flash on Navigation
+
+继 Round-5 之后，Round-6 修复点击菜单切换页面时短暂闪登录页的问题：
+
+- **根因**：每个 client page 用 `useState(false)` 初始化 `authed`，再用 `useEffect(() => setAuthed(!!getToken()), [])` 异步读取 localStorage。Next.js SSR 阶段无 localStorage 访问，初始渲染必为 `authed=false`，因此每次切页都先渲染 1 帧 `<LoginForm>` 才切到真实内容。
+- **修复**：将 18 个 client page 的 `authed` 改为三态 `boolean | null`，初始 `null` 表示"检查中"，渲染 `null`（layout AppNav 保留，主区域空白一瞬不可见）；`useEffect` 跑完后再切到 `true / false`。SSR + 客户端首次渲染都返回 `null`，无 hydration mismatch、无闪烁。
+- **未改动**：`activation-guide` 页面 — 该页不整页 swap 到登录表单，仅在内部条件渲染中使用 `authed`，无闪烁问题。
+- **未触碰**：API、DB schema、enum、smoke 用例、真实发送门控。
+
 ## Post-v1 UAT Round-5 — Billing Plan + Status Label Unification
 
 继 Round-4 之后，Round-5 完成最后一组共用化：

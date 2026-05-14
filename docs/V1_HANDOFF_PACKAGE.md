@@ -11,6 +11,10 @@ This is the canonical handoff document. If you are receiving Omni v1, **start he
 > **Post-v1 UAT Round-4 (2026-05)：** 新增 `apps/web/src/lib/enumLabels.ts` 集中前端 enum → 中文 label 映射。Inbox / PWA / Channels Setup / Audit / Activation Monitoring / Team / Account / Settings / Boss 全部改用共用 util；关键操作按钮（人工接管 / 释放给 AI / 关闭对话 / 安全演练 / 保存凭据 / 激活）补充中文 `title` 与 `aria-label`。
 >
 > **Post-v1 UAT Round-5 (2026-05)：** `enumLabels.ts` 扩展 `planLabel` / `planPeriodLabel` / `launchStatusLabel` / `releaseStatusLabel` / `qaStatusLabel`；Billing / Settings / Account 套餐显示中文化（保留原始 plan ID 作为 `title`）；Launch / Release / Production QA 状态徽章统一走共用 util；`errorText.ts` 扩展 6 类计费 / 套餐错误；refresh / re-run 按钮补充中文 `title`。多语言切换框架仍延后到 post-v1 i18n。产品定位（**非**广播 / **非**广告 / **非**群发）未改变。真实发送门控仍默认关闭。
+>
+> **Post-v1 UAT Round-6 (2026-05)：** 修复点击侧边栏菜单时短暂闪登录表单的问题。18 个 client page 把 `authed` 改为三态 `boolean | null`，初次 SSR / hydration 渲染 `null`（什么都不渲染）而不是 `LoginForm`，等 `useEffect` 跑完才决定显示登录或内容，消除 1 帧 flash。
+>
+> **Post-v1 UAT Round-7 (2026-05)：** AppNav 信息架构重组 — 顶部 4 个分组为**租户日常**（日常工作 / 客户与成交 / 新客户上线 / 账户管理），底部新增 **SaaS Admin · 平台运维**分组（含分隔线 + section label + muted 视觉层级），把上线激活指南 / 激活监控 / 上线清单 / 审计日志 / 生产 QA / 运维手册 / 发布检查清单 / 演示流程从原"启动配置"和"运维与安全"两个分组合并到此处。`localStorage` 键升级为 `omni.nav.expanded.v2`；默认仅展开当前活跃分组（无活跃路由时默认展开"日常工作"）。所有路由与页面均保留可访问，无 RBAC 隐藏（comment 中标注 future RBAC hook 位置）。
 
 ---
 

@@ -1,8 +1,9 @@
 'use client'
-// AppNav — collapsible grouped sidebar (Phase 19 UAT polish)
+// AppNav — collapsible grouped sidebar (Phase 19 UAT polish, Round-7 IA cleanup)
 // Chinese-first labels. Top-level groups collapse/expand on click.
 // Active page highlights both child item and parent group.
 // Expanded state persists in localStorage.
+// Tenant daily groups appear on top; SaaS Admin / 平台运维 is separated at the bottom.
 
 import { useState, useEffect } from 'react'
 import { usePathname }         from 'next/navigation'
@@ -14,16 +15,18 @@ interface NavItem {
 }
 
 interface NavGroup {
-  key:    string
-  label:  string
-  icon:   string
-  items:  NavItem[]
+  key:     string
+  label:   string
+  icon:    string
+  items:   NavItem[]
+  /** When true, group is rendered in the SaaS Admin / 平台运维 section (muted + divider). */
+  admin?:  boolean
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
     key: 'workspace',
-    label: '工作台',
+    label: '日常工作',
     icon: '🏠',
     items: [
       { href: '/boss',  label: '老板工作台' },
@@ -41,20 +44,17 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: 'setup',
-    label: '启动配置',
+    label: '新客户上线',
     icon: '🧙',
     items: [
-      { href: '/signup',           label: '新建账号' },
-      { href: '/onboarding',       label: '上线向导' },
-      { href: '/channels/setup',   label: '渠道设置' },
-      { href: '/activation-guide', label: '上线激活指南' },
-      { href: '/activation/monitoring', label: '激活监控' },
-      { href: '/launch-checklist', label: '上线清单' },
+      { href: '/signup',         label: '新建账号' },
+      { href: '/onboarding',     label: '上线向导' },
+      { href: '/channels/setup', label: '渠道设置' },
     ],
   },
   {
     key: 'account',
-    label: '账户与团队',
+    label: '账户管理',
     icon: '👤',
     items: [
       { href: '/account',  label: '我的账户' },
@@ -63,16 +63,23 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/settings', label: '设置' },
     ],
   },
+  // ── SaaS Admin / 平台运维 ───────────────────────────────────────────────
+  // Future: hide SaaS Admin group for non-platform roles when platform RBAC is available.
+  // For now this is visual separation only — all tenants can still reach these routes.
   {
-    key: 'ops',
-    label: '运维与安全',
+    key: 'admin',
+    label: '平台运维',
     icon: '🛡️',
+    admin: true,
     items: [
-      { href: '/audit',             label: '审计日志' },
-      { href: '/production-qa',     label: '生产 QA' },
-      { href: '/ops/runbook',       label: '运维手册' },
-      { href: '/release-checklist', label: '发布检查清单' },
-      { href: '/demo-flow',         label: '演示流程' },
+      { href: '/activation-guide',      label: '上线激活指南' },
+      { href: '/activation/monitoring', label: '激活监控' },
+      { href: '/launch-checklist',      label: '上线清单' },
+      { href: '/audit',                 label: '审计日志' },
+      { href: '/production-qa',         label: '生产 QA' },
+      { href: '/ops/runbook',           label: '运维手册' },
+      { href: '/release-checklist',     label: '发布检查清单' },
+      { href: '/demo-flow',             label: '演示流程' },
     ],
   },
 ]
@@ -86,7 +93,8 @@ const TEXT_LIGHT = '#e0e7ff'
 const HOVER_BG   = 'rgba(99,102,241,0.18)'
 const ACTIVE_BG  = 'rgba(99,102,241,0.32)'
 
-const STORAGE_KEY = 'omni.nav.expanded.v1'
+// v2 — keyspace changed when Round-7 reorganized groups; old v1 keys (e.g. "ops") are ignored.
+const STORAGE_KEY = 'omni.nav.expanded.v2'
 
 function findActiveGroup(pathname: string): string | null {
   for (const g of NAV_GROUPS) {
@@ -119,7 +127,8 @@ export default function AppNav() {
         return
       }
     } catch { /* ignore */ }
-    if (activeKey) setExpanded(new Set([activeKey]))
+    // No localStorage state: expand the active group only, or fall back to 日常工作.
+    setExpanded(new Set([activeKey ?? 'workspace']))
   }, [pathname])
 
   function toggle(key: string) {
@@ -154,11 +163,33 @@ export default function AppNav() {
 
       {/* Groups */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0.5rem' }}>
-        {NAV_GROUPS.map(group => {
+        {NAV_GROUPS.map((group, idx) => {
           const isExpanded = expanded.has(group.key)
           const hasActive  = group.items.some(i => pathname === i.href || (i.href !== '/' && pathname.startsWith(i.href)))
+          const prev       = idx > 0 ? NAV_GROUPS[idx - 1] : null
+          const showAdminDivider = group.admin && !prev?.admin
           return (
             <div key={group.key} style={{ marginBottom: '0.125rem' }}>
+              {showAdminDivider && (
+                <div
+                  aria-hidden
+                  style={{
+                    marginTop: '0.75rem',
+                    paddingTop: '0.75rem',
+                    paddingLeft: '0.625rem',
+                    paddingRight: '0.625rem',
+                    paddingBottom: '0.25rem',
+                    borderTop: '1px solid rgba(99,102,241,0.18)',
+                    fontSize: '0.625rem',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: TEXT_DIM,
+                    opacity: 0.7,
+                  }}
+                >
+                  SaaS Admin · 平台运维
+                </div>
+              )}
               <button
                 onClick={() => toggle(group.key)}
                 style={{
@@ -166,16 +197,17 @@ export default function AppNav() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  padding: '0.5rem 0.625rem',
+                  padding: group.admin ? '0.4375rem 0.625rem' : '0.5rem 0.625rem',
                   borderRadius: 6,
                   background: hasActive && !isExpanded ? HOVER_BG : 'transparent',
                   border: 'none',
-                  color: hasActive ? '#fff' : TEXT_LIGHT,
-                  fontSize: '0.8125rem',
-                  fontWeight: hasActive ? 600 : 500,
+                  color: hasActive ? '#fff' : (group.admin ? TEXT_DIM : TEXT_LIGHT),
+                  fontSize: group.admin ? '0.75rem' : '0.8125rem',
+                  fontWeight: hasActive ? 600 : (group.admin ? 400 : 500),
                   cursor: 'pointer',
                   textAlign: 'left',
                   transition: 'background 0.12s',
+                  opacity: group.admin && !hasActive ? 0.85 : 1,
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = HOVER_BG }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = hasActive && !isExpanded ? HOVER_BG : 'transparent' }}
@@ -206,12 +238,13 @@ export default function AppNav() {
                           margin: '0.0625rem 0',
                           borderRadius: 6,
                           textDecoration: 'none',
-                          fontSize: '0.8125rem',
+                          fontSize: group.admin ? '0.75rem' : '0.8125rem',
                           fontWeight: isActive ? 600 : 400,
-                          color: isActive ? '#fff' : TEXT_LIGHT,
+                          color: isActive ? '#fff' : (group.admin ? TEXT_DIM : TEXT_LIGHT),
                           background: isActive ? ACTIVE_BG : 'transparent',
                           transition: 'background 0.12s',
                           position: 'relative',
+                          opacity: group.admin && !isActive ? 0.85 : 1,
                         }}
                         onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLAnchorElement).style.background = HOVER_BG }}
                         onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
