@@ -60,19 +60,15 @@ function relativeTime(iso: string): string {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
-function safeMetaPreview(json: string): string {
-  try {
-    const obj = JSON.parse(json) as Record<string, unknown>
-    const safe: Record<string, unknown> = {}
-    const skip = new Set(['password', 'token', 'secret', 'apiKey', 'credential'])
-    for (const [k, v] of Object.entries(obj)) {
-      if (!skip.has(k)) safe[k] = v
-    }
-    const s = JSON.stringify(safe)
-    return s.length > 120 ? s.slice(0, 117) + '...' : s
-  } catch {
-    return '{}'
-  }
+// Phase 18B: client-side raw metadataJson parser removed.
+// /audit/logs now returns server-sanitized `safeMetadata` (whitelisted object)
+// and `summary` (deterministic human-readable string). The audit UI consumes
+// those fields directly — no raw JSON parsing is performed in the browser.
+
+function formatSafeMetadata(meta: Record<string, unknown> | undefined): string {
+  if (!meta || Object.keys(meta).length === 0) return ''
+  const s = JSON.stringify(meta)
+  return s.length > 120 ? s.slice(0, 117) + '...' : s
 }
 
 export default function AuditPage() {
@@ -205,9 +201,10 @@ export default function AuditPage() {
 }
 
 function AuditCard({ log }: { log: AuditLog }) {
-  const label    = ACTION_LABELS[log.action] ?? log.action
+  // Phase 18B: prefer server `summary`; fall back to label map for older codepaths
+  const label     = log.summary ?? ACTION_LABELS[log.action] ?? log.action
   const roleColor = log.actorRole ? (ROLE_COLORS[log.actorRole] ?? '#374151') : '#9ca3af'
-  const meta     = safeMetaPreview(log.metadataJson)
+  const meta      = formatSafeMetadata(log.safeMetadata)
 
   return (
     <div style={{
@@ -252,7 +249,7 @@ function AuditCard({ log }: { log: AuditLog }) {
           <span style={{ fontFamily: 'monospace', background: '#f9fafb', padding: '0.125rem 0.375rem', borderRadius: 4 }}>
             {log.entityType}{log.entityId ? `:${log.entityId.slice(0, 8)}` : ''}
           </span>
-          {meta !== '{}' && (
+          {!!meta && (
             <span style={{ marginLeft: '0.75rem', fontFamily: 'monospace', color: '#9ca3af', fontSize: '0.75rem' }}>
               {meta}
             </span>

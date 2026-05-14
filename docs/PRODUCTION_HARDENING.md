@@ -262,3 +262,14 @@ See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.
 - Refactored: `/account/activity`, `/account/security-events`, `/activation/timeline`, `/audit/logs`
 - Future audit/event endpoints MUST use this utility — do not duplicate sanitization logic
 - Raw `metadataJson` is NOT exposed by `/account/*` or `/activation/timeline`; `/audit/logs` keeps it for legacy UI compat and tests assert no secret substrings
+
+
+## Phase 18B: metadataJson Removal From /audit/logs
+
+- `/audit/logs` response no longer contains `metadataJson` (removed entirely)
+- Each log entry now exposes only `safeMetadata` + `summary` for metadata-derived info
+- Audit UI (`/audit`) migrated to use `safeMetadata` and `summary`
+- Activation monitoring UI no longer carries a metadataJson fallback path
+- Smoke tests 214 / 216 / 218 / 219 now hard-scan for `metadataJson` substring and fail if it appears anywhere in audit/activity/timeline/security responses
+
+Future tenant-facing audit/event endpoints MUST NOT include raw `metadataJson` in responses. Use `apps/api/src/lib/audit-safe.ts`.

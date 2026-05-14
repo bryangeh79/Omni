@@ -307,3 +307,18 @@ Endpoints using the shared utility (Phase 18A):
 - `GET /account/security-events` — uses `classifySecuritySeverity` + sanitized events
 - `GET /activation/timeline` — raw `metadataJson` replaced with `safeMetadata` + `summary`
 - `GET /audit/logs` — adds `safeMetadata` + `summary` alongside legacy `metadataJson`
+
+
+## Phase 18B: Audit UI Migration + metadataJson Removal
+
+`/audit/logs` no longer returns the raw `metadataJson` field. The legacy field has been fully dropped from the response shape. Consumers must read:
+- `summary` (deterministic human-readable string)
+- `safeMetadata` (whitelisted object)
+
+These come from the shared `apps/api/src/lib/audit-safe.ts` utility. Server reads `metadataJson` from the DB only to feed the sanitizer; it never echoes the raw string back.
+
+Web changes:
+- `apps/web/src/app/audit/page.tsx` now consumes `log.safeMetadata` and `log.summary`. The legacy client-side `safeMetaPreview()` JSON parser was removed.
+- `apps/web/src/app/activation/monitoring/page.tsx` removed its Phase 18A fallback branch and the unused `metaSafePreview()` helper.
+
+Hard rule going forward: **no tenant-facing endpoint may return raw `metadataJson`.** Any new audit/event consumer must call `sanitizeAuditEvent` (or `parseAuditMetadataSafe` + `summarizeAuditAction`) from `apps/api/src/lib/audit-safe.ts`.

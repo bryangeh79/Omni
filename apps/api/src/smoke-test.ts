@@ -4050,7 +4050,7 @@ async function smoke() {
   check('timeline no webhookVerifyTokenRef',   !p18aTlJson.includes('webhookVerifyTokenRef'))
   check('timeline no apiKeyRef',               !p18aTlJson.includes('apiKeyRef'))
 
-  console.log('\n214. Phase 18A: /audit/logs enriched with safeMetadata; legacy metadataJson preserved without secrets')
+  console.log('\n214. Phase 18B: /audit/logs returns safeMetadata + summary, metadataJson removed')
   const p18aAuditRes  = await get('/audit/logs?pageSize=20', accessToken)
   const p18aAuditBody = await p18aAuditRes.json() as Record<string, unknown>
   check('GET /audit/logs → 200',                   p18aAuditRes.status === 200)
@@ -4059,14 +4059,15 @@ async function smoke() {
     const l = p18aAuditLogs[0]
     check('audit log has safeMetadata',            typeof l.safeMetadata === 'object')
     check('audit log has summary',                 typeof l.summary === 'string')
-    check('audit log preserves metadataJson key (compat)', 'metadataJson' in l)
+    check('audit log no metadataJson key (P18B)',  !('metadataJson' in l))
   } else {
     check('audit log has safeMetadata (skip)',     true)
     check('audit log has summary (skip)',          true)
-    check('audit log preserves metadataJson (skip)', true)
+    check('audit log no metadataJson key (skip)',  true)
   }
-  // Legacy metadataJson must not contain secret substrings (defensive scan)
+  // Hard scan: response must NOT contain metadataJson substring anywhere
   const p18aAuditJson = JSON.stringify(p18aAuditBody)
+  check('audit no metadataJson substring (P18B)', !p18aAuditJson.includes('metadataJson'))
   check('audit no passwordHash',          !p18aAuditJson.includes('passwordHash'))
   check('audit no credentialRef',         !p18aAuditJson.includes('credentialRef'))
   check('audit no metaAccessTokenRef',    !p18aAuditJson.includes('metaAccessTokenRef'))
@@ -4082,6 +4083,65 @@ async function smoke() {
   const p18aFiltFilters = (p18aFiltBody.filters ?? {}) as Record<string, unknown>
   check('filters object still echoed',                 p18aFiltFilters.actionGroup === 'team')
   check('availableActionGroups still present',         Array.isArray(p18aFiltBody.availableActionGroups))
+
+  console.log('\n216. Phase 18B: /audit/logs structure and complete metadataJson removal')
+  const p18bAuditRes  = await get('/audit/logs?pageSize=50', accessToken)
+  const p18bAuditBody = await p18bAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs → 200',                       p18bAuditRes.status === 200)
+  const p18bAuditLogs = (p18bAuditBody.logs ?? []) as Record<string, unknown>[]
+  check('audit logs is array',                          Array.isArray(p18bAuditBody.logs))
+  // Every log must have safeMetadata + summary and NOT metadataJson
+  const allHaveSafeMeta  = p18bAuditLogs.every(l => typeof l.safeMetadata === 'object')
+  const allHaveSummary   = p18bAuditLogs.every(l => typeof l.summary === 'string')
+  const noneHaveRawMeta  = p18bAuditLogs.every(l => !('metadataJson' in l))
+  check('every audit log has safeMetadata',             p18bAuditLogs.length === 0 || allHaveSafeMeta)
+  check('every audit log has summary',                  p18bAuditLogs.length === 0 || allHaveSummary)
+  check('NO audit log has metadataJson key',            p18bAuditLogs.length === 0 || noneHaveRawMeta)
+  // Hard string scan covering entire response
+  const p18bAuditJson = JSON.stringify(p18bAuditBody)
+  check('audit response no "metadataJson" substring',   !p18bAuditJson.includes('metadataJson'))
+
+  console.log('\n217. Phase 18B: pagination + filter still work after metadataJson removal')
+  // Pagination
+  const p18bPagRes  = await get('/audit/logs?page=1&pageSize=5', accessToken)
+  check('GET /audit/logs?pageSize=5 → 200',             p18bPagRes.status === 200)
+  const p18bPagBody = await p18bPagRes.json() as Record<string, unknown>
+  const p18bPagn = (p18bPagBody.pagination ?? {}) as Record<string, unknown>
+  check('pagination.pageSize=5 respected',              p18bPagn.pageSize === 5)
+  check('pagination still has total + pages',           typeof p18bPagn.total === 'number' && typeof p18bPagn.pages === 'number')
+  // Action filter
+  const p18bFilterRes  = await get('/audit/logs?action=SMOKE_TEST_EVENT', accessToken)
+  check('GET /audit/logs?action=SMOKE_TEST_EVENT → 200', p18bFilterRes.status === 200)
+
+  console.log('\n218. Phase 18B: /activation/timeline remains free of metadataJson')
+  const p18bTlRes  = await get('/activation/timeline', accessToken)
+  const p18bTlBody = await p18bTlRes.json() as Record<string, unknown>
+  check('GET /activation/timeline → 200',               p18bTlRes.status === 200)
+  const p18bTlJson = JSON.stringify(p18bTlBody)
+  check('activation/timeline no "metadataJson" substring', !p18bTlJson.includes('metadataJson'))
+  const p18bTlEvents = (p18bTlBody.events ?? []) as Record<string, unknown>[]
+  check('every timeline event has safeMetadata',
+    p18bTlEvents.length === 0 || p18bTlEvents.every(e => typeof e.safeMetadata === 'object'))
+  check('NO timeline event has metadataJson key',
+    p18bTlEvents.length === 0 || p18bTlEvents.every(e => !('metadataJson' in e)))
+
+  console.log('\n219. Phase 18B: comprehensive cross-endpoint secret scan')
+  // Triple check — none of the audit-exposing endpoints leak anywhere
+  const allJsonBlobs = [p18bAuditJson, p18bTlJson, p18aActJson, p18aSecJson]
+  const FORBIDDEN_PATTERNS = [
+    'metadataJson',
+    'passwordHash',
+    'credentialRef',
+    'metaAccessTokenRef',
+    'webhookVerifyTokenRef',
+    'apiKeyRef',
+    'JWT_SECRET',
+    'DATABASE_URL',
+  ]
+  for (const pat of FORBIDDEN_PATTERNS) {
+    const found = allJsonBlobs.some(j => j.includes(pat))
+    check(`no "${pat}" across audit/timeline/activity/security responses`, !found)
+  }
 
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')

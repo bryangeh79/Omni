@@ -1114,7 +1114,10 @@ export interface AuditLog {
   action:       string
   entityType:   string
   entityId:     string | null
-  metadataJson: string
+  // Phase 18B: metadataJson removed from response. Use safeMetadata (whitelisted)
+  // and summary (deterministic human-readable string) instead.
+  safeMetadata: Record<string, unknown>
+  summary:      string
   ip:           string | null
   createdAt:    string
 }

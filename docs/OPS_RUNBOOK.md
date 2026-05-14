@@ -125,3 +125,12 @@ If you add a new audit-log-exposing endpoint, import from `apps/api/src/lib/audi
 - `classifySecuritySeverity` if you need severity buckets
 
 Never select raw `metadataJson` into a tenant-facing response without first sanitizing it. The shared whitelist is the single source of truth; extend `SAFE_AUDIT_METADATA_KEYS` only after security review.
+
+
+## Phase 18B: Audit Response Surface Cleanup
+
+When debugging audit-related issues:
+- The DB still stores `AuditLog.metadataJson` (column unchanged) — this is the canonical write target for `createAuditLog`
+- The API NEVER echoes `metadataJson` back to clients; it is read in the route handler only to feed the sanitizer
+- Operators querying audit data via `/audit/logs` see only `safeMetadata` + `summary` — for raw forensics, query the database directly
+- The shared `apps/api/src/lib/audit-safe.ts` is the only path to expose metadata in API responses

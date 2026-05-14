@@ -406,7 +406,7 @@ export async function activationRoutes(app: FastifyInstance) {
       totalActivationDryRuns,
       recentEventCount:   safeEvents.length,
       events: safeEvents,
-      note: 'Timeline shows recent operator-initiated activation events only. Metadata is sanitized through a shared whitelist — no raw metadataJson, secrets, or credentials are included.',
+      note: 'Timeline shows recent operator-initiated activation events only. Metadata is sanitized through a shared whitelist — no raw audit payload, secrets, or credentials are included.',
     }
   })
 

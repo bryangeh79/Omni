@@ -56,7 +56,7 @@ export async function auditRoutes(app: FastifyInstance) {
           action:      true,
           entityType:  true,
           entityId:    true,
-          metadataJson: true,
+          metadataJson: true,  // read for sanitization only — NOT echoed back
           ip:          true,
           createdAt:   true,
           // userAgent omitted — can be long and is rarely needed in the UI
@@ -64,14 +64,23 @@ export async function auditRoutes(app: FastifyInstance) {
       }),
     ])
 
-    // Phase 18A: enrich each log entry with safeMetadata (whitelisted view) +
-    // summary, while preserving the legacy `metadataJson` field for existing
-    // /audit UI consumers (already filtered at write-time by createAuditLog).
-    // Tests assert that metadataJson contains no secret substrings.
-    const enrichedLogs = logs.map(l => ({
-      ...l,
+    // Phase 18B: metadataJson is NEVER echoed back to clients.
+    // Each entry is reshaped through the shared sanitizer:
+    //   - summary       — deterministic human-readable label
+    //   - safeMetadata  — whitelisted metadata object
+    // The raw metadataJson string is dropped before the response leaves the API.
+    const safeLogs = logs.map(l => ({
+      id:           l.id,
+      tenantId:     l.tenantId,
+      actorUserId:  l.actorUserId,
+      actorRole:    l.actorRole,
+      action:       l.action,
+      entityType:   l.entityType,
+      entityId:     l.entityId,
       summary:      summarizeAuditAction(l.action),
       safeMetadata: parseAuditMetadataSafe(l.metadataJson),
+      ip:           l.ip,
+      createdAt:    l.createdAt,
     }))
 
     return {
@@ -82,7 +91,7 @@ export async function auditRoutes(app: FastifyInstance) {
         pageSize: take,
         pages:    Math.ceil(total / take),
       },
-      logs: enrichedLogs,
+      logs: safeLogs,
     }
   })
 

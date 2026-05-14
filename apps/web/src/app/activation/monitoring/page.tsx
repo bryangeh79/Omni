@@ -77,13 +77,8 @@ function relTime(iso: string): string {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
-function metaSafePreview(json: string): string {
-  try {
-    const o = JSON.parse(json) as AnyData
-    const s = JSON.stringify(o)
-    return s.length > 80 ? s.slice(0, 77) + '…' : s
-  } catch { return '{}' }
-}
+// Phase 18B: client-side metadataJson preview removed —
+// /activation/timeline server now returns sanitized safeMetadata only.
 
 export default function ActivationMonitoringPage() {
   const [authed,    setAuthed]    = useState(false)
@@ -263,11 +258,10 @@ export default function ActivationMonitoringPage() {
                       </div>
                       <div style={{ fontSize: '0.75rem', color: NEUTRAL }}>
                         {!!e.actorRole && <span style={{ marginRight: '0.5rem' }}>{String(e.actorRole)}</span>}
-                        {/* Phase 18A: server returns sanitized safeMetadata; fall back to legacy metadataJson if present */}
+                        {/* Phase 18B: server is the only source for safeMetadata; no client-side parse */}
                         {!!e.safeMetadata && Object.keys(e.safeMetadata as object).length > 0 && (
                           <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{JSON.stringify(e.safeMetadata)}</span>
                         )}
-                        {!e.safeMetadata && !!e.metadataJson && <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{metaSafePreview(String(e.metadataJson))}</span>}
                       </div>
                     </div>
                   </div>
