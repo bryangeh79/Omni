@@ -15,19 +15,19 @@ import {
 
 // ── Status badge helpers ──────────────────────────────────────────────────────
 const SETUP_STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  DRAFT:                  { label: 'Draft',               cls: 'bg-gray-100 text-gray-600' },
-  TESTED_STUB:            { label: 'Stub Tested',         cls: 'bg-blue-50 text-blue-700' },
-  READY_FOR_CREDENTIALS:  { label: 'Ready for Credentials', cls: 'bg-amber-50 text-amber-700' },
-  CREDENTIALS_SAVED:      { label: 'Credentials Saved',   cls: 'bg-indigo-50 text-indigo-700' },
-  ACTIVATION_PENDING:     { label: 'Activation Pending',  cls: 'bg-orange-50 text-orange-700' },
-  ACTIVE:                 { label: 'Active',              cls: 'bg-emerald-50 text-emerald-700' },
-  FAILED:                 { label: 'Failed',              cls: 'bg-red-50 text-red-700' },
+  DRAFT:                  { label: '草稿',           cls: 'bg-gray-100 text-gray-600' },
+  TESTED_STUB:            { label: '演练已通过',     cls: 'bg-blue-50 text-blue-700' },
+  READY_FOR_CREDENTIALS:  { label: '待填凭据',       cls: 'bg-amber-50 text-amber-700' },
+  CREDENTIALS_SAVED:      { label: '凭据已保存',     cls: 'bg-indigo-50 text-indigo-700' },
+  ACTIVATION_PENDING:     { label: '激活等待中',     cls: 'bg-orange-50 text-orange-700' },
+  ACTIVE:                 { label: '已激活',         cls: 'bg-emerald-50 text-emerald-700' },
+  FAILED:                 { label: '失败',           cls: 'bg-red-50 text-red-700' },
 }
 
 const CRED_STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  NONE:             { label: 'Not Set',        cls: 'bg-gray-100 text-gray-500' },
-  DRAFT:            { label: 'Draft (No Vault)', cls: 'bg-amber-50 text-amber-600' },
-  ENCRYPTED_STORED: { label: 'Encrypted',      cls: 'bg-emerald-50 text-emerald-700' },
+  NONE:             { label: '未设置',           cls: 'bg-gray-100 text-gray-500' },
+  DRAFT:            { label: '草稿（未加密）',   cls: 'bg-amber-50 text-amber-600' },
+  ENCRYPTED_STORED: { label: '已加密保存',       cls: 'bg-emerald-50 text-emerald-700' },
 }
 
 function StatusBadge({ status, cfg }: { status: string; cfg: Record<string, { label: string; cls: string }> }) {
@@ -58,7 +58,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             <span className="text-white text-2xl">💬</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">渠道设置</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to configure your WhatsApp channel</p>
+          <p className="text-sm text-gray-400 mt-1">登录以配置您的 WhatsApp 渠道</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
         <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
@@ -80,25 +80,25 @@ function ChannelCard({ type, icon, title, tagline, pros, cons, boundary, selecte
     <button type="button" onClick={() => onSelect(type)}
       className={`text-left rounded-2xl border-2 p-5 transition-all w-full ${selected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 bg-white hover:border-green-300 hover:shadow-sm'}`}>
       <div className="flex items-start gap-4">
-        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl ${selected ? 'bg-green-200' : 'bg-gray-100'}`}>{icon}</div>
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-lg font-semibold ${selected ? 'bg-green-200 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{icon}</div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-            {selected && <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Selected</span>}
+            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+            {selected && <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">已选择</span>}
           </div>
           <p className="text-xs text-gray-500 mb-3">{tagline}</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Pros</p>
+              <p className="text-xs font-semibold text-gray-500 mb-1">优势</p>
               <ul className="space-y-0.5">{pros.map((p, i) => <li key={i} className="text-xs text-gray-700 flex gap-1"><span className="text-green-500">✓</span>{p}</li>)}</ul>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Cons</p>
+              <p className="text-xs font-semibold text-gray-500 mb-1">限制</p>
               <ul className="space-y-0.5">{cons.map((c, i) => <li key={i} className="text-xs text-gray-700 flex gap-1"><span className="text-amber-400">·</span>{c}</li>)}</ul>
             </div>
           </div>
           <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-            <p className="text-xs text-amber-700"><strong>Boundary:</strong> {boundary}</p>
+            <p className="text-xs text-amber-700"><strong>使用边界：</strong>{boundary}</p>
           </div>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function ChannelSetupPage() {
     try {
       const r = await requestWaWebQr()
       setQrResult({ blocked: r.blocked, note: r.note })
-    } catch (e) { setError(e instanceof Error ? e.message : 'QR request failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : 'QR 请求失败') }
     finally { setRequestingQr(false) }
   }
 
@@ -174,19 +174,19 @@ export default function ChannelSetupPage() {
     try {
       const r = await requestMetaLiveTest()
       setLiveTestResult({ blocked: r.blocked, note: r.note })
-    } catch (e) { setError(e instanceof Error ? e.message : 'Live test request failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '真实测试请求失败') }
     finally { setRequestingLive(false) }
   }
 
   function notify(msg: string) { setNotice(msg); setTimeout(() => setNotice(''), 4000) }
 
   async function handleSaveDraft() {
-    if (!selected) { setError('Select a channel type first'); return }
+    if (!selected) { setError('请先选择渠道类型'); return }
     setSaving(true); setError('')
     try {
       const r = await saveChannelSetupDraft({ channelType: selected, displayName: displayName || undefined, phoneNumber: phoneNumber || undefined })
-      setStatus(r); notify('Draft saved')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed') }
+      setStatus(r); notify('草稿已保存')
+    } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
 
@@ -195,7 +195,7 @@ export default function ChannelSetupPage() {
     try {
       const r = await testChannelSetup(selected || undefined)
       setTestResult(r); await loadStatus()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Test failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '测试失败') }
     finally { setTesting(false) }
   }
 
@@ -204,8 +204,8 @@ export default function ChannelSetupPage() {
     try {
       await saveCredentialsDraft({ wabaId: wabaId || undefined, phoneNumberId: phoneId || undefined, accessToken: accessToken || undefined, channelType: selected || undefined })
       await Promise.all([loadStatus(), fetchCredentialsStatus().then(setCredStatus)])
-      setShowCredForm(false); setAccessToken(''); notify('Credentials saved (encrypted)')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Credential save failed') }
+      setShowCredForm(false); setAccessToken(''); notify('凭据已保存（已加密）')
+    } catch (e) { setError(e instanceof Error ? e.message : '凭据保存失败') }
     finally { setSavingCreds(false) }
   }
 
@@ -214,8 +214,8 @@ export default function ChannelSetupPage() {
     try {
       await clearCredentials()
       await Promise.all([loadStatus(), fetchCredentialsStatus().then(setCredStatus)])
-      notify('Credentials cleared')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Clear failed') }
+      notify('凭据已清除')
+    } catch (e) { setError(e instanceof Error ? e.message : '清除失败') }
     finally { setClearingCreds(false) }
   }
 
@@ -223,7 +223,7 @@ export default function ChannelSetupPage() {
     setRequestingAct(true); setError('')
     try {
       const r = await requestActivation(); setActivationResult(r); await loadStatus()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Activation request failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '激活请求失败') }
     finally { setRequestingAct(false) }
   }
 
@@ -231,7 +231,7 @@ export default function ChannelSetupPage() {
     setConfirmingAct(true); setError('')
     try {
       const r = await confirmActivation(); setActivationResult(r); await loadStatus()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Confirm activation failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '激活确认失败') }
     finally { setConfirmingAct(false) }
   }
 
@@ -243,13 +243,13 @@ export default function ChannelSetupPage() {
 
   // Activation readiness checklist
   const checklist = [
-    { label: 'Channel type selected', done: !!selected },
-    { label: 'Draft saved to DB', done: !!(status && status.updatedAt) },
-    { label: 'Stub test completed', done: setupStatus !== 'DRAFT' },
-    { label: 'Credentials saved', done: credStat === 'ENCRYPTED_STORED' || credStat === 'DRAFT', applicable: isMetaType },
-    { label: 'OMNI_ALLOW_WA_SESSION=true (WA Web)', done: false, note: 'Required for WA_WEB activation — set by operator', applicable: selected === 'WA_WEB' },
-    { label: 'OMNI_ENABLE_REAL_META_SEND=true (Meta API)', done: false, note: 'Required for Meta API activation — set by operator', applicable: isMetaType },
-    { label: 'Activation requested', done: setupStatus === 'ACTIVATION_PENDING' || setupStatus === 'ACTIVE' },
+    { label: '已选择渠道类型', done: !!selected },
+    { label: '草稿已保存到数据库', done: !!(status && status.updatedAt) },
+    { label: '已完成安全演练测试', done: setupStatus !== 'DRAFT' },
+    { label: '凭据已保存', done: credStat === 'ENCRYPTED_STORED' || credStat === 'DRAFT', applicable: isMetaType },
+    { label: 'OMNI_ALLOW_WA_SESSION=true（WhatsApp Web）', done: false, note: 'WA Web 激活必需 — 由运维设置', applicable: selected === 'WA_WEB' },
+    { label: 'OMNI_ENABLE_REAL_META_SEND=true（Meta API）', done: false, note: 'Meta API 激活必需 — 由运维设置', applicable: isMetaType },
+    { label: '已发起激活请求', done: setupStatus === 'ACTIVATION_PENDING' || setupStatus === 'ACTIVE' },
   ]
 
   return (
@@ -270,13 +270,13 @@ export default function ChannelSetupPage() {
             </div>
           </div>
           <nav className="flex items-center gap-3 text-xs flex-wrap">
-            <a href="/onboarding" className="text-green-600 hover:text-green-800">← Onboarding</a>
+            <a href="/onboarding" className="text-green-600 hover:text-green-800">← 上线向导</a>
             <span className="text-gray-200">|</span>
-            <a href="/channels/setup/meta-webhook" className="text-blue-500 hover:text-blue-700">Meta Webhook</a>
+            <a href="/channels/setup/meta-webhook" className="text-blue-600 hover:text-blue-700">Meta Webhook</a>
             <span className="text-gray-200">|</span>
-            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">🚀 Launch Checklist</a>
+            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">上线清单</a>
             <span className="text-gray-200">|</span>
-            <a href="/knowledge" className="text-gray-400 hover:text-gray-600">Knowledge</a>
+            <a href="/knowledge" className="text-gray-500 hover:text-gray-700">知识库</a>
           </nav>
         </div>
       </header>
@@ -287,56 +287,56 @@ export default function ChannelSetupPage() {
 
         {/* Intro */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="text-base font-bold text-gray-900 mb-2">Choose Your WhatsApp Channel</h2>
-          <p className="text-sm text-gray-500 mb-3">Draft persists to DB. Choose, configure, and test — real activation requires explicit env flags not set by default.</p>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">选择您的 WhatsApp 渠道</h2>
+          <p className="text-sm text-gray-500 mb-3">草稿会持久化到数据库。选择渠道、配置参数、运行安全演练 — 真实激活必须显式设置环境变量（默认关闭）。</p>
           <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-xs text-blue-700">
-            <strong>Safe by default:</strong> No WhatsApp session or Meta API call is made from this page. All activation is guarded by environment flags.
+            <strong>默认安全：</strong>本页不会触发任何 WhatsApp 会话或 Meta API 调用。所有激活均受环境变量门控保护。
           </div>
         </div>
 
         {/* Channel option cards */}
         <div className="space-y-3">
           <ChannelCard
-            type="WA_WEB" icon="📱" title="WhatsApp Web / Business App"
-            tagline="Connect via WhatsApp Web — quick start, no Meta approval needed."
-            pros={['Fast start — no Meta approval', 'Works with standard WA/WA Business', 'Low cost to trial', 'Small team friendly']}
-            cons={['Not official Meta platform', 'Phone must stay connected', 'No template messages', 'Session stability best-effort']}
-            boundary="Not for mass marketing or broadcast. WA ToS applies. Session stability is best-effort."
+            type="WA_WEB" icon="WA" title="WhatsApp Web / 商家版"
+            tagline="通过 WhatsApp Web 接入 — 启动快速，无需 Meta 审批。"
+            pros={['启动快 — 无需 Meta 审批', '兼容标准 WA / WA 商家版', '试用成本低', '适合小团队']}
+            cons={['非 Meta 官方平台', '手机需保持在线', '不支持模板消息', '会话稳定性尽力而为']}
+            boundary="不可用于大规模营销或广播；遵守 WhatsApp 服务条款；会话稳定性尽力而为。"
             selected={selected === 'WA_WEB'} onSelect={setSelected}
           />
           <ChannelCard
-            type="META_WA_BUSINESS" icon="🏢" title="Meta WhatsApp Business Platform (Official API)"
-            tagline="Official Meta Cloud API — enterprise-grade, template messages, no phone session."
-            pros={['Official Meta-approved', 'Template messages', 'No phone dependency', 'Enterprise scale']}
-            cons={['Needs Meta business verification', 'Template approval needed', 'Per-conversation fee', 'More setup steps']}
-            boundary="Enterprise use. Meta fees are pass-through credits — not bundled. No broadcast/ads in current product."
+            type="META_WA_BUSINESS" icon="API" title="Meta WhatsApp 商业平台（官方 API）"
+            tagline="Meta Cloud API — 企业级、支持模板消息、无需手机会话。"
+            pros={['Meta 官方授权', '支持模板消息', '不依赖手机', '企业级承载']}
+            cons={['需 Meta 企业认证', '需模板审核', '按会话计费', '配置步骤较多']}
+            boundary="面向企业用户；Meta 费用为透传，不打包；当前产品不含广播 / 广告。"
             selected={selected === 'META_WA_BUSINESS'} onSelect={setSelected}
           />
         </div>
 
         {/* Draft form */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
-          <h3 className="text-sm font-bold text-gray-800">Channel Details</h3>
+          <h3 className="text-sm font-semibold text-gray-800">渠道详情</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-500 block mb-1">Display Name</label>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-400" placeholder="e.g. Sunshine Property WA" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+              <label className="text-xs font-semibold text-gray-600 block mb-1">显示名称</label>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-400" placeholder="例如：阳光地产 WA" value={displayName} onChange={e => setDisplayName(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 block mb-1">Phone Number (last 4 stored)</label>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">手机号（仅保存末四位）</label>
               <input className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-400" placeholder="+60 12-345 6789" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
-              <p className="text-xs text-gray-400 mt-0.5">Only last 4 digits are stored</p>
+              <p className="text-xs text-gray-400 mt-0.5">仅保存末四位用于显示</p>
             </div>
           </div>
           {status?.phoneLast4 && (
-            <p className="text-xs text-gray-500">Stored phone hint: ****{status.phoneLast4}</p>
+            <p className="text-xs text-gray-500">已保存手机末尾：****{status.phoneLast4}</p>
           )}
           <div className="flex gap-2">
-            <button onClick={() => { void handleSaveDraft() }} disabled={saving || !selected} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
-              {saving ? 'Saving…' : 'Save Draft'}
+            <button onClick={() => { void handleSaveDraft() }} disabled={saving || !selected} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+              {saving ? '保存中…' : '保存草稿'}
             </button>
             <button onClick={() => { void handleTest() }} disabled={testing} className="px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
-              {testing ? 'Testing…' : 'Stub Test'}
+              {testing ? '测试中…' : '安全演练'}
             </button>
           </div>
         </div>
@@ -345,21 +345,20 @@ export default function ChannelSetupPage() {
         {testResult && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-base">🔒</span>
-              <span className="text-sm font-bold text-amber-800">Stub Test Result</span>
+              <span className="text-sm font-semibold text-amber-800">安全演练结果</span>
               <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{testResult.testResult}</span>
             </div>
             <p className="text-xs text-amber-700">{testResult.note}</p>
             <div className="grid grid-cols-2 gap-2 mt-2">
               {[
-                { label: 'WA Session Started', value: testResult.whatsappSessionStarted },
-                { label: 'Meta API Called',     value: testResult.metaApiCalled },
-                { label: 'Real Send Enabled',   value: testResult.realMetaSendEnabled },
-                { label: 'Connected',           value: testResult.connected },
+                { label: 'WhatsApp 会话已启动', value: testResult.whatsappSessionStarted },
+                { label: 'Meta API 已调用',      value: testResult.metaApiCalled },
+                { label: '真实发送已启用',       value: testResult.realMetaSendEnabled },
+                { label: '已连接',               value: testResult.connected },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between bg-white rounded-xl px-3 py-1.5 border border-amber-100">
                   <span className="text-xs text-gray-600">{label}</span>
-                  <span className={`text-xs font-bold ${value ? 'text-red-600' : 'text-emerald-600'}`}>{value ? 'YES' : 'NO'}</span>
+                  <span className={`text-xs font-semibold ${value ? 'text-red-600' : 'text-emerald-600'}`}>{value ? '是' : '否'}</span>
                 </div>
               ))}
             </div>
@@ -371,21 +370,21 @@ export default function ChannelSetupPage() {
           <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-gray-800">Credential Vault</h3>
+                <h3 className="text-sm font-semibold text-gray-800">凭据保险库</h3>
                 <div className="flex items-center gap-2 mt-1">
                   <StatusBadge status={credStat} cfg={CRED_STATUS_CFG} />
-                  {credStatus?.credentialLast4 && <span className="text-xs text-gray-500">Token hint: ****{credStatus.credentialLast4}</span>}
-                  {credStatus && <span className="text-xs text-gray-400">Vault: {credStatus.vaultConfigured ? '✓ configured' : '⚠ not configured'}</span>}
+                  {credStatus?.credentialLast4 && <span className="text-xs text-gray-500">凭据末尾：****{credStatus.credentialLast4}</span>}
+                  {credStatus && <span className="text-xs text-gray-400">保险库：{credStatus.vaultConfigured ? '✓ 已配置' : '⚠ 未配置'}</span>}
                 </div>
               </div>
               <div className="flex gap-2">
                 {credStat !== 'NONE' && (
                   <button onClick={() => { void handleClearCreds() }} disabled={clearingCreds} className="text-xs px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 disabled:opacity-50">
-                    {clearingCreds ? '…' : 'Clear'}
+                    {clearingCreds ? '…' : '清除'}
                   </button>
                 )}
                 <button onClick={() => setShowCredForm(v => !v)} className="text-xs px-3 py-1.5 rounded-xl bg-gray-100 border border-gray-200 text-gray-600 hover:bg-gray-200">
-                  {showCredForm ? 'Cancel' : credStat !== 'NONE' ? 'Update' : 'Add Credentials'}
+                  {showCredForm ? '取消' : credStat !== 'NONE' ? '更新' : '添加凭据'}
                 </button>
               </div>
             </div>
@@ -393,32 +392,32 @@ export default function ChannelSetupPage() {
             {showCredForm && (
               <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-3">
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
-                  Credentials are encrypted (AES-256-GCM) before storage. Raw values are never logged or returned. Use test/placeholder values in development.
+                  凭据保存前会经 AES-256-GCM 加密，原始值不会写入日志或在响应中返回。开发环境请使用测试或占位值。
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 block mb-1">WABA ID</label>
-                    <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-green-400" placeholder="WhatsApp Business Account ID" value={wabaId} onChange={e => setWabaId(e.target.value)} />
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">WABA ID</label>
+                    <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-green-400" placeholder="WhatsApp 商业账号 ID" value={wabaId} onChange={e => setWabaId(e.target.value)} />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 block mb-1">Phone Number ID</label>
-                    <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-green-400" placeholder="Meta Phone Number ID" value={phoneId} onChange={e => setPhoneId(e.target.value)} />
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">Phone Number ID</label>
+                    <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-green-400" placeholder="Meta 手机号 ID" value={phoneId} onChange={e => setPhoneId(e.target.value)} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 block mb-1">Access Token (encrypted on save)</label>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Access Token（保存时加密）</label>
                   <input
                     type="password"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-green-400"
-                    placeholder="EAAxxxxxxx (never stored in plaintext)"
+                    placeholder="EAAxxxxxxx（绝不以明文保存）"
                     value={accessToken}
                     onChange={e => setAccessToken(e.target.value)}
                     autoComplete="off"
                   />
-                  <p className="text-xs text-gray-400 mt-0.5">Only last 4 characters are stored for display. Raw token is never returned.</p>
+                  <p className="text-xs text-gray-400 mt-0.5">仅末四位用于显示，原始 token 永远不会返回。</p>
                 </div>
-                <button onClick={() => { void handleSaveCreds() }} disabled={savingCreds || (!wabaId && !phoneId && !accessToken)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
-                  {savingCreds ? 'Encrypting & Saving…' : 'Save Credentials (Encrypted)'}
+                <button onClick={() => { void handleSaveCreds() }} disabled={savingCreds || (!wabaId && !phoneId && !accessToken)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                  {savingCreds ? '加密保存中…' : '保存凭据（加密）'}
                 </button>
               </div>
             )}
@@ -427,20 +426,17 @@ export default function ChannelSetupPage() {
 
         {/* Meta webhook setup link */}
         {isMetaType && (
-          <a href="/channels/setup/meta-webhook" className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl p-4 hover:bg-blue-100 transition-all">
-            <span className="text-2xl">🔗</span>
-            <div>
-              <p className="text-sm font-bold text-blue-800">Meta Webhook Setup Wizard</p>
-              <p className="text-xs text-blue-600">Configure webhook URL, verify token, and complete Meta App setup steps →</p>
-            </div>
+          <a href="/channels/setup/meta-webhook" className="block bg-blue-50 border border-blue-200 rounded-2xl p-4 hover:bg-blue-100 transition-all">
+            <p className="text-sm font-semibold text-blue-800">Meta Webhook 配置向导</p>
+            <p className="text-xs text-blue-600 mt-0.5">配置 webhook URL、校验 token，完成 Meta 应用配置步骤 →</p>
           </a>
         )}
 
         {/* Activation readiness checklist */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-800">Activation Readiness</h3>
-            <a href="/launch-checklist" className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">Full Checklist 🚀</a>
+            <h3 className="text-sm font-semibold text-gray-800">激活准备度</h3>
+            <a href="/launch-checklist" className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">完整上线清单 →</a>
           </div>
           <div className="space-y-1.5">
             {checklist.filter(c => c.applicable !== false).map((c, i) => (
@@ -455,11 +451,11 @@ export default function ChannelSetupPage() {
           </div>
 
           <div className="flex gap-2 pt-1">
-            <button onClick={() => { void handleRequestActivation() }} disabled={requestingAct || !selected} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
-              {requestingAct ? 'Requesting…' : 'Request Activation'}
+            <button onClick={() => { void handleRequestActivation() }} disabled={requestingAct || !selected} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+              {requestingAct ? '请求中…' : '发起激活请求'}
             </button>
-            <button onClick={() => { void handleConfirmActivation() }} disabled={confirmingAct || setupStatus !== 'ACTIVATION_PENDING'} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
-              {confirmingAct ? 'Confirming…' : 'Confirm Activation'}
+            <button onClick={() => { void handleConfirmActivation() }} disabled={confirmingAct || setupStatus !== 'ACTIVATION_PENDING'} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+              {confirmingAct ? '确认中…' : '确认激活'}
             </button>
           </div>
         </div>
@@ -468,9 +464,8 @@ export default function ChannelSetupPage() {
         {activationResult && (
           <div className={`rounded-2xl border p-4 space-y-2 ${activationResult.blocked ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
             <div className="flex items-center gap-2">
-              <span className="text-base">{activationResult.blocked ? '🔒' : '✓'}</span>
-              <span className={`text-sm font-bold ${activationResult.blocked ? 'text-amber-800' : 'text-emerald-800'}`}>
-                {activationResult.blocked ? 'Activation Blocked (Safe Default)' : 'Activation Progressed'}
+              <span className={`text-sm font-semibold ${activationResult.blocked ? 'text-amber-800' : 'text-emerald-800'}`}>
+                {activationResult.blocked ? '激活已拦截（默认安全）' : '激活已推进'}
               </span>
             </div>
             <p className="text-xs text-gray-700">{activationResult.note}</p>
@@ -483,12 +478,12 @@ export default function ChannelSetupPage() {
             )}
             <div className="grid grid-cols-2 gap-2 mt-2">
               {[
-                { label: 'Real WA Session', value: activationResult.realWaSessionEnabled },
-                { label: 'Real Meta Send',  value: activationResult.realMetaSendEnabled },
+                { label: '真实 WhatsApp 会话', value: activationResult.realWaSessionEnabled },
+                { label: '真实 Meta 发送',     value: activationResult.realMetaSendEnabled },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between bg-white rounded-xl px-3 py-1.5 border border-gray-100">
                   <span className="text-xs text-gray-600">{label}</span>
-                  <span className={`text-xs font-bold ${value ? 'text-red-600' : 'text-emerald-600'}`}>{value ? 'YES' : 'NO'}</span>
+                  <span className={`text-xs font-semibold ${value ? 'text-red-600' : 'text-emerald-600'}`}>{value ? '是' : '否'}</span>
                 </div>
               ))}
             </div>
@@ -499,7 +494,7 @@ export default function ChannelSetupPage() {
         {selected === 'WA_WEB' && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-800">WA Web Live Activation</h3>
+              <h3 className="text-sm font-semibold text-gray-800">WhatsApp Web 真实激活</h3>
               {waWebStatus && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${waWebStatus.waSessionAllowed ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                   {waWebStatus.sessionStatus}
@@ -508,21 +503,21 @@ export default function ChannelSetupPage() {
             </div>
             {waWebStatus?.missingConditions && waWebStatus.missingConditions.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
-                <p className="font-bold mb-1">Missing Conditions</p>
+                <p className="font-semibold mb-1">缺失条件</p>
                 {waWebStatus.missingConditions.map((c, i) => <p key={i}>• {c}</p>)}
               </div>
             )}
-            <p className="text-xs text-gray-500">{waWebStatus?.note ?? 'Loading…'}</p>
+            <p className="text-xs text-gray-500">{waWebStatus?.note ?? '加载中…'}</p>
             <button
               onClick={() => { void handleRequestQr() }}
               disabled={requestingQr}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50"
             >
-              {requestingQr ? 'Requesting…' : 'Request QR Code (Guarded)'}
+              {requestingQr ? '请求中…' : '请求 QR 码（受门控保护）'}
             </button>
             {qrResult && (
               <div className={`rounded-xl border px-4 py-3 text-xs ${qrResult.blocked ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-                <p className="font-bold mb-1">{qrResult.blocked ? '🔒 Blocked' : 'ℹ️ Response'}</p>
+                <p className="font-semibold mb-1">{qrResult.blocked ? '已拦截' : '返回结果'}</p>
                 <p>{qrResult.note}</p>
               </div>
             )}
@@ -533,7 +528,7 @@ export default function ChannelSetupPage() {
         {selected === 'META_WA_BUSINESS' && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-800">Meta Live Webhook Verification</h3>
+              <h3 className="text-sm font-semibold text-gray-800">Meta Webhook 真实验证</h3>
               {metaLiveStatus && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${metaLiveStatus.liveStatus === 'READY_FOR_LIVE_TEST' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                   {metaLiveStatus.liveStatus.replace(/_/g, ' ')}
@@ -542,26 +537,26 @@ export default function ChannelSetupPage() {
             </div>
             {metaLiveStatus?.missingConditions && metaLiveStatus.missingConditions.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
-                <p className="font-bold mb-1">Missing Conditions</p>
+                <p className="font-semibold mb-1">缺失条件</p>
                 {metaLiveStatus.missingConditions.map((c, i) => <p key={i}>• {c}</p>)}
               </div>
             )}
-            <p className="text-xs text-gray-500">{metaLiveStatus?.note ?? 'Loading…'}</p>
+            <p className="text-xs text-gray-500">{metaLiveStatus?.note ?? '加载中…'}</p>
             <div className="flex gap-2">
               <button
                 onClick={() => { void handleRequestLiveTest() }}
                 disabled={requestingLive}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50"
               >
-                {requestingLive ? 'Requesting…' : 'Request Live Test (Guarded)'}
+                {requestingLive ? '请求中…' : '请求真实测试（受门控保护）'}
               </button>
               <a href="/channels/setup/meta-webhook" className="px-4 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-medium">
-                Webhook Wizard
+                Webhook 向导
               </a>
             </div>
             {liveTestResult && (
               <div className={`rounded-xl border px-4 py-3 text-xs ${liveTestResult.blocked ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-                <p className="font-bold mb-1">{liveTestResult.blocked ? '🔒 Blocked' : 'ℹ️ Response'}</p>
+                <p className="font-semibold mb-1">{liveTestResult.blocked ? '已拦截' : '返回结果'}</p>
                 <p>{liveTestResult.note}</p>
               </div>
             )}
@@ -570,12 +565,12 @@ export default function ChannelSetupPage() {
 
         {/* Safety reminder */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
-          <p className="font-bold text-gray-600">Safety defaults:</p>
-          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — WA Web session never started by default</p>
-          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> — Meta API never called by default</p>
-          <p>• Credentials are AES-256-GCM encrypted before storage; never returned in responses</p>
-          <p>• Real channel activation requires explicit operator-set env flags</p>
-          <p>• <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">View full launch checklist →</a></p>
+          <p className="font-semibold text-gray-600">安全默认：</p>
+          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — WhatsApp Web 会话默认不会启动</p>
+          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> — Meta API 默认不会调用</p>
+          <p>• 凭据保存前经 AES-256-GCM 加密，响应中绝不返回原始值</p>
+          <p>• 真实渠道激活必须由运维显式设置 env 标志</p>
+          <p>• <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">查看完整上线清单 →</a></p>
         </div>
       </main>
     </div>

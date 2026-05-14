@@ -88,10 +88,10 @@ export default function TeamPage() {
     e.preventDefault(); setInviting(true); setError('')
     try {
       const r = await inviteDraft({ email: invEmail, name: invName || undefined, role: invRole })
-      setInvResult(`Invite recorded for ${r.invited.email} as ${r.invited.role}. ${r.note}`)
+      setInvResult(`已记录 ${r.invited.email} 的 ${r.invited.role} 邀请草稿。${r.note}`)
       setInvEmail(''); setInvName('')
       setTimeout(() => setInvResult(null), 8000)
-    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Invite failed') }
+    } catch (ex) { setError(ex instanceof Error ? ex.message : '邀请失败') }
     finally { setInviting(false) }
   }
 
@@ -99,11 +99,11 @@ export default function TeamPage() {
     setSavingRole(true); setError('')
     try {
       await updateMemberRole(member.id, editingRole)
-      setNotice(`Role updated to ${editingRole}`)
+      setNotice(`角色已更新为 ${editingRole}`)
       setEditingId(null)
       setTimeout(() => setNotice(''), 3000)
       await load()
-    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Update failed') }
+    } catch (ex) { setError(ex instanceof Error ? ex.message : '更新失败') }
     finally { setSavingRole(false) }
   }
 
@@ -111,10 +111,10 @@ export default function TeamPage() {
     setError('')
     try {
       await updateMemberStatus(member.id, !member.isActive)
-      setNotice(`${member.email} ${!member.isActive ? 'activated' : 'deactivated'}`)
+      setNotice(`${member.email} ${!member.isActive ? '已激活' : '已停用'}`)
       setTimeout(() => setNotice(''), 3000)
       await load()
-    } catch (ex) { setError(ex instanceof Error ? ex.message : 'Status update failed') }
+    } catch (ex) { setError(ex instanceof Error ? ex.message : '状态更新失败') }
   }
 
   if (!authed) return <LoginForm onLogin={() => { setAuthed(true); void load() }} />
@@ -124,18 +124,18 @@ export default function TeamPage() {
       <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><span className="text-white text-sm">👥</span></div>
+            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">TM</span></div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">团队管理</h1>
-              <p className="text-xs text-gray-400">{team ? `${team.active} active · ${team.total} total` : 'Loading…'}{myRole ? ` · Your role: ${myRole}` : ''}</p>
+              <h1 className="text-base font-semibold text-gray-900">团队管理</h1>
+              <p className="text-xs text-gray-400">{team ? `活跃 ${team.active} · 总计 ${team.total}` : '加载中…'}{myRole ? ` · 您的角色：${myRole}` : ''}</p>
             </div>
           </div>
           <nav className="flex items-center gap-2 text-xs flex-wrap">
-            <a href="/settings" className="text-gray-400 hover:text-gray-700">Settings</a>
+            <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>
             <span className="text-gray-200">|</span>
-            <a href="/billing" className="text-blue-500 hover:text-blue-700">Billing</a>
+            <a href="/billing" className="text-blue-600 hover:text-blue-700">套餐与计费</a>
             <span className="text-gray-200">|</span>
-            <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
+            <a href="/boss" className="text-gray-500 hover:text-gray-700">工作台</a>
           </nav>
         </div>
       </header>
@@ -146,17 +146,17 @@ export default function TeamPage() {
 
         {/* RBAC info banner */}
         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 text-xs text-indigo-800 space-y-1">
-          <p><strong>RBAC Tiers:</strong> OWNER/ADMIN — manage team, billing, settings. MANAGER — view team and reports. AGENT — inbox access. VIEWER — read-only.</p>
-          {!isAdmin && <p className="text-amber-700"><strong>Note:</strong> You need OWNER or ADMIN role to invite or modify team members.</p>}
+          <p><strong>权限层级：</strong>OWNER / ADMIN 可管理团队、计费与设置；MANAGER 可查看团队与报表；AGENT 可使用收件箱；VIEWER 为只读。</p>
+          {!isAdmin && <p className="text-amber-700"><strong>提示：</strong>邀请或修改团队成员需要 OWNER 或 ADMIN 角色。</p>}
         </div>
 
         {loading && !team ? (
-          <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-3">⏳</p><p>Loading team…</p></div>
+          <div className="text-center py-16 text-gray-400"><p className="text-sm">正在加载团队…</p></div>
         ) : (
           <>
             {/* 成员列表 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Team Members</h2>
+              <h2 className="text-sm font-semibold text-gray-700 mb-4">团队成员</h2>
               <div className="space-y-2">
                 {(team?.members ?? []).map(m => (
                   <div key={m.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 ${m.isActive ? 'bg-gray-50' : 'bg-red-50 opacity-70'}`}>
@@ -177,25 +177,25 @@ export default function TeamPage() {
                           >
                             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                           </select>
-                          <button onClick={() => { void handleRoleSave(m) }} disabled={savingRole} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">{savingRole ? '…' : 'Save'}</button>
+                          <button onClick={() => { void handleRoleSave(m) }} disabled={savingRole} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">{savingRole ? '…' : '保存'}</button>
                           <button onClick={() => setEditingId(null)} className="text-xs text-gray-400 px-1">✕</button>
                         </div>
                       ) : (
                         <>
                           <RoleBadge role={m.role} />
-                          {!m.isActive && <span className="text-xs text-red-500 font-bold">Inactive</span>}
+                          {!m.isActive && <span className="text-xs text-red-500 font-bold">已停用</span>}
                           {isAdmin && (
                             <div className="flex gap-1">
                               <button
                                 onClick={() => { setEditingId(m.id); setEditingRole(m.role) }}
                                 className="text-xs text-indigo-500 hover:text-indigo-700 px-1"
-                                title="Change role"
+                                title="修改角色"
                               >编辑</button>
                               <button
                                 onClick={() => { void handleToggleStatus(m) }}
                                 className={`text-xs px-1 ${m.isActive ? 'text-red-400 hover:text-red-600' : 'text-emerald-500 hover:text-emerald-700'}`}
-                                title={m.isActive ? 'Deactivate' : 'Activate'}
-                              >{m.isActive ? 'Deactivate' : 'Activate'}</button>
+                                title={m.isActive ? '停用' : '激活'}
+                              >{m.isActive ? '停用' : '激活'}</button>
                             </div>
                           )}
                         </>
@@ -204,7 +204,7 @@ export default function TeamPage() {
                   </div>
                 ))}
                 {(team?.members?.length ?? 0) === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">No team members yet.</p>
+                  <p className="text-sm text-gray-400 text-center py-4">暂无团队成员。</p>
                 )}
               </div>
             </div>
@@ -212,14 +212,14 @@ export default function TeamPage() {
             {/* Invite Form — ADMIN+ only */}
             {isAdmin && (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Invite Team Member (Draft)</h2>
+                <h2 className="text-sm font-semibold text-gray-700 mb-4">邀请团队成员（草稿）</h2>
                 {invResult && (
                   <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-xs mb-4">{invResult}</div>
                 )}
                 <form onSubmit={e => { void handleInvite(e) }} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-gray-500 block mb-1">Email *</label>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">邮箱 *</label>
                       <input
                         type="email"
                         required
@@ -230,17 +230,17 @@ export default function TeamPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-500 block mb-1">Name</label>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">姓名</label>
                       <input
                         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                        placeholder="Full name (optional)"
+                        placeholder="全名（选填）"
                         value={invName}
                         onChange={e => setInvName(e.target.value)}
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 block mb-1">Role</label>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">角色</label>
                     <select
                       value={invRole}
                       onChange={e => setInvRole(e.target.value)}
@@ -250,10 +250,10 @@ export default function TeamPage() {
                     </select>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button type="submit" disabled={inviting} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2 rounded-xl disabled:opacity-50">
-                      {inviting ? 'Recording…' : 'Record Invite Draft'}
+                    <button type="submit" disabled={inviting} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-5 py-2 rounded-xl disabled:opacity-50">
+                      {inviting ? '记录中…' : '记录邀请草稿'}
                     </button>
-                    <p className="text-xs text-amber-600">No real email sent — email delivery not configured in this phase.</p>
+                    <p className="text-xs text-amber-600">不会发送真实邮件 — 当前阶段邮件投递未配置。</p>
                   </div>
                 </form>
               </div>

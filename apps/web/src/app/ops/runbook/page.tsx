@@ -44,46 +44,46 @@ const OMNI_PORTS = [
 ]
 
 const HEALTH_CHECKS = [
-  { key: 'api_health',   label: 'API /ops/health responds 200',      url: 'http://localhost:43111/ops/health' },
-  { key: 'api_ready',    label: 'API /ops/ready responds 200',       url: 'http://localhost:43111/ops/ready'  },
-  { key: 'api_db',       label: 'DB connectivity (via API ready)',   url: null },
+  { key: 'api_health',   label: 'API /ops/health 返回 200',          url: 'http://localhost:43111/ops/health' },
+  { key: 'api_ready',    label: 'API /ops/ready 返回 200',           url: 'http://localhost:43111/ops/ready'  },
+  { key: 'api_db',       label: '数据库连通性（通过 API ready 判定）', url: null },
 ]
 
 const BACKUP_CHECKLIST = [
-  { key: 'pg_dump',          label: 'PostgreSQL pg_dump scheduled (daily minimum)',         status: 'MANUAL' },
-  { key: 'backup_offsite',   label: 'Backup copy stored off-server (S3 or similar)',        status: 'MANUAL' },
-  { key: 'backup_restore',   label: 'Restore procedure tested in staging',                  status: 'MANUAL' },
-  { key: 'backup_retention', label: 'Retention policy defined (7 days minimum)',            status: 'MANUAL' },
-  { key: 'backup_alert',     label: 'Alert on backup failure configured',                   status: 'MANUAL' },
+  { key: 'pg_dump',          label: 'PostgreSQL pg_dump 已计划（至少每日）',           status: 'MANUAL' },
+  { key: 'backup_offsite',   label: '备份副本存储于异地（S3 或类似服务）',              status: 'MANUAL' },
+  { key: 'backup_restore',   label: '恢复流程已在预演环境验证',                          status: 'MANUAL' },
+  { key: 'backup_retention', label: '保留策略已定义（至少 7 天）',                       status: 'MANUAL' },
+  { key: 'backup_alert',     label: '备份失败告警已配置',                                status: 'MANUAL' },
 ]
 
 const MONITORING_CHECKLIST = [
-  { key: 'uptime_monitor',   label: 'External uptime monitor on API health endpoint',       status: 'MANUAL' },
-  { key: 'error_rate_alert', label: 'Error rate alert (>1% 5xx triggers page)',             status: 'MANUAL' },
-  { key: 'disk_alert',       label: 'Disk usage alert (>80%)',                              status: 'MANUAL' },
-  { key: 'db_size',          label: 'Database size growth tracked',                        status: 'MANUAL' },
-  { key: 'log_retention',    label: 'API/worker logs retained ≥30 days',                   status: 'MANUAL' },
-  { key: 'redis_memory',     label: 'Redis memory monitored, eviction policy set',         status: 'MANUAL' },
+  { key: 'uptime_monitor',   label: '外部监控对 API 健康端点检测',                       status: 'MANUAL' },
+  { key: 'error_rate_alert', label: '错误率告警（>1% 5xx 触发 page）',                  status: 'MANUAL' },
+  { key: 'disk_alert',       label: '磁盘使用率告警（>80%）',                            status: 'MANUAL' },
+  { key: 'db_size',          label: '数据库容量增长已跟踪',                              status: 'MANUAL' },
+  { key: 'log_retention',    label: 'API / Worker 日志保留 ≥ 30 天',                    status: 'MANUAL' },
+  { key: 'redis_memory',     label: 'Redis 内存监控与淘汰策略已设置',                    status: 'MANUAL' },
 ]
 
 const INCIDENT_STEPS = [
-  'Confirm scope: which tenants, channels, features affected?',
-  'Check API health: GET /ops/health and /ops/ready',
-  'Check Postgres: can you connect to port 43113 and query?',
-  'Check Redis: can you connect to port 43114?',
-  'Check Worker: is the worker process running and processing jobs?',
-  'Review API logs for 5xx errors or uncaught exceptions',
-  'If WhatsApp session issue: check OMNI_ALLOW_WA_SESSION flag',
-  'If Meta webhook issue: check webhook verify token and channel config',
-  'Notify affected tenants via out-of-band channel (email/WhatsApp)',
-  'Capture incident timeline, root cause, and fix for post-mortem',
+  '确认影响范围：哪些租户 / 渠道 / 功能受影响？',
+  '检查 API 健康：GET /ops/health 与 /ops/ready',
+  '检查 Postgres：43113 端口可连接并查询？',
+  '检查 Redis：43114 端口可连接？',
+  '检查 Worker：进程是否在跑、是否在消费任务？',
+  '审阅 API 日志：5xx 错误或未捕获异常',
+  '若为 WhatsApp 会话问题：检查 OMNI_ALLOW_WA_SESSION 开关',
+  '若为 Meta Webhook 问题：检查 verify token 与渠道配置',
+  '通过外部渠道（邮件 / WhatsApp）通知受影响租户',
+  '记录事件时间线、根因与修复，用于事后复盘',
 ]
 
 const SUPPORT_READINESS = [
-  { key: 'support_contact',   label: 'Support contact method defined and documented' },
-  { key: 'escalation_path',   label: 'Escalation path documented (L1 → L2 → engineer)' },
-  { key: 'tenant_comms',      label: 'Tenant communication template ready for outages' },
-  { key: 'runbook_location',  label: 'This runbook URL shared with ops team' },
+  { key: 'support_contact',   label: '支持联系方式已定义并记录' },
+  { key: 'escalation_path',   label: '升级路径已记录（L1 → L2 → 工程师）' },
+  { key: 'tenant_comms',      label: '故障时租户通知模板已就绪' },
+  { key: 'runbook_location',  label: '本手册 URL 已同步给运维团队' },
 ]
 
 export default function RunbookPage() {
@@ -100,20 +100,20 @@ export default function RunbookPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>生产运维手册</h1>
           <p style={{ margin: '0.25rem 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
-            Health checks, backup checklist, monitoring, incident response, and support readiness.
+            健康检查、备份清单、监控、事件响应与支持准备。
           </p>
         </div>
-        <a href="/production-qa" style={{ color: '#6366f1', fontSize: '0.875rem', textDecoration: 'none' }}>Production QA &rarr;</a>
+        <a href="/production-qa" style={{ color: '#6366f1', fontSize: '0.875rem', textDecoration: 'none' }}>生产 QA →</a>
       </div>
 
       {/* Nav tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {[
-          { id: 'health',   label: 'Health Checks' },
-          { id: 'backup',   label: 'Backup Checklist' },
-          { id: 'monitor',  label: 'Monitoring' },
-          { id: 'incident', label: 'Incident Response' },
-          { id: 'support',  label: 'Support Readiness' },
+          { id: 'health',   label: '健康检查' },
+          { id: 'backup',   label: '备份清单' },
+          { id: 'monitor',  label: '监控' },
+          { id: 'incident', label: '事件响应' },
+          { id: 'support',  label: '支持准备' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -136,16 +136,16 @@ export default function RunbookPage() {
       </div>
 
       {section === 'health' && (
-        <Section title="Health Check Endpoints">
+        <Section title="健康检查端点">
           <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            All Omni services should respond on their dedicated ports. No port conflicts with other projects.
+            所有 Omni 服务均应在专属端口响应；不与其他项目共用端口。
           </p>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Service</th>
-                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Port</th>
-                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>Check</th>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>服务</th>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>端口</th>
+                <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem' }}>检查方式</th>
               </tr>
             </thead>
             <tbody>
@@ -153,7 +153,7 @@ export default function RunbookPage() {
                 <tr key={p.port} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '0.5rem 0.75rem', color: '#111827' }}>{p.label}</td>
                   <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', color: '#6366f1' }}>{p.port}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>TCP connect</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>TCP 连通</td>
                 </tr>
               ))}
             </tbody>
@@ -164,7 +164,7 @@ export default function RunbookPage() {
                 <span style={{ fontSize: '0.875rem', color: '#374151' }}>{hc.label}</span>
                 {hc.url
                   ? <a href={hc.url} target="_blank" rel="noopener" style={{ color: '#6366f1', fontSize: '0.8125rem', fontFamily: 'monospace' }}>{hc.url}</a>
-                  : <span style={{ color: '#9ca3af', fontSize: '0.8125rem' }}>derived</span>
+                  : <span style={{ color: '#9ca3af', fontSize: '0.8125rem' }}>派生</span>
                 }
               </div>
             ))}
@@ -173,34 +173,33 @@ export default function RunbookPage() {
       )}
 
       {section === 'backup' && (
-        <Section title="Backup Checklist">
+        <Section title="备份清单">
           <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            All items are manual operator tasks. Mark each as complete once configured.
+            以下均为运维人工任务，配置完成后请逐项勾选。
           </p>
           <ChecklistItems items={BACKUP_CHECKLIST} />
           <InfoBox>
-            Backup command: <code>pg_dump -h localhost -p 43113 -U omni_user omni_dev &gt; backup_$(date +%Y%m%d).sql</code>
-            <br />Restore: <code>psql -h localhost -p 43113 -U omni_user omni_dev &lt; backup_YYYYMMDD.sql</code>
-            <br />Test restore in an isolated dev database before using in production.
+            备份命令：<code>pg_dump -h localhost -p 43113 -U omni_user omni_dev &gt; backup_$(date +%Y%m%d).sql</code>
+            <br />恢复命令：<code>psql -h localhost -p 43113 -U omni_user omni_dev &lt; backup_YYYYMMDD.sql</code>
+            <br />投入生产前请先在隔离的开发数据库中验证恢复流程。
           </InfoBox>
         </Section>
       )}
 
       {section === 'monitor' && (
-        <Section title="Monitoring Checklist">
+        <Section title="监控清单">
           <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            All items require external tooling (UptimeRobot, Grafana, Sentry, etc.) — configure before launch.
+            以下项目需要外部工具（UptimeRobot / Grafana / Sentry 等），上线前请完成配置。
           </p>
           <ChecklistItems items={MONITORING_CHECKLIST} />
           <InfoBox>
-            Recommended: monitor <code>GET /ops/health</code> every 60s from an external probe.
-            Set alert threshold: 2 consecutive failures = page on-call.
+            建议：使用外部探针每 60 秒检测 <code>GET /ops/health</code>，连续失败 2 次即触发值班 page。
           </InfoBox>
         </Section>
       )}
 
       {section === 'incident' && (
-        <Section title="Incident Response Procedure">
+        <Section title="事件响应流程">
           <ol style={{ margin: 0, padding: '0 0 0 1.25rem', lineHeight: 1.8 }}>
             {INCIDENT_STEPS.map((step, i) => (
               <li key={i} style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '0.5rem' }}>
@@ -209,28 +208,26 @@ export default function RunbookPage() {
             ))}
           </ol>
           <InfoBox>
-            Post-incident: file a brief report with timeline, root cause, and action items.
-            Update this runbook if the incident revealed a gap.
+            事后：撰写简短报告记录时间线、根因与待办；若发现手册缺口，请同步更新本手册。
           </InfoBox>
         </Section>
       )}
 
       {section === 'support' && (
-        <Section title="Support Readiness">
+        <Section title="支持准备">
           <ChecklistItems items={SUPPORT_READINESS} />
           <InfoBox>
-            All support contacts and escalation paths should be documented in an internal wiki
-            and shared with the ops team before production launch.
+            所有支持联系人与升级路径应记录到内部 Wiki，并在正式上线前同步给运维团队。
           </InfoBox>
         </Section>
       )}
 
       <footer style={{ marginTop: '2.5rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Omni AI Chatbot — Phase 15C 生产运维手册 &nbsp;|&nbsp;
+        Omni AI Chatbot — 生产运维手册 &nbsp;|&nbsp;
         <a href="/audit" style={{ color: '#6366f1' }}>审计日志</a> &nbsp;|&nbsp;
-        <a href="/production-qa" style={{ color: '#6366f1' }}>Production QA</a> &nbsp;|&nbsp;
-        <a href="/activation-guide" style={{ color: '#6366f1' }}>Activation Guide</a> &nbsp;|&nbsp;
-        <a href="/activation/monitoring" style={{ color: '#6366f1' }}>Activation Monitor</a>
+        <a href="/production-qa" style={{ color: '#6366f1' }}>生产 QA</a> &nbsp;|&nbsp;
+        <a href="/activation-guide" style={{ color: '#6366f1' }}>上线激活指南</a> &nbsp;|&nbsp;
+        <a href="/activation/monitoring" style={{ color: '#6366f1' }}>激活监控</a>
       </footer>
     </main>
   )

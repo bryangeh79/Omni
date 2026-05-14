@@ -133,19 +133,19 @@ export default function ActivationMonitoringPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            🖥️  激活监控面板
+            激活监控面板
           </h1>
           <p style={{ margin: '0.25rem 0 0', color: NEUTRAL, fontSize: '0.875rem' }}>
-            Local readiness and health overview. All data is DB-derived — no external provider calls.
-            {lastRefresh && <span style={{ marginLeft: '0.75rem', color: '#9ca3af' }}>Last refresh: {lastRefresh.toLocaleTimeString()}</span>}
+            本地就绪度与健康度总览。所有数据均来自数据库，不调用任何外部服务商。
+            {lastRefresh && <span style={{ marginLeft: '0.75rem', color: '#9ca3af' }}>最近刷新：{lastRefresh.toLocaleTimeString('zh-CN')}</span>}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button onClick={loadAll} disabled={loading} style={{ padding: '0.4375rem 0.875rem', background: ACCENT, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: '0.875rem' }}>
-            {loading ? 'Refreshing…' : 'Refresh All'}
+            {loading ? '刷新中…' : '全部刷新'}
           </button>
           <a href="/activation-guide" style={{ padding: '0.4375rem 0.875rem', background: '#f3f4f6', color: '#374151', borderRadius: 7, textDecoration: 'none', fontSize: '0.875rem', border: '1px solid #e5e7eb' }}>
-            Activation Guide →
+            上线激活指南 →
           </a>
         </div>
       </div>
@@ -158,23 +158,23 @@ export default function ActivationMonitoringPage() {
 
       {/* Status row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
-        <StatusCard title="Readiness Level" value={pfReadiness} color={readinessColor(pfReadiness)} sub={`${pfSummary.passed ?? 0}/${pfSummary.total ?? 0} checks passed`} />
-        <StatusCard title="Health Level" value={healthLevel} color={healthColor(healthLevel)} sub={`${channelHealth.length} active channel(s)`} />
-        <StatusCard title="Real Send" value={safetyFlags.realSendCurrentlyOff === true ? 'OFF ✓' : 'ON ⚠'} color={safetyFlags.realSendCurrentlyOff === true ? SUCCESS : DANGER} sub={safetyFlags.realSendCurrentlyOff ? 'Safe — stub mode' : 'Active — monitor carefully'} />
-        <StatusCard title="Go-Live Checklist" value={`${clSummary.automatedPassed ?? 0}/${(Number(clSummary.automatedPassed ?? 0) + Number(clSummary.automatedFailed ?? 0))} auto`} color={clSummary.automatedFailed === 0 ? SUCCESS : WARN_C} sub={`${clSummary.manualRequired ?? 0} manual items pending`} />
+        <StatusCard title="就绪等级" value={pfReadiness} color={readinessColor(pfReadiness)} sub={`通过 ${pfSummary.passed ?? 0}/${pfSummary.total ?? 0} 项检查`} />
+        <StatusCard title="健康等级" value={healthLevel} color={healthColor(healthLevel)} sub={`${channelHealth.length} 个活跃渠道`} />
+        <StatusCard title="真实发送" value={safetyFlags.realSendCurrentlyOff === true ? '关闭 ✓' : '开启 ⚠'} color={safetyFlags.realSendCurrentlyOff === true ? SUCCESS : DANGER} sub={safetyFlags.realSendCurrentlyOff ? '安全 — 安全演练模式' : '已激活 — 请持续监控'} />
+        <StatusCard title="上线清单" value={`自动通过 ${clSummary.automatedPassed ?? 0}/${(Number(clSummary.automatedPassed ?? 0) + Number(clSummary.automatedFailed ?? 0))}`} color={clSummary.automatedFailed === 0 ? SUCCESS : WARN_C} sub={`${clSummary.manualRequired ?? 0} 项人工待处理`} />
       </div>
 
       {/* Recommended action */}
       {recommendedAction !== '—' && (
         <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '0.75rem 1.125rem', marginBottom: '1.25rem', fontSize: '0.875rem', color: '#0c4a6e' }}>
-          <strong>Next recommended action:</strong> {recommendedAction}
+          <strong>下一步建议：</strong>{recommendedAction}
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
 
         {/* Pre-flight checks */}
-        <Section title="Pre-flight Checks" link={{ href: '/activation-guide', label: 'Guide →' }}>
+        <Section title="上线前检查" link={{ href: '/activation-guide', label: '指南 →' }}>
           {preflight
             ? ((preflight.checks ?? []) as AnyData[]).map(c => {
                 const b = statusBadge(!!c.passed, false)
@@ -186,7 +186,7 @@ export default function ActivationMonitoringPage() {
         </Section>
 
         {/* Go-live checklist */}
-        <Section title="Go-Live Checklist" link={{ href: '/release-checklist', label: 'Release →' }}>
+        <Section title="上线清单" link={{ href: '/release-checklist', label: '发布清单 →' }}>
           {checklist
             ? checkItems.map(c => {
                 const b = statusBadge(!!c.passed, !!c.requiresManualConfirmation)
@@ -201,7 +201,7 @@ export default function ActivationMonitoringPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
 
         {/* Channel health */}
-        <Section title="Channel Health" link={{ href: '/channels/setup', label: 'Setup →' }}>
+        <Section title="渠道健康" link={{ href: '/channels/setup', label: '渠道设置 →' }}>
           {health ? (
             channelHealth.length > 0
               ? channelHealth.map(c => (
@@ -210,20 +210,20 @@ export default function ActivationMonitoringPage() {
                       <span style={{ fontWeight: 600, color: '#111827' }}>{String(c.displayName)}</span>
                       <span style={{ marginLeft: '0.375rem', color: NEUTRAL, fontSize: '0.75rem' }}>{String(c.type)}</span>
                     </div>
-                    <span style={{ color: NEUTRAL, fontSize: '0.75rem', flexShrink: 0 }}>{c.lastWebhookAt ? relTime(String(c.lastWebhookAt)) : 'no webhook'}</span>
+                    <span style={{ color: NEUTRAL, fontSize: '0.75rem', flexShrink: 0 }}>{c.lastWebhookAt ? relTime(String(c.lastWebhookAt)) : '无 webhook'}</span>
                   </div>
                 ))
-              : <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>No active channels found. Configure at /channels/setup.</div>
+              : <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>未找到活跃渠道，请前往 /channels/setup 配置。</div>
           ) : <Skeleton />}
           {health && (
             <div style={{ marginTop: '0.625rem', fontSize: '0.75rem', color: NEUTRAL }}>
-              Safety: realSendActive = {String(safetyFlags.realSendActive ?? false)}
+              安全：realSendActive = {String(safetyFlags.realSendActive ?? false)}
             </div>
           )}
         </Section>
 
         {/* Manual blockers summary */}
-        <Section title="Manual Blockers" link={{ href: '/ops/runbook', label: 'Runbook →' }}>
+        <Section title="人工阻塞项" link={{ href: '/ops/runbook', label: '运维手册 →' }}>
           {checklist ? (
             checkItems
               .filter(c => !!c.requiresManualConfirmation)
@@ -232,19 +232,19 @@ export default function ActivationMonitoringPage() {
                   <span style={{ color: WARN_C, flexShrink: 0, marginTop: 1 }}>⬜</span>
                   <div>
                     <div style={{ color: '#374151', lineHeight: 1.4 }}>{String(c.label)}</div>
-                    {!!c.action && <a href={String(c.action)} style={{ color: ACCENT, fontSize: '0.75rem' }}>View →</a>}
+                    {!!c.action && <a href={String(c.action)} style={{ color: ACCENT, fontSize: '0.75rem' }}>查看 →</a>}
                   </div>
                 </div>
               ))
           ) : <Skeleton />}
           <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: NEUTRAL }}>
-            Manual items require operator action outside this system.
+            人工项需要运维在系统外操作。
           </div>
         </Section>
       </div>
 
       {/* Audit / Timeline */}
-      <Section title="Recent Activation Timeline" link={{ href: '/audit', label: 'Full Log →' }}>
+      <Section title="最近激活时间线" link={{ href: '/audit', label: '完整日志 →' }}>
         {timeline ? (
           events.length > 0
             ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
@@ -258,7 +258,6 @@ export default function ActivationMonitoringPage() {
                       </div>
                       <div style={{ fontSize: '0.75rem', color: NEUTRAL }}>
                         {!!e.actorRole && <span style={{ marginRight: '0.5rem' }}>{String(e.actorRole)}</span>}
-                        {/* Phase 18B: server is the only source for safeMetadata; no client-side parse */}
                         {!!e.safeMetadata && Object.keys(e.safeMetadata as object).length > 0 && (
                           <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{JSON.stringify(e.safeMetadata)}</span>
                         )}
@@ -267,33 +266,31 @@ export default function ActivationMonitoringPage() {
                   </div>
                 ))}
               </div>
-            : <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>No activation events yet. Run a dry-run from /activation-guide.</div>
+            : <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>暂无激活事件，可前往 /activation-guide 运行安全演练。</div>
         ) : <Skeleton />}
         {timeline && (
           <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: NEUTRAL }}>
-            Total activation dry-runs: {String(timeline.totalActivationDryRuns ?? 0)}
+            累计激活安全演练次数：{String(timeline.totalActivationDryRuns ?? 0)}
           </div>
         )}
       </Section>
 
       {/* Safety notice */}
       <div style={{ marginTop: '1.25rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.8125rem', color: NEUTRAL, lineHeight: 1.6 }}>
-        <strong>Safety:</strong> This dashboard is local-only. No external WhatsApp/Meta/AI/email/payment calls are made.
-        Real sends remain <strong>disabled by default</strong> unless an operator manually sets{' '}
-        <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ALLOW_WA_SESSION</code> or{' '}
-        <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ENABLE_REAL_META_SEND</code>.
-        Omni is a WhatsApp AI 客服 + CRM system — not a broadcast/ads/bulk-sending platform.
+        <strong>安全说明：</strong>本面板为本地视图，不调用任何外部 WhatsApp / Meta / AI / 邮件 / 支付服务。除非运维显式设置{' '}
+        <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ALLOW_WA_SESSION</code> 或{' '}
+        <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ENABLE_REAL_META_SEND</code>，<strong>真实发送默认关闭</strong>。Omni 是 WhatsApp AI 客服 + CRM 系统，非广播 / 广告 / 群发平台。
       </div>
 
       {/* Quick links */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1.25rem', justifyContent: 'center' }}>
         {[
-          { href: '/activation-guide',  label: 'Activation Guide' },
+          { href: '/activation-guide',  label: '上线激活指南' },
           { href: '/release-checklist', label: '发布检查清单' },
           { href: '/ops/runbook',       label: '运维手册' },
-          { href: '/channels/setup',    label: 'Channel Setup' },
+          { href: '/channels/setup',    label: '渠道设置' },
           { href: '/audit',             label: '审计日志' },
-          { href: '/production-qa',     label: 'Production QA' },
+          { href: '/production-qa',     label: '生产 QA' },
         ].map(l => (
           <a key={l.href} href={l.href} style={{ padding: '0.3125rem 0.75rem', background: '#f3f4f6', color: '#374151', borderRadius: 6, textDecoration: 'none', fontSize: '0.8125rem', border: '1px solid #e5e7eb' }}>
             {l.label}

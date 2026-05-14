@@ -29,8 +29,8 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-600 mb-3">
             <span className="text-white text-2xl">📱</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">WA Web QR Setup</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to manage your WhatsApp connection</p>
+          <h1 className="text-2xl font-bold text-gray-900">WhatsApp Web 二维码登录</h1>
+          <p className="text-sm text-gray-400 mt-1">登录以管理您的 WhatsApp 连接</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
         <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
@@ -74,7 +74,7 @@ export default function WaWebQrPage() {
     try {
       const r = await requestWaWebQr()
       setQrResult({ blocked: r.blocked, note: r.note, nextStep: r.nextStep })
-    } catch (e) { setError(e instanceof Error ? e.message : 'Request failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '请求失败') }
     finally { setRequesting(false) }
   }
 
@@ -90,19 +90,19 @@ export default function WaWebQrPage() {
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center">
-              <span className="text-white text-sm">📱</span>
+              <span className="text-white text-xs font-bold">QR</span>
             </div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">WA Web QR Staging</h1>
+              <h1 className="text-base font-semibold text-gray-900">WhatsApp Web 二维码登录</h1>
               <p className="text-xs text-gray-400">
-                {loading ? 'Loading…' : isConnected ? '● Connected' : isBlocked ? '● Blocked (default safe)' : '● Not connected'}
+                {loading ? '加载中…' : isConnected ? '● 已连接' : isBlocked ? '● 已拦截（默认安全）' : '● 未连接'}
               </p>
             </div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
-            <a href="/channels/setup" className="text-green-600 hover:text-green-800">← Channel Setup</a>
+            <a href="/channels/setup" className="text-green-600 hover:text-green-800">← 渠道设置</a>
             <span className="text-gray-200">|</span>
-            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800">🚀 Launch Checklist</a>
+            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800">上线清单</a>
           </nav>
         </div>
       </header>
@@ -113,17 +113,16 @@ export default function WaWebQrPage() {
         {/* Safety state banner */}
         <div className={`rounded-2xl border p-4 ${isBlocked ? 'bg-amber-50 border-amber-200' : isConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'}`}>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{isBlocked ? '🔒' : isConnected ? '✅' : '⚙️'}</span>
             <div>
-              <p className={`text-sm font-bold ${isBlocked ? 'text-amber-800' : isConnected ? 'text-emerald-800' : 'text-blue-800'}`}>
-                {isBlocked ? 'Session Blocked (Safe Default)' : isConnected ? 'WhatsApp Session Connected' : 'Session Not Started'}
+              <p className={`text-sm font-semibold ${isBlocked ? 'text-amber-800' : isConnected ? 'text-emerald-800' : 'text-blue-800'}`}>
+                {isBlocked ? '会话已拦截（默认安全）' : isConnected ? 'WhatsApp 会话已连接' : '尚未启动会话'}
               </p>
               <p className={`text-xs mt-0.5 ${isBlocked ? 'text-amber-700' : isConnected ? 'text-emerald-700' : 'text-blue-700'}`}>
                 {isBlocked
-                  ? 'OMNI_ALLOW_WA_SESSION is not set — no WhatsApp session will start. This is the safe default.'
+                  ? 'OMNI_ALLOW_WA_SESSION 未启用 — WhatsApp 会话不会启动。这是默认安全状态。'
                   : isConnected
-                    ? 'WhatsApp Web session is active. Monitor via /inbox.'
-                    : 'OMNI_ALLOW_WA_SESSION is enabled. Use the steps below to start a session.'}
+                    ? 'WhatsApp Web 会话已就绪。请在「对话收件箱」中监控。'
+                    : 'OMNI_ALLOW_WA_SESSION 已启用。请按下方步骤启动会话。'}
               </p>
             </div>
           </div>
@@ -132,12 +131,12 @@ export default function WaWebQrPage() {
         {/* Session status */}
         {sessStatus && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h2 className="text-sm font-bold text-gray-800 mb-3">Session Status</h2>
+            <h2 className="text-sm font-semibold text-gray-800 mb-3">会话状态</h2>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { label: 'Session',    value: sessStatus.sessionStatus },
-                { label: 'Has Ref',    value: sessStatus.hasSessionRef ? 'Yes' : 'No' },
-                { label: 'Channel',    value: sessStatus.channelIsActive ? 'Active' : 'Inactive' },
+                { label: '会话状态',  value: sessStatus.sessionStatus },
+                { label: '会话引用',  value: sessStatus.hasSessionRef ? '已建立' : '无' },
+                { label: '渠道状态',  value: sessStatus.channelIsActive ? '激活' : '未激活' },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
                   <p className="text-xs text-gray-400">{label}</p>
@@ -145,45 +144,45 @@ export default function WaWebQrPage() {
                 </div>
               ))}
             </div>
-            {sessStatus.lastUpdatedAt && <p className="text-xs text-gray-400 mt-2">Updated: {new Date(sessStatus.lastUpdatedAt).toLocaleString()}</p>}
+            {sessStatus.lastUpdatedAt && <p className="text-xs text-gray-400 mt-2">更新于：{new Date(sessStatus.lastUpdatedAt).toLocaleString('zh-CN')}</p>}
           </div>
         )}
 
         {/* Operator steps */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-800 mb-3">
-            {isBlocked ? 'How to Enable WA Web Session' : 'QR Session Flow'}
+          <h2 className="text-sm font-semibold text-gray-800 mb-3">
+            {isBlocked ? '如何启用 WhatsApp Web 会话' : '二维码登录流程'}
           </h2>
           <div className="space-y-3">
             {[
               {
-                num: 1, title: 'Enable WA Web Session Flag',
-                desc: 'Operator sets OMNI_ALLOW_WA_SESSION=true in .env and restarts the API process.',
+                num: 1, title: '启用 WhatsApp Web 会话开关',
+                desc: '运维需在 .env 中设置 OMNI_ALLOW_WA_SESSION=true 并重启 API 进程。',
                 done: !isBlocked,
                 blocked: isBlocked,
                 isOperator: true,
               },
               {
-                num: 2, title: 'Create a WA Web Channel',
-                desc: 'POST /channels/whatsapp-web/connect — creates a channel and starts the QR session.',
+                num: 2, title: '创建 WhatsApp Web 渠道',
+                desc: 'POST /channels/whatsapp-web/connect — 创建渠道并启动 QR 会话。',
                 done: !!sessStatus?.hasSessionRef,
                 blocked: isBlocked,
               },
               {
-                num: 3, title: 'Get QR Code',
-                desc: 'GET /channels/whatsapp-web/:channelId/qr — poll until QR is available, then display.',
+                num: 3, title: '获取二维码',
+                desc: 'GET /channels/whatsapp-web/:channelId/qr — 轮询直到 QR 可用后显示。',
                 done: sessStatus?.sessionStatus === 'CONNECTED',
                 blocked: isBlocked || !sessStatus?.hasSessionRef,
               },
               {
-                num: 4, title: 'Scan QR with WhatsApp App',
-                desc: 'Open WhatsApp mobile → Settings → Linked Devices → Link a Device → scan QR.',
+                num: 4, title: '使用 WhatsApp 手机端扫码',
+                desc: '打开 WhatsApp 手机端 → 设置 → 已链接的设备 → 链接设备 → 扫描二维码。',
                 done: isConnected ?? false,
                 blocked: isBlocked,
               },
               {
-                num: 5, title: 'Verify Connection',
-                desc: 'Session becomes CONNECTED. Test by sending a message from the Inbox.',
+                num: 5, title: '确认连接成功',
+                desc: '会话状态变为 CONNECTED 后，可在「对话收件箱」中发送测试消息。',
                 done: isConnected ?? false,
                 blocked: isBlocked,
               },
@@ -195,7 +194,7 @@ export default function WaWebQrPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className={`text-sm font-semibold ${step.done ? 'text-emerald-800' : 'text-gray-800'}`}>{step.title}</p>
-                    {step.isOperator && <span className="text-xs bg-orange-50 border border-orange-200 text-orange-600 px-1.5 py-0.5 rounded-full">Operator action</span>}
+                    {step.isOperator && <span className="text-xs bg-orange-50 border border-orange-200 text-orange-600 px-1.5 py-0.5 rounded-full">运维操作</span>}
                   </div>
                   <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{step.desc}</p>
                 </div>
@@ -206,23 +205,23 @@ export default function WaWebQrPage() {
 
         {/* Request QR button */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <h3 className="text-sm font-bold text-gray-800">Request QR Session (Guarded)</h3>
-          <p className="text-xs text-gray-500">This button checks readiness and provides operator instructions. No real session is started from this page.</p>
+          <h3 className="text-sm font-semibold text-gray-800">请求 QR 会话（受门控保护）</h3>
+          <p className="text-xs text-gray-500">此按钮仅检查准备度并返回运维步骤说明，不会从本页启动真实会话。</p>
           <button
             onClick={() => { void handleRequestQr() }}
             disabled={requesting}
-            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
+            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50"
           >
-            {requesting ? 'Checking…' : 'Check QR Readiness'}
+            {requesting ? '检查中…' : '检查 QR 准备度'}
           </button>
           {qrResult && (
             <div className={`rounded-xl border px-4 py-3 space-y-2 ${qrResult.blocked ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'}`}>
-              <p className={`text-xs font-bold ${qrResult.blocked ? 'text-amber-800' : 'text-blue-800'}`}>
-                {qrResult.blocked ? '🔒 Blocked (Safe Default)' : 'ℹ️ Operator Path'}
+              <p className={`text-xs font-semibold ${qrResult.blocked ? 'text-amber-800' : 'text-blue-800'}`}>
+                {qrResult.blocked ? '已拦截（默认安全）' : '运维路径'}
               </p>
               <p className="text-xs text-gray-700">{qrResult.note}</p>
               {qrResult.nextStep && (
-                <p className="text-xs text-blue-700 font-mono">Next step: {qrResult.nextStep}</p>
+                <p className="text-xs text-blue-700 font-mono">下一步：{qrResult.nextStep}</p>
               )}
             </div>
           )}
@@ -230,11 +229,11 @@ export default function WaWebQrPage() {
 
         {/* Real send disabled badge */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
-          <p className="font-bold text-gray-600">Safety Defaults</p>
-          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — no WhatsApp session started by default</p>
-          <p>• No raw QR payload, session tokens, or session content returned from this page</p>
-          <p>• This page never starts a Chromium or WhatsApp Web session</p>
-          <p>• <strong>No broadcast/ads/bulk sending</strong> — Omni is 1:1 AI customer service only</p>
+          <p className="font-semibold text-gray-600">安全默认</p>
+          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — WhatsApp 会话默认不会启动</p>
+          <p>• 本页不会返回原始 QR 数据、会话 token 或会话内容</p>
+          <p>• 本页不会启动 Chromium 或 WhatsApp Web 会话</p>
+          <p>• <strong>不支持广播 / 广告 / 群发</strong> — Omni 仅提供 1:1 AI 客服</p>
         </div>
       </main>
     </div>

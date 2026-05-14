@@ -33,8 +33,8 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
   const isActive = current === plan.id
   return (
     <div className={`rounded-2xl border-2 p-5 transition-all ${isActive ? 'border-blue-500 bg-blue-50' : plan.recommended ? 'border-blue-200 bg-white' : 'border-gray-200 bg-white'}`}>
-      {plan.recommended && <div className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full inline-block mb-2">Most Popular</div>}
-      {isActive && <div className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-2">当前套餐</div>}
+      {plan.recommended && <div className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full inline-block mb-2">最受欢迎</div>}
+      {isActive && <div className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-2">当前套餐</div>}
       <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
       <p className="text-2xl font-bold text-blue-700 my-2">RM{plan.priceRm}<span className="text-sm font-normal text-gray-400">/{plan.period}</span></p>
       <ul className="space-y-1.5 mb-4">
@@ -49,9 +49,9 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
       <button
         onClick={() => onSelect(plan.id)}
         disabled={selecting || isActive}
-        className={`w-full rounded-xl py-2 text-sm font-bold transition-all disabled:opacity-50 ${isActive ? 'bg-emerald-100 text-emerald-700 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+        className={`w-full rounded-xl py-2 text-sm font-semibold transition-all disabled:opacity-50 ${isActive ? 'bg-emerald-100 text-emerald-700 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
       >
-        {isActive ? '当前套餐' : selecting ? 'Saving…' : 'Select Plan (Draft)'}
+        {isActive ? '当前套餐' : selecting ? '保存中…' : '选择套餐（草稿）'}
       </button>
     </div>
   )
@@ -80,10 +80,10 @@ export default function BillingPage() {
     setSelecting(true); setError('')
     try {
       await selectPlanDraft(planId)
-      setNotice(`Plan "${planId}" saved as draft. No real charge applied.`)
+      setNotice(`套餐「${planId}」已保存为草稿，不会触发真实扣费。`)
       setTimeout(() => setNotice(''), 4000)
       await load()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Select failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '选择失败') }
     finally { setSelecting(false) }
   }
 
@@ -94,17 +94,17 @@ export default function BillingPage() {
       <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center"><span className="text-white text-sm">💳</span></div>
-            <div><h1 className="text-base font-bold text-gray-900">Billing & Plans</h1><p className="text-xs text-gray-400">Current plan: {plans?.currentPlan ?? '…'}</p></div>
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">$</span></div>
+            <div><h1 className="text-base font-semibold text-gray-900">套餐与计费</h1><p className="text-xs text-gray-400">当前套餐：{plans?.currentPlan ?? '…'}</p></div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
-            <a href="/settings" className="text-gray-400 hover:text-gray-700">Settings</a>
+            <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>
             <span className="text-gray-200">|</span>
-            <a href="/team" className="text-indigo-600 hover:text-indigo-800">Team</a>
+            <a href="/team" className="text-indigo-600 hover:text-indigo-800">团队</a>
             <span className="text-gray-200">|</span>
-            <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA Checklist</a>
+            <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA 清单</a>
             <span className="text-gray-200">|</span>
-            <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
+            <a href="/boss" className="text-gray-500 hover:text-gray-700">工作台</a>
           </nav>
         </div>
       </header>
@@ -115,20 +115,20 @@ export default function BillingPage() {
 
         {/* No real charge notice */}
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-800 space-y-1">
-          <p><strong>Planning Mode:</strong> Plan selection is a draft preference. No real payment gateway is configured. No charges will occur until payment integration is completed.</p>
-          <p><strong>RBAC:</strong> Only OWNER or ADMIN can select a plan. MANAGER/AGENT/VIEWER have read-only access to billing.</p>
+          <p><strong>规划模式：</strong>套餐选择仅为草稿偏好。尚未配置真实支付网关，完成支付集成前不会产生任何扣费。</p>
+          <p><strong>权限：</strong>仅 OWNER 或 ADMIN 可选择套餐。MANAGER / AGENT / VIEWER 为只读权限。</p>
         </div>
 
         {/* Usage summary */}
         {usage && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">This Month Usage ({usage.period})</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">本月用量（{usage.period}）</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: 'AI Replies',   value: usage.usage.aiRepliesThisMonth.toLocaleString() },
-                { label: 'Customers',    value: usage.usage.customers.toLocaleString() },
-                { label: 'KB Items',     value: usage.usage.activeKnowledgeItems.toLocaleString() },
-                { label: 'Est. AI Cost', value: `RM ${usage.usage.estimatedCostRm}` },
+                { label: 'AI 回复数',  value: usage.usage.aiRepliesThisMonth.toLocaleString() },
+                { label: '客户数',     value: usage.usage.customers.toLocaleString() },
+                { label: '知识条目',   value: usage.usage.activeKnowledgeItems.toLocaleString() },
+                { label: 'AI 估算成本', value: `RM ${usage.usage.estimatedCostRm}` },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
                   <p className="text-xs text-gray-400">{label}</p>
@@ -152,7 +152,7 @@ export default function BillingPage() {
         {/* Boundaries */}
         {plans && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Important Boundaries</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">重要边界</h2>
             <div className="space-y-2">
               {Object.entries(plans.boundary).map(([key, value]) => (
                 <div key={key} className="flex items-start gap-2 text-xs">

@@ -83,7 +83,7 @@ Positioning: **Omni Ai Chatbot｜WhatsApp AI 客服 CRM 成交系统** — 1:1 A
 | Multi-instance Redis-backed HMAC replay cache | Single-instance deployment is the current target | Medium |
 | Audit-safe whitelist write-side enforcement | Defensive-in-depth; current write-side already filters via `lib/audit.ts` | Medium |
 | Audit UI advanced filters (action group, date range) — already done in `/account/activity`; mirror to `/audit` | Tier-2 polish | Low |
-| i18n (zh / en / ms) full multilingual | UAT 阶段已切到 **中文优先（Chinese-first）**；多语言框架与英 / 马来语切换延后到 post-v1 | Medium |
+| i18n (zh / en / ms) full multilingual | UAT Round-1+Round-2 已完成 **中文优先（Chinese-first）** 覆盖（onboarding / channels / knowledge / launch / release / qa / ops / activation / account / audit / billing / team / settings 全部深度本地化）；i18n 多语言切换框架延后到 post-v1 | Medium |
 | Real email verification (link, SMTP) | Out of v1; current stub is intentional | Medium |
 | Real payment integration (Stripe / Razorpay / etc.) | Out of v1 | Medium |
 | Webhook delivery retry queue (BullMQ-backed) | Current path is synchronous in handler; works for v1 single-instance | Medium |

@@ -1,6 +1,17 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
-## Post-v1 UAT — UI Polish (Chinese-first + Collapsible Nav)
+## Post-v1 UAT Round-2 — Deep Chinese UI Polish
+
+继 Round-1 之后，Round-2 完成更深层的中文化与企业级 SaaS 一致性优化：
+
+- **深度中文化**：覆盖 onboarding 5 步向导内部（行业 / AI 目标 / 资料 / 预览 / 启用）、channels/setup + meta-webhook + wa-web/qr 子页、knowledge 表格 / 编辑表单、launch / release / production-qa / ops/runbook 内部检查清单、activation-guide 全部 BEFORE / WA_WEB / META 步骤、activation/monitoring 仪表板、account 全部 tab（overview / activity / security / export）、audit ACTION_LABELS、team / billing / settings 全部 section header。
+- **装饰性 emoji 清理**：移除导航装饰 emoji，文字徽章（KB / WA / API / QA / WH / QR 等）替代；保留少量语义性符号（✓ / × / ↻）。
+- **专业用语一致**：上线向导 / 知识库 / 渠道设置 / 上线激活指南 / 激活监控 / 审计日志 / 生产 QA / 运维手册 / 发布检查清单 / 套餐与计费 / 团队成员 / 自动跟进 / 安全演练 全局对齐 Round-1 术语表。
+- **后端 API 字段名、env、route paths、数据库字段、开发者标识符未翻译**。
+- **smoke 维持 1494 / 0 failed**，web build 24 路由静态化成功，lint 零 error（8 pre-existing warning）。
+- **真实发送门控、产品定位（非广播 / 非广告 / 非群发）不变。**
+
+## Post-v1 UAT Round-1 — UI Polish (Chinese-first + Collapsible Nav)
 
 Applied after the v1 final handoff:
 

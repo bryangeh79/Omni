@@ -54,87 +54,87 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; border: string 
 const STATIC_SECTIONS: ReleaseSection[] = [
   {
     key:    'product_complete',
-    label:  'Product flow complete',
+    label:  '产品主流程完整',
     status: 'PASS',
-    detail: 'Onboarding → KB → Channel → Inbox → Boss → PWA → Billing → Team → Audit — all core flows implemented.',
+    detail: '上线向导 → 知识库 → 渠道 → 收件箱 → 老板工作台 → PWA → 计费 → 团队 → 审计，全部核心流程已实现。',
   },
   {
     key:    'no_broadcast',
-    label:  'No broadcast/ads/bulk sending',
+    label:  '不支持广播 / 广告 / 群发',
     status: 'PASS',
-    detail: 'Marketing broadcast and bulk sending are not implemented on any plan. 1:1 AI customer service only.',
+    detail: '所有套餐均不实现营销广播或群发。Omni 仅提供 1:1 AI 客服。',
   },
   {
     key:    'real_send_default_off',
-    label:  'Real send disabled by default',
+    label:  '真实发送默认关闭',
     status: 'PASS',
-    detail: 'OMNI_ALLOW_WA_SESSION=false, OMNI_ENABLE_REAL_META_SEND=false. No real WhatsApp/Meta messages sent.',
+    detail: 'OMNI_ALLOW_WA_SESSION=false、OMNI_ENABLE_REAL_META_SEND=false，不会发送真实 WhatsApp / Meta 消息。',
   },
   {
     key:    'auth_rbac',
-    label:  'Auth + RBAC enforced',
+    label:  '认证与 RBAC 已启用',
     status: 'PASS',
-    detail: '5-tier RBAC (OWNER/ADMIN/MANAGER/AGENT/VIEWER). JWT-based auth. Tenant-scoped via JWT. No cross-tenant access.',
+    detail: '5 级 RBAC（OWNER / ADMIN / MANAGER / AGENT / VIEWER），基于 JWT 鉴权，按租户隔离，禁止跨租户访问。',
   },
   {
     key:    'audit_logs',
-    label:  'Audit logs available',
+    label:  '审计日志可用',
     status: 'PASS',
-    detail: 'Admin actions recorded in AuditLog table. GET /audit/logs available. Secrets never logged.',
+    detail: '所有管理动作写入 AuditLog 表，GET /audit/logs 可查询；密钥与凭据永不写入日志。',
     action: '/audit',
   },
   {
     key:    'ops_runbook',
-    label:  'Ops runbook available',
+    label:  '运维手册已就绪',
     status: 'PASS',
-    detail: 'Production ops runbook at /ops/runbook covers health checks, backup, monitoring, incident response.',
+    detail: '/ops/runbook 涵盖健康检查、备份、监控与事件响应。',
     action: '/ops/runbook',
   },
   {
     key:    'meta_fees_separated',
-    label:  'Meta API fees clearly separated',
+    label:  'Meta API 费用单独透传',
     status: 'PASS',
-    detail: 'Meta WhatsApp official API per-conversation fees are explicitly NOT bundled in plan pricing — they are pass-through credits billed at cost.',
+    detail: 'Meta 官方 WhatsApp API 的按会话费用不打包到套餐中，作为透传 credits 按成本结算。',
     action: '/billing',
   },
   {
     key:    'payment_not_configured',
-    label:  'Payment gateway not configured (safe)',
+    label:  '支付网关未配置（安全）',
     status: 'PASS',
-    detail: 'No real payment gateway. Plan selection is a draft preference only. No charges will occur until payment gateway is explicitly configured.',
+    detail: '当前无真实支付网关。套餐选择仅为草稿偏好，在显式配置支付网关前不会产生任何扣费。',
     action: '/billing',
   },
   {
     key:    'manual_activation',
-    label:  'Manual operator activation required for live',
+    label:  '正式上线需运维手动激活',
     status: 'MANUAL',
-    detail: 'To go live: operator must set OMNI_ALLOW_WA_SESSION=true or OMNI_ENABLE_REAL_META_SEND=true AFTER full channel setup, credential vault, and testing.',
+    detail: '正式上线前：运维需在完成渠道配置、凭据保险库与测试后，显式设置 OMNI_ALLOW_WA_SESSION=true 或 OMNI_ENABLE_REAL_META_SEND=true。',
   },
   {
     key:    'backup_configured',
-    label:  'Database backup configured',
+    label:  '数据库备份已配置',
     status: 'MANUAL',
-    detail: 'Operator must configure pg_dump schedule, off-site backup storage, and restore procedure. See /ops/runbook.',
+    detail: '运维需配置 pg_dump 计划、异地备份存储与恢复流程，详见 /ops/runbook。',
     action: '/ops/runbook',
   },
   {
     key:    'monitoring_configured',
-    label:  'External monitoring configured',
+    label:  '外部监控已配置',
     status: 'MANUAL',
-    detail: 'Operator must configure uptime monitoring on /ops/health, error rate alerts, disk alerts. See /ops/runbook.',
+    detail: '运维需配置 /ops/health 健康监测、错误率告警与磁盘告警，详见 /ops/runbook。',
     action: '/ops/runbook',
   },
   {
     key:    'docs_ready',
-    label:  'Documentation complete',
+    label:  '文档完整',
     status: 'PASS',
-    detail: 'Phase 15D: DEMO_FLOW.md, RELEASE_CHECKLIST.md, OPS_RUNBOOK.md, AUDIT_LOGS.md, PRODUCTION_HARDENING.md all present.',
+    detail: 'Phase 15D 起 DEMO_FLOW.md、RELEASE_CHECKLIST.md、OPS_RUNBOOK.md、AUDIT_LOGS.md、PRODUCTION_HARDENING.md 均已就绪。',
   },
   {
     key:    'navigation_shell',
-    label:  'App shell / navigation present',
+    label:  '应用 Shell / 导航已就位',
     status: 'PASS',
-    detail: 'Shared AppNav sidebar component wraps all pages. All 15+ routes reachable from nav.',
+    detail: '共用 AppNav 侧边栏覆盖全部页面，全部 15+ 路由可达。',
   },
 ]
 
@@ -181,14 +181,14 @@ export default function ReleaseChecklistPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            📦 SaaS v1 发布检查清单
+            SaaS v1 发布检查清单
           </h1>
           <p style={{ margin: '0.375rem 0 0', color: '#6b7280', fontSize: '0.875rem', lineHeight: 1.5 }}>
-            Final readiness review before production activation. Items marked MANUAL require operator action.
+            正式上线激活前的最终就绪复核。标记为「人工」的项目需要运维操作。
           </p>
         </div>
         <a href="/demo-flow" style={{ padding: '0.4375rem 0.875rem', background: '#6366f1', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          Demo Flow ←
+          ← 演示流程
         </a>
       </div>
 
@@ -207,25 +207,25 @@ export default function ReleaseChecklistPage() {
       }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: '1.0625rem', color: isReady ? '#15803d' : '#b45309' }}>
-            {isReady ? '✅ SaaS v1 — Ready for manual activation' : '⚠️  Review required before activation'}
+            {isReady ? 'SaaS v1 — 可进入手动激活' : '激活前需复核'}
           </div>
           <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: 4 }}>
-            {passCount} pass · {warnCount} warn · {failCount} fail · {manualCount} manual
+            通过 {passCount} 项 · 警告 {warnCount} 项 · 失败 {failCount} 项 · 人工 {manualCount} 项
             {apiStatus && (
-              <> · API: {apiStatus.summary.passed} passed / {apiStatus.summary.failed} failed</>
+              <> · API：通过 {apiStatus.summary.passed} / 失败 {apiStatus.summary.failed}</>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <a href="/production-qa" style={{ padding: '0.375rem 0.75rem', background: '#6366f1', color: '#fff', borderRadius: 6, textDecoration: 'none', fontSize: '0.8125rem' }}>
-            Production QA →
+            生产 QA →
           </a>
           <button
             onClick={loadApiStatus}
             disabled={loading}
             style={{ padding: '0.375rem 0.75rem', background: '#f3f4f6', color: '#374151', borderRadius: 6, border: '1px solid #d1d5db', cursor: 'pointer', fontSize: '0.8125rem' }}
           >
-            {loading ? 'Checking…' : 'Refresh'}
+            {loading ? '检查中…' : '刷新'}
           </button>
         </div>
       </div>
@@ -245,7 +245,7 @@ export default function ReleaseChecklistPage() {
               gap: '0.875rem',
             }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.color, background: `${colors.border}60`, padding: '0.1875rem 0.5rem', borderRadius: 4, flexShrink: 0, marginTop: 1 }}>
-                {item.status}
+                {({ PASS: '通过', WARN: '警告', FAIL: '失败', MANUAL: '人工', LOADING: '加载' } as const)[item.status] ?? item.status}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{item.label}</div>
@@ -253,7 +253,7 @@ export default function ReleaseChecklistPage() {
               </div>
               {item.action && (
                 <a href={item.action} style={{ fontSize: '0.8125rem', color: '#6366f1', textDecoration: 'none', flexShrink: 0, marginTop: 2 }}>
-                  View →
+                  查看 →
                 </a>
               )}
             </div>
@@ -263,15 +263,15 @@ export default function ReleaseChecklistPage() {
 
       {/* Manual activation note */}
       <div style={{ marginTop: '1.5rem', padding: '1rem 1.25rem', background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: '0.875rem', color: '#374151', lineHeight: 1.6 }}>
-        <strong>Manual production activation steps:</strong>
+        <strong>正式上线手动激活步骤：</strong>
         <ol style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', lineHeight: 1.8 }}>
-          <li>Complete all MANUAL items (backup, monitoring, support contact)</li>
-          <li>Configure credential vault (OMNI_API_KEY_ENCRYPTION_SECRET)</li>
-          <li>Add real channel credentials via /channels/setup</li>
-          <li>Test stub → verify webhook works in staging</li>
-          <li>Set OMNI_ALLOW_WA_SESSION=true OR OMNI_ENABLE_REAL_META_SEND=true (NOT both unless needed)</li>
-          <li>Configure payment gateway when ready for billing</li>
-          <li>Confirm all production-qa items are PASS before going live</li>
+          <li>完成所有「人工」项（备份、监控、支持联系人）</li>
+          <li>配置凭据保险库（OMNI_API_KEY_ENCRYPTION_SECRET）</li>
+          <li>通过 /channels/setup 添加真实渠道凭据</li>
+          <li>运行安全演练 → 在预演环境验证 webhook 可用</li>
+          <li>按需设置 OMNI_ALLOW_WA_SESSION=true 或 OMNI_ENABLE_REAL_META_SEND=true（一般不同时开启）</li>
+          <li>需要正式计费时再配置支付网关</li>
+          <li>所有「生产 QA」项均为「通过」后再正式上线</li>
         </ol>
       </div>
 

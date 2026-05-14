@@ -36,12 +36,12 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  TEAM_INVITE_DRAFT:      'Team invite drafted',
-  TEAM_ROLE_UPDATE:       'Member role updated',
-  TEAM_STATUS_UPDATE:     'Member status changed',
-  BILLING_PLAN_SELECTED:  'Billing plan selected',
-  SETTINGS_PROFILE_UPDATE: 'Company profile updated',
-  SMOKE_TEST_EVENT:       'Smoke test event',
+  TEAM_INVITE_DRAFT:      '记录团队邀请草稿',
+  TEAM_ROLE_UPDATE:       '修改成员角色',
+  TEAM_STATUS_UPDATE:     '修改成员状态',
+  BILLING_PLAN_SELECTED:  '选择计费套餐',
+  SETTINGS_PROFILE_UPDATE: '更新公司资料',
+  SMOKE_TEST_EVENT:       '冒烟测试事件',
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -54,10 +54,10 @@ const ROLE_COLORS: Record<string, string> = {
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
-  if (diff < 60_000)         return 'just now'
-  if (diff < 3_600_000)      return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000)     return `${Math.floor(diff / 3_600_000)}h ago`
-  return `${Math.floor(diff / 86_400_000)}d ago`
+  if (diff < 60_000)         return '刚刚'
+  if (diff < 3_600_000)      return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000)     return `${Math.floor(diff / 3_600_000)} 小时前`
+  return `${Math.floor(diff / 86_400_000)} 天前`
 }
 
 // Phase 18B: client-side raw metadataJson parser removed.
@@ -112,12 +112,12 @@ export default function AuditPage() {
     <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 900, margin: '0 auto', padding: '2rem 1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Admin Activity Timeline</h1>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>管理动作时间线</h1>
           <p style={{ margin: '0.25rem 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
-            Audit log of critical admin actions. Secrets and credentials are never recorded.
+            关键管理动作的审计日志；密钥与凭据永远不会被记录。
           </p>
         </div>
-        <a href="/settings" style={{ color: '#6366f1', fontSize: '0.875rem', textDecoration: 'none' }}>&larr; Settings</a>
+        <a href="/settings" style={{ color: '#6366f1', fontSize: '0.875rem', textDecoration: 'none' }}>← 设置</a>
       </div>
 
       {/* Filters */}
@@ -127,7 +127,7 @@ export default function AuditPage() {
           onChange={e => { setFilterAction(e.target.value); setPage(1) }}
           style={{ padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.875rem' }}
         >
-          <option value="">All actions</option>
+          <option value="">全部动作</option>
           {Object.entries(ACTION_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
@@ -137,18 +137,18 @@ export default function AuditPage() {
           onChange={e => { setFilterEntityType(e.target.value); setPage(1) }}
           style={{ padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.875rem' }}
         >
-          <option value="">All entity types</option>
-          <option value="User">User</option>
-          <option value="Tenant">Tenant</option>
-          <option value="TeamInvite">TeamInvite</option>
-          <option value="SmokeTest">SmokeTest</option>
+          <option value="">全部实体类型</option>
+          <option value="User">用户</option>
+          <option value="Tenant">租户</option>
+          <option value="TeamInvite">团队邀请</option>
+          <option value="SmokeTest">冒烟测试</option>
         </select>
         <button
           onClick={() => load(1)}
           disabled={loading}
           style={{ padding: '0.4rem 1rem', borderRadius: 6, background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.875rem' }}
         >
-          {loading ? 'Loading…' : 'Refresh'}
+          {loading ? '加载中…' : '刷新'}
         </button>
       </div>
 
@@ -162,7 +162,7 @@ export default function AuditPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {logs.length === 0 && !loading && (
           <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem 0' }}>
-            No audit events found.
+            暂无审计事件。
           </div>
         )}
         {logs.map((log: AuditLog) => (
@@ -178,23 +178,23 @@ export default function AuditPage() {
             disabled={page <= 1 || loading}
             style={{ padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', background: page <= 1 ? '#f3f4f6' : '#fff', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
           >
-            Prev
+            上一页
           </button>
           <span style={{ color: '#374151', fontSize: '0.875rem' }}>
-            Page {pag.page} of {pag.pages} ({pag.total} events)
+            第 {pag.page} / {pag.pages} 页 · 共 {pag.total} 条
           </span>
           <button
             onClick={() => load(page + 1)}
             disabled={page >= pag.pages || loading}
             style={{ padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', background: page >= pag.pages ? '#f3f4f6' : '#fff', cursor: page >= pag.pages ? 'not-allowed' : 'pointer' }}
           >
-            Next
+            下一页
           </button>
         </div>
       )}
 
       <footer style={{ marginTop: '2rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Audit logs are tenant-scoped. Secrets and credentials are never recorded.
+        审计日志按租户隔离；密钥与凭据永不记录。
       </footer>
     </main>
   )
@@ -258,7 +258,7 @@ function AuditCard({ log }: { log: AuditLog }) {
 
         {log.actorUserId && (
           <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#9ca3af' }}>
-            actor: {log.actorUserId.slice(0, 12)}…
+            操作者：{log.actorUserId.slice(0, 12)}…
           </div>
         )}
       </div>

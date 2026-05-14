@@ -70,9 +70,9 @@ export default function SettingsPage() {
     setSaving(true); setError('')
     try {
       await updateCompanyProfile({ companyName, businessHours })
-      setNotice('Profile saved'); setTimeout(() => setNotice(''), 3000)
+      setNotice('资料已保存'); setTimeout(() => setNotice(''), 3000)
       setEditing(false); await load()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
 
@@ -85,20 +85,20 @@ export default function SettingsPage() {
       <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-700 rounded-xl flex items-center justify-center"><span className="text-white text-sm">⚙️</span></div>
+            <div className="w-9 h-9 bg-slate-700 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">⚙</span></div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">设置</h1>
-              <p className="text-xs text-gray-400">{o?.company.name ?? 'Loading…'} · {o?.company.plan ?? 'trial'} plan</p>
+              <h1 className="text-base font-semibold text-gray-900">设置</h1>
+              <p className="text-xs text-gray-400">{o?.company.name ?? '加载中…'} · {o?.company.plan ?? 'trial'} 套餐</p>
             </div>
           </div>
           <nav className="flex items-center gap-2 text-xs flex-wrap">
-            <a href="/boss" className="text-gray-400 hover:text-gray-700">Dashboard</a>
+            <a href="/boss" className="text-gray-500 hover:text-gray-700">工作台</a>
             <span className="text-gray-200">|</span>
-            <a href="/team" className="text-indigo-600 hover:text-indigo-800">Team</a>
+            <a href="/team" className="text-indigo-600 hover:text-indigo-800">团队</a>
             <span className="text-gray-200">|</span>
-            <a href="/billing" className="text-blue-500 hover:text-blue-700">Billing</a>
+            <a href="/billing" className="text-blue-600 hover:text-blue-700">套餐与计费</a>
             <span className="text-gray-200">|</span>
-            <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA Checklist</a>
+            <a href="/production-qa" className="text-emerald-600 hover:text-emerald-800">QA 清单</a>
           </nav>
         </div>
       </header>
@@ -108,19 +108,19 @@ export default function SettingsPage() {
         {notice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
 
         {loading && !o ? (
-          <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-3">⏳</p><p>Loading settings…</p></div>
+          <div className="text-center py-16 text-gray-400"><p className="text-sm">正在加载设置…</p></div>
         ) : o ? (
           <>
             {/* Company Profile */}
-            <Section title="Company Profile">
+            <Section title="公司资料">
               {!editing ? (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     {[
-                      { label: 'Company Name', value: o.onboarding.companyName ?? '—' },
-                      { label: 'Industry', value: o.onboarding.industry ?? '—' },
-                      { label: 'Business Hours', value: o.onboarding.businessHours ?? '—' },
-                      { label: 'Plan', value: o.company.plan },
+                      { label: '公司名称',   value: o.onboarding.companyName ?? '—' },
+                      { label: '行业',       value: o.onboarding.industry ?? '—' },
+                      { label: '营业时间',   value: o.onboarding.businessHours ?? '—' },
+                      { label: '套餐',       value: o.company.plan },
                     ].map(({ label, value }) => (
                       <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
                         <p className="text-xs text-gray-400">{label}</p>
@@ -128,22 +128,22 @@ export default function SettingsPage() {
                       </div>
                     ))}
                   </div>
-                  <button onClick={() => setEditing(true)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl">Edit Profile</button>
+                  <button onClick={() => setEditing(true)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl">编辑资料</button>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-gray-500 block mb-1">Company Name</label>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">公司名称</label>
                       <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400" value={companyName} onChange={e => setCompanyName(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-gray-500 block mb-1">Business Hours</label>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">营业时间</label>
                       <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400" value={businessHours} onChange={e => setBusinessHours(e.target.value)} />
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { void handleSaveProfile() }} disabled={saving} className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+                    <button onClick={() => { void handleSaveProfile() }} disabled={saving} className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-xl disabled:opacity-50">{saving ? '保存中…' : '保存'}</button>
                     <button onClick={() => setEditing(false)} className="bg-gray-100 text-gray-600 text-xs px-4 py-2 rounded-xl">取消</button>
                   </div>
                 </div>
@@ -151,12 +151,12 @@ export default function SettingsPage() {
             </Section>
 
             {/* AI & Onboarding */}
-            <Section title="AI Configuration">
+            <Section title="AI 配置">
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Onboarding', value: o.onboarding.status ?? 'Not started' },
-                  { label: 'AI Goals', value: `${o.onboarding.goalsCount} selected` },
-                  { label: 'Preview', value: o.onboarding.hasPreview ? 'Generated' : 'Not generated' },
+                  { label: '上线向导',  value: o.onboarding.status ?? '未开始' },
+                  { label: 'AI 目标',   value: `已选 ${o.onboarding.goalsCount} 项` },
+                  { label: '预览',      value: o.onboarding.hasPreview ? '已生成' : '未生成' },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
                     <p className="text-xs text-gray-400">{label}</p>
@@ -164,32 +164,32 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <a href="/onboarding" className="inline-block mt-3 text-xs text-blue-600 hover:text-blue-800">Update AI Configuration →</a>
+              <a href="/onboarding" className="inline-block mt-3 text-xs text-blue-600 hover:text-blue-800">更新 AI 配置 →</a>
             </Section>
 
             {/* Knowledge Base */}
-            <Section title="Knowledge Base">
+            <Section title="知识库">
               <div className="flex items-center gap-4">
                 <div className="bg-purple-50 rounded-xl px-4 py-3 text-center">
                   <p className="text-2xl font-bold text-purple-700">{o.knowledgeBase.activeItems}</p>
-                  <p className="text-xs text-purple-500">Active Items</p>
+                  <p className="text-xs text-purple-500">启用条目</p>
                 </div>
                 <div>
                   <p className={`text-sm font-semibold ${o.knowledgeBase.ready ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    {o.knowledgeBase.ready ? '● Ready' : '● No items — add product/service materials'}
+                    {o.knowledgeBase.ready ? '● 已就绪' : '● 暂无条目 — 请添加产品 / 服务资料'}
                   </p>
-                  <a href="/knowledge" className="text-xs text-blue-600 hover:text-blue-800 mt-1 block">Manage Knowledge Base →</a>
+                  <a href="/knowledge" className="text-xs text-blue-600 hover:text-blue-800 mt-1 block">管理知识库 →</a>
                 </div>
               </div>
             </Section>
 
             {/* Channel */}
-            <Section title="Channel Setup">
+            <Section title="渠道设置">
               <div className="grid grid-cols-3 gap-3 mb-3">
                 {[
-                  { label: 'Type', value: o.channel.type ?? '—' },
-                  { label: 'Status', value: o.channel.setupStatus },
-                  { label: 'Credentials', value: o.channel.credentialStatus },
+                  { label: '类型',   value: o.channel.type ?? '—' },
+                  { label: '状态',   value: o.channel.setupStatus },
+                  { label: '凭据',   value: o.channel.credentialStatus },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
                     <p className="text-xs text-gray-400">{label}</p>
@@ -197,18 +197,18 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <a href="/channels/setup" className="text-xs text-blue-600 hover:text-blue-800">Channel Setup →</a>
+              <a href="/channels/setup" className="text-xs text-blue-600 hover:text-blue-800">渠道设置 →</a>
               {' · '}
-              <a href="/launch-checklist" className="text-xs text-emerald-600 hover:text-emerald-800">Launch Checklist →</a>
+              <a href="/launch-checklist" className="text-xs text-emerald-600 hover:text-emerald-800">上线清单 →</a>
             </Section>
 
             {/* Safety */}
-            <Section title="Safety Status">
+            <Section title="安全状态">
               <div className="grid grid-cols-3 gap-3 mb-3">
                 {[
-                  { label: 'WA Session', value: o.safety.waSessionAllowed ? 'ENABLED' : 'Disabled', warn: o.safety.waSessionAllowed },
-                  { label: 'Meta Send',  value: o.safety.metaSendAllowed  ? 'ENABLED' : 'Disabled', warn: o.safety.metaSendAllowed },
-                  { label: 'Real Send',  value: o.safety.realSendEnabled  ? 'ENABLED' : 'Disabled', warn: o.safety.realSendEnabled },
+                  { label: 'WhatsApp 会话', value: o.safety.waSessionAllowed ? '已启用' : '已关闭', warn: o.safety.waSessionAllowed },
+                  { label: 'Meta 发送',     value: o.safety.metaSendAllowed  ? '已启用' : '已关闭', warn: o.safety.metaSendAllowed },
+                  { label: '真实发送',      value: o.safety.realSendEnabled  ? '已启用' : '已关闭', warn: o.safety.realSendEnabled },
                 ].map(({ label, value, warn }) => (
                   <div key={label} className={`rounded-xl px-3 py-2 ${warn ? 'bg-red-50' : 'bg-emerald-50'}`}>
                     <p className={`text-xs ${warn ? 'text-red-400' : 'text-emerald-400'}`}>{label}</p>
@@ -216,12 +216,12 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-500">Real send flags are disabled by default. Operator must explicitly enable them to go live.</p>
+              <p className="text-xs text-gray-500">真实发送相关开关默认关闭，需运维显式启用才能正式上线。</p>
             </Section>
 
             {/* Team */}
-            <Section title="Team">
-              <p className="text-sm text-gray-600 mb-2">{o.team.userCount} active user{o.team.userCount !== 1 ? 's' : ''}</p>
+            <Section title="团队">
+              <p className="text-sm text-gray-600 mb-2">{o.team.userCount} 名活跃成员</p>
               <div className="space-y-1.5">
                 {o.team.users.slice(0, 5).map(u => (
                   <div key={u.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
@@ -234,7 +234,7 @@ export default function SettingsPage() {
             </Section>
 
             {/* Quick Links */}
-            <Section title="Quick Links">
+            <Section title="快速链接">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {Object.entries(o.links).map(([key, href]) => (
                   <a key={key} href={href} className="text-xs bg-gray-50 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl hover:border-slate-400 hover:bg-slate-50 capitalize">

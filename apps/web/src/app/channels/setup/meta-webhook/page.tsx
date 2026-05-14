@@ -12,33 +12,33 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
 const STEPS = [
   {
     num:   1,
-    title: 'Create Meta App',
-    desc:  'Go to developers.facebook.com → My Apps → Create App → Business type.',
+    title: '创建 Meta 应用',
+    desc:  '前往 developers.facebook.com → 我的应用 → 创建应用 → 选择「商业」类型。',
   },
   {
     num:   2,
-    title: 'Add WhatsApp Product',
-    desc:  'Inside your Meta App, click "Add Product" → WhatsApp. Connect your WhatsApp Business Account (WABA).',
+    title: '添加 WhatsApp 产品',
+    desc:  '在 Meta 应用中点击「添加产品」→ WhatsApp，关联您的 WhatsApp 商业账号（WABA）。',
   },
   {
     num:   3,
-    title: 'Get Phone Number ID',
-    desc:  'In App Dashboard → WhatsApp → Getting Started, copy your Phone Number ID and WABA ID.',
+    title: '获取 Phone Number ID',
+    desc:  '在应用 Dashboard → WhatsApp → 入门指南中复制 Phone Number ID 与 WABA ID。',
   },
   {
     num:   4,
-    title: 'Configure Webhook',
-    desc:  `Under WhatsApp → Configuration → Webhook, enter your callback URL and a verify token you choose.`,
+    title: '配置 Webhook',
+    desc:  '在 WhatsApp → Configuration → Webhook 中填入回调 URL 和自定义的校验 token。',
   },
   {
     num:   5,
-    title: 'Subscribe Webhook Fields',
-    desc:  'Subscribe to: messages. This lets Meta send you incoming message events.',
+    title: '订阅 Webhook 事件',
+    desc:  '订阅 messages 字段。这样 Meta 才会推送入站消息事件给您。',
   },
   {
     num:   6,
-    title: 'Save Credentials',
-    desc:  'Go back to Channel Setup and save your WABA ID, Phone Number ID, and Access Token.',
+    title: '保存凭据',
+    desc:  '返回「渠道设置」页保存 WABA ID、Phone Number ID 与 Access Token。',
   },
 ]
 
@@ -64,8 +64,8 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 mb-3">
             <span className="text-white text-2xl">🔗</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Meta Webhook Setup</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to configure your webhook</p>
+          <h1 className="text-2xl font-bold text-gray-900">Meta Webhook 配置</h1>
+          <p className="text-sm text-gray-400 mt-1">登录以配置您的 Webhook</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
         <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
@@ -111,8 +111,8 @@ export default function MetaWebhookPage() {
         webhookSubscribed:  step >= 4,
         verifyTokenHint:    verifyHint || undefined,
       })
-      setCurrentStep(step); await loadStatus(); notify(`Step ${step} marked complete`)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed') }
+      setCurrentStep(step); await loadStatus(); notify(`步骤 ${step} 已标记完成`)
+    } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
 
@@ -120,7 +120,7 @@ export default function MetaWebhookPage() {
     setTesting(true); setError(''); setTestResult(null)
     try {
       const r = await testMetaWebhookStub(); setTestResult(r)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Test failed') }
+    } catch (e) { setError(e instanceof Error ? e.message : '测试失败') }
     finally { setTesting(false) }
   }
 
@@ -134,17 +134,17 @@ export default function MetaWebhookPage() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
-              <span className="text-white text-sm">🔗</span>
+              <span className="text-white text-xs font-bold">WH</span>
             </div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">Meta Webhook Setup Wizard</h1>
-              <p className="text-xs text-gray-400">Configure Meta WhatsApp Business Platform webhook</p>
+              <h1 className="text-base font-semibold text-gray-900">Meta Webhook 配置向导</h1>
+              <p className="text-xs text-gray-400">配置 Meta WhatsApp 商业平台 webhook</p>
             </div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
-            <a href="/channels/setup" className="text-blue-600 hover:text-blue-800">← Channel Setup</a>
+            <a href="/channels/setup" className="text-blue-600 hover:text-blue-800">← 渠道设置</a>
             <span className="text-gray-200">|</span>
-            <a href="/launch-checklist" className="text-gray-400 hover:text-gray-600">Launch Checklist</a>
+            <a href="/launch-checklist" className="text-gray-500 hover:text-gray-700">上线清单</a>
           </nav>
         </div>
       </header>
@@ -155,36 +155,36 @@ export default function MetaWebhookPage() {
 
         {/* Safety notice */}
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-800">
-          <strong>Safe by default:</strong> This wizard guides Meta App Dashboard configuration. No Meta API calls are made from this page. Real webhook delivery requires <code>OMNI_ENABLE_REAL_META_SEND=true</code>.
+          <strong>默认安全：</strong>本向导仅协助配置 Meta 应用 Dashboard，不会发起任何真实 Meta API 调用。真实 Webhook 投递需要 <code>OMNI_ENABLE_REAL_META_SEND=true</code>。
         </div>
 
         {/* Webhook callback URL */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-800 mb-3">Your Webhook Callback URL</h2>
+          <h2 className="text-sm font-semibold text-gray-800 mb-3">Webhook 回调 URL</h2>
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
             <code className="text-sm text-blue-700 font-mono flex-1 break-all">{webhookCallbackUrl}</code>
             <button
-              onClick={() => { void navigator.clipboard.writeText(webhookCallbackUrl); notify('Copied!') }}
+              onClick={() => { void navigator.clipboard.writeText(webhookCallbackUrl); notify('已复制') }}
               className="text-xs text-gray-500 hover:text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-1.5"
             >
-              Copy
+              复制
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Enter this URL in the Meta App Dashboard → WhatsApp → Configuration → Webhook.</p>
+          <p className="text-xs text-gray-400 mt-2">请在 Meta 应用 Dashboard → WhatsApp → Configuration → Webhook 中填入此 URL。</p>
         </div>
 
         {/* Verify token section */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-800">Verify Token</h2>
-            {status?.verifyTokenSet && <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Set ✓{status.verifyTokenLast4 ? ` (****${status.verifyTokenLast4})` : ''}</span>}
+            <h2 className="text-sm font-semibold text-gray-800">Verify Token（校验令牌）</h2>
+            {status?.verifyTokenSet && <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">已设置 ✓{status.verifyTokenLast4 ? `（****${status.verifyTokenLast4}）` : ''}</span>}
           </div>
-          <p className="text-xs text-gray-500">Choose any random string. Enter it in Meta App Dashboard AND save the last 4 chars here for reference.</p>
+          <p className="text-xs text-gray-500">使用任意随机字符串作为 verify token。同时填入 Meta 应用 Dashboard，并在此保存末四位用于参考。</p>
           <div className="flex gap-2">
             <input
               type="password"
               className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Enter verify token (only last 4 stored)"
+              placeholder="输入 verify token（仅保存末四位）"
               value={verifyHint}
               onChange={e => setVerifyHint(e.target.value)}
               autoComplete="off"
@@ -193,20 +193,20 @@ export default function MetaWebhookPage() {
               onClick={() => {
                 if (!verifyHint) return
                 void saveMetaWebhookDraft({ verifyTokenHint: verifyHint })
-                  .then(() => { setVerifyHint(''); notify('Verify token hint saved'); void loadStatus() })
+                  .then(() => { setVerifyHint(''); notify('verify token 已保存（末四位）'); void loadStatus() })
               }}
               disabled={!verifyHint || saving}
-              className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:bg-blue-700"
+              className="px-4 bg-blue-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50 hover:bg-blue-700"
             >
-              Save
+              保存
             </button>
           </div>
-          <p className="text-xs text-gray-400">Only the last 4 characters are stored. The raw token is never returned or logged.</p>
+          <p className="text-xs text-gray-400">仅末四位保存到数据库，原始 token 不会写入日志或返回。</p>
         </div>
 
         {/* Step-by-step guide */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-800 mb-4">Setup Steps</h2>
+          <h2 className="text-sm font-semibold text-gray-800 mb-4">配置步骤</h2>
           <div className="space-y-3">
             {STEPS.map((step) => {
               const done = currentStep >= step.num
@@ -220,7 +220,7 @@ export default function MetaWebhookPage() {
                       <p className={`text-sm font-semibold ${done ? 'text-emerald-800' : 'text-gray-800'}`}>{step.title}</p>
                       <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{step.desc}</p>
                       {step.num === 4 && (
-                        <p className="text-xs text-blue-700 mt-1 font-mono">Callback URL: {webhookCallbackUrl}</p>
+                        <p className="text-xs text-blue-700 mt-1 font-mono">回调 URL：{webhookCallbackUrl}</p>
                       )}
                     </div>
                     {!done && (
@@ -229,7 +229,7 @@ export default function MetaWebhookPage() {
                         disabled={saving || (step.num > 1 && currentStep < step.num - 1)}
                         className="flex-shrink-0 text-xs px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 font-medium"
                       >
-                        Mark Done
+                        标记完成
                       </button>
                     )}
                   </div>
@@ -241,21 +241,21 @@ export default function MetaWebhookPage() {
 
         {/* Credential checklist */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-800 mb-3">Credential Checklist</h2>
+          <h2 className="text-sm font-semibold text-gray-800 mb-3">凭据检查清单</h2>
           <div className="space-y-2">
             {[
-              { label: 'WABA ID (WhatsApp Business Account ID)', done: status?.credentialStatus !== 'NONE' },
+              { label: 'WABA ID（WhatsApp 商业账号 ID）', done: status?.credentialStatus !== 'NONE' },
               { label: 'Phone Number ID', done: status?.credentialStatus !== 'NONE' },
-              { label: 'Access Token (encrypted)', done: status?.credentialStatus === 'ENCRYPTED_STORED' },
-              { label: 'Verify Token (hint saved)', done: !!status?.verifyTokenSet },
-              { label: 'Webhook Subscribed', done: !!status?.webhookSubscribed },
+              { label: 'Access Token（已加密）', done: status?.credentialStatus === 'ENCRYPTED_STORED' },
+              { label: 'Verify Token（末四位已保存）', done: !!status?.verifyTokenSet },
+              { label: 'Webhook 已订阅', done: !!status?.webhookSubscribed },
             ].map(({ label, done }) => (
               <div key={label} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${done ? 'bg-emerald-50' : 'bg-gray-50'}`}>
                 <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${done ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {done ? '✓' : '○'}
                 </span>
                 <span className={`text-xs ${done ? 'text-emerald-700' : 'text-gray-600'}`}>{label}</span>
-                {!done && <a href="/channels/setup" className="ml-auto text-xs text-blue-500 hover:text-blue-700">Configure →</a>}
+                {!done && <a href="/channels/setup" className="ml-auto text-xs text-blue-600 hover:text-blue-700">前往配置 →</a>}
               </div>
             ))}
           </div>
@@ -265,18 +265,18 @@ export default function MetaWebhookPage() {
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-gray-800">Test Webhook (Stub)</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Verify setup state — no real Meta API call</p>
+              <h3 className="text-sm font-semibold text-gray-800">Webhook 安全演练</h3>
+              <p className="text-xs text-gray-500 mt-0.5">验证配置状态 — 不会发起真实 Meta API 调用</p>
             </div>
             <button onClick={() => { void handleTest() }} disabled={testing} className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium px-4 py-2 rounded-xl disabled:opacity-50">
-              {testing ? 'Testing…' : 'Run Stub Test'}
+              {testing ? '测试中…' : '运行安全演练'}
             </button>
           </div>
           {testResult && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-amber-800">{testResult.testResult}</span>
-                <span className="text-xs text-amber-600">— Meta API NOT called</span>
+                <span className="text-xs font-semibold text-amber-800">{testResult.testResult}</span>
+                <span className="text-xs text-amber-600">— 未调用 Meta API</span>
               </div>
               <p className="text-xs text-amber-700">{testResult.note}</p>
             </div>
@@ -285,11 +285,11 @@ export default function MetaWebhookPage() {
 
         {/* Safety footer */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
-          <p><strong>Meta API Safety:</strong></p>
-          <p>• No Meta APIs are called from this page</p>
-          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> by default</p>
-          <p>• Verify token: only last 4 chars stored, never returned</p>
-          <p>• Access token: AES-256-GCM encrypted, never returned</p>
+          <p className="font-semibold text-gray-600">Meta API 安全说明：</p>
+          <p>• 本页不会发起任何 Meta API 调用</p>
+          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> 为默认值</p>
+          <p>• Verify token：仅保存末四位，绝不返回</p>
+          <p>• Access token：经 AES-256-GCM 加密保存，绝不返回</p>
         </div>
       </main>
     </div>

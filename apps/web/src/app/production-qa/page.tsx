@@ -4,17 +4,17 @@ import { useEffect, useState } from 'react'
 import { getToken, login, fetchProductionQa, type ProductionQaResult } from '@/lib/api'
 
 const STATUS_CFG = {
-  PASS:   { icon: '✓', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: 'Pass' },
-  FAIL:   { icon: '✕', bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     label: 'Fail' },
-  WARN:   { icon: '!', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   label: 'Warn' },
-  MANUAL: { icon: '?', bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    label: 'Manual' },
+  PASS:   { icon: '✓', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: '通过' },
+  FAIL:   { icon: '✕', bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     label: '失败' },
+  WARN:   { icon: '!', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   label: '警告' },
+  MANUAL: { icon: '?', bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    label: '人工' },
 }
 
 const OVERALL_CFG = {
-  PASS:                     { label: 'Ready',               color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300' },
-  FAIL:                     { label: 'Issues Found',         color: 'text-red-800',     bg: 'bg-red-100',     border: 'border-red-300' },
-  WARN:                     { label: 'Warnings',             color: 'text-amber-800',   bg: 'bg-amber-100',   border: 'border-amber-300' },
-  MANUAL_REVIEW_NEEDED:     { label: 'Manual Review Needed', color: 'text-blue-800',    bg: 'bg-blue-100',    border: 'border-blue-300' },
+  PASS:                     { label: '已就绪',         color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300' },
+  FAIL:                     { label: '发现问题',       color: 'text-red-800',     bg: 'bg-red-100',     border: 'border-red-300' },
+  WARN:                     { label: '存在警告',       color: 'text-amber-800',   bg: 'bg-amber-100',   border: 'border-amber-300' },
+  MANUAL_REVIEW_NEEDED:     { label: '需要人工复核',   color: 'text-blue-800',    bg: 'bg-blue-100',    border: 'border-blue-300' },
 }
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -32,7 +32,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         <div className="text-center mb-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-800 mb-3"><span className="text-white text-xl">🔍</span></div>
           <h1 className="text-2xl font-bold text-gray-900">生产 QA</h1>
-          <p className="text-sm text-gray-400 mt-1">Sign in to run launch checks</p>
+          <p className="text-sm text-gray-400 mt-1">登录以运行上线检查</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
         <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
@@ -58,7 +58,7 @@ export default function ProductionQaPage() {
   async function runQa() {
     setLoading(true); setError('')
     try { setQa(await fetchProductionQa()) }
-    catch (e) { setError(e instanceof Error ? e.message : 'QA check failed') }
+    catch (e) { setError(e instanceof Error ? e.message : 'QA 检查失败') }
     finally { setLoading(false) }
   }
 
@@ -73,17 +73,17 @@ export default function ProductionQaPage() {
       <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-800 rounded-xl flex items-center justify-center"><span className="text-white text-sm">🔍</span></div>
+            <div className="w-9 h-9 bg-slate-800 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">QA</span></div>
             <div>
-              <h1 className="text-base font-bold text-gray-900">Production QA Checklist</h1>
-              {qa && <p className="text-xs text-gray-400">{qa.summary.passed}/{qa.summary.total} passed · {qa.summary.failed} failed · {qa.summary.manual} manual</p>}
+              <h1 className="text-base font-semibold text-gray-900">生产 QA 检查清单</h1>
+              {qa && <p className="text-xs text-gray-400">通过 {qa.summary.passed}/{qa.summary.total} · 失败 {qa.summary.failed} · 人工 {qa.summary.manual}</p>}
             </div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
-            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800">Launch Checklist</a>
+            <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800">上线清单</a>
             <span className="text-gray-200">|</span>
-            <a href="/settings" className="text-gray-400 hover:text-gray-700">Settings</a>
-            <button onClick={() => { void runQa() }} disabled={loading} className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">{loading ? '…' : '↻ Re-run'}</button>
+            <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>
+            <button onClick={() => { void runQa() }} disabled={loading} className="text-xs px-3 py-1.5 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">{loading ? '…' : '↻ 重新运行'}</button>
           </nav>
         </div>
       </header>
@@ -92,25 +92,24 @@ export default function ProductionQaPage() {
         {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
 
         {loading && !qa ? (
-          <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-3">⏳</p><p>Running QA checks…</p></div>
+          <div className="text-center py-16 text-gray-400"><p className="text-sm">正在运行 QA 检查…</p></div>
         ) : qa ? (
           <>
             {/* Overall status */}
             {overallCfg && (
               <div className={`rounded-2xl border p-5 flex items-center gap-4 ${overallCfg.bg} ${overallCfg.border}`}>
-                <span className="text-3xl">{qa.overallStatus === 'PASS' ? '🟢' : qa.overallStatus === 'FAIL' ? '🔴' : qa.overallStatus === 'WARN' ? '🟡' : '🔵'}</span>
                 <div>
-                  <p className={`text-base font-bold ${overallCfg.color}`}>{overallCfg.label}</p>
+                  <p className={`text-base font-semibold ${overallCfg.color}`}>{overallCfg.label}</p>
                   <p className={`text-xs ${overallCfg.color} opacity-80`}>{qa.operatorNote}</p>
                 </div>
                 <div className="ml-auto flex gap-2 flex-wrap">
                   {[
-                    { label: 'Pass',   count: qa.summary.passed,  color: 'bg-emerald-200 text-emerald-800' },
-                    { label: 'Fail',   count: qa.summary.failed,   color: 'bg-red-200 text-red-800' },
-                    { label: 'Warn',   count: qa.summary.warned,   color: 'bg-amber-200 text-amber-800' },
-                    { label: 'Manual', count: qa.summary.manual,   color: 'bg-blue-200 text-blue-800' },
+                    { label: '通过', count: qa.summary.passed,  color: 'bg-emerald-200 text-emerald-800' },
+                    { label: '失败', count: qa.summary.failed,   color: 'bg-red-200 text-red-800' },
+                    { label: '警告', count: qa.summary.warned,   color: 'bg-amber-200 text-amber-800' },
+                    { label: '人工', count: qa.summary.manual,   color: 'bg-blue-200 text-blue-800' },
                   ].filter(s => s.count > 0).map(({ label, count, color }) => (
-                    <span key={label} className={`text-xs font-bold px-2.5 py-1 rounded-full ${color}`}>{count} {label}</span>
+                    <span key={label} className={`text-xs font-bold px-2.5 py-1 rounded-full ${color}`}>{count} 项{label}</span>
                   ))}
                 </div>
               </div>
@@ -121,7 +120,7 @@ export default function ProductionQaPage() {
               {categories.map(cat => (
                 <button key={cat} onClick={() => setFilterCat(cat)}
                   className={`text-xs px-3 py-1.5 rounded-full transition-all ${filterCat === cat ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-slate-400'}`}>
-                  {cat}
+                  {cat === 'All' ? '全部' : cat}
                 </button>
               ))}
             </div>
@@ -142,7 +141,7 @@ export default function ProductionQaPage() {
                         <p className="text-xs text-gray-600 mt-0.5">{item.detail}</p>
                       </div>
                       {item.action && item.status !== 'PASS' && (
-                        <a href={item.action} className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0">Fix →</a>
+                        <a href={item.action} className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0">处理 →</a>
                       )}
                     </div>
                   </div>
@@ -150,7 +149,7 @@ export default function ProductionQaPage() {
               })}
             </div>
 
-            <p className="text-xs text-gray-400 text-center">Last run: {new Date(qa.asOf).toLocaleString()}</p>
+            <p className="text-xs text-gray-400 text-center">最近运行：{new Date(qa.asOf).toLocaleString('zh-CN')}</p>
           </>
         ) : null}
       </main>

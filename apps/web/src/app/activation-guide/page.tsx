@@ -22,37 +22,37 @@ interface Step {
 const BEFORE_STEPS: Step[] = [
   {
     n: 1,
-    title:  'Complete all pre-flight checks',
-    detail: 'Run GET /activation/preflight or check /release-checklist to confirm readiness level.',
+    title:  '完成所有上线前检查',
+    detail: '运行 GET /activation/preflight 或检查 /release-checklist 以确认就绪等级。',
     items: [
-      'Onboarding wizard must be ENABLED',
-      'At least one active knowledge base item',
-      'Channel type selected and draft saved',
-      'OWNER or ADMIN user exists',
-      'Credential vault configured (OMNI_API_KEY_ENCRYPTION_SECRET)',
+      '上线向导必须处于「已启用」状态',
+      '知识库至少存在一条启用条目',
+      '已选择渠道类型并保存草稿',
+      '存在 OWNER 或 ADMIN 用户',
+      '凭据保险库已配置（OMNI_API_KEY_ENCRYPTION_SECRET）',
     ],
   },
   {
     n: 2,
-    title:  'Confirm backup and monitoring are configured',
-    detail: 'Before going live, protect your data.',
+    title:  '确认备份与监控已配置',
+    detail: '正式上线前请先保护好数据。',
     items: [
-      'pg_dump scheduled (daily minimum) with off-server storage',
-      'Restore procedure tested in staging',
-      'Uptime monitor on GET /ops/health (external probe)',
-      'Error rate alert configured (>1% 5xx triggers page)',
+      'pg_dump 已计划（至少每日）且备份存储于异地',
+      '恢复流程已在预演环境中验证',
+      '外部探针监控 GET /ops/health',
+      '已配置错误率告警（>1% 5xx 触发 page）',
     ],
-    warning: 'Do not activate live channels without backup configured. Data loss is permanent.',
+    warning: '未配置备份不要激活真实渠道 — 数据丢失不可恢复。',
   },
   {
     n: 3,
-    title:  'Run activation dry-run',
-    detail: 'Use POST /activation/dry-run to simulate the activation path without making any real connections.',
+    title:  '运行激活安全演练',
+    detail: '使用 POST /activation/dry-run 模拟激活路径，不会触发任何真实连接。',
     items: [
-      'POST /activation/dry-run with channelType and intendedMode',
-      'Review blockedReasons — resolve any BLOCKED items',
-      'Review stepsIfProceeding for your channel type',
-      'Note: dry-run never enables real send',
+      'POST /activation/dry-run 传入 channelType 与 intendedMode',
+      '检查 blockedReasons — 解决所有 BLOCKED 项',
+      '检查 stepsIfProceeding 中对应渠道的步骤',
+      '提示：安全演练绝不会启用真实发送',
     ],
   },
 ]
@@ -60,57 +60,57 @@ const BEFORE_STEPS: Step[] = [
 const WA_WEB_STEPS: Step[] = [
   {
     n: 1,
-    title:  'Required: Ordinary WhatsApp account',
-    detail: 'You need an active WhatsApp account on a real phone number for WA Web.',
+    title:  '前提：拥有普通 WhatsApp 账号',
+    detail: 'WhatsApp Web 需要在真实手机号上有可用的 WhatsApp 账号。',
     items: [
-      'A phone number with active WhatsApp installed',
-      'Phone must remain connected/online for session stability',
-      'NOT the Meta WhatsApp Business Platform (WABA) — that is a separate path',
+      '一个已安装并激活 WhatsApp 的手机号',
+      '手机需保持在线以维持会话稳定',
+      '不是 Meta 商业平台（WABA） — 那是独立路径',
     ],
-    warning: 'Ordinary WhatsApp (WA Web) stability is BEST-EFFORT. WhatsApp may disconnect or ban the session. Use Meta WhatsApp Business API for production stability.',
+    warning: '普通 WhatsApp（WA Web）会话稳定性「尽力而为」，WhatsApp 可能断线或封禁。生产环境稳定性请使用 Meta 商业 API。',
   },
   {
     n: 2,
-    title:  'Set environment flag',
-    detail: 'In production .env only (never dev/staging unless testing).',
+    title:  '设置环境变量',
+    detail: '仅在生产环境 .env 中设置（开发 / 预演环境除非测试，否则不要开启）。',
     items: [
-      'Set OMNI_ALLOW_WA_SESSION=true',
-      'Restart the API server',
-      'Confirm /channels/setup/wa-web/status shows waSessionAllowed: true',
+      '设置 OMNI_ALLOW_WA_SESSION=true',
+      '重启 API 服务',
+      '确认 /channels/setup/wa-web/status 返回 waSessionAllowed: true',
     ],
-    warning: 'This flag enables real WhatsApp Web session capabilities. Ensure your phone and account are ready.',
+    warning: '此开关启用真实 WhatsApp Web 会话能力，请确认手机与账号已就绪。',
   },
   {
     n: 3,
-    title:  'Scan QR code',
-    detail: 'Navigate to /channels/setup/wa-web/qr and scan the QR with your phone.',
+    title:  '扫描二维码',
+    detail: '前往 /channels/setup/wa-web/qr 并用手机扫码。',
     items: [
-      'Open /channels/setup/wa-web/qr in the operator dashboard',
-      'Open WhatsApp on your phone → Linked Devices → Link a Device',
-      'Scan the QR code',
-      'Wait for session to confirm (sessionStatus: CONNECTED)',
+      '在运维控制台打开 /channels/setup/wa-web/qr',
+      '手机端打开 WhatsApp → 已链接设备 → 链接设备',
+      '扫描二维码',
+      '等待会话确认（sessionStatus: CONNECTED）',
     ],
   },
   {
     n: 4,
-    title:  'Verify session health',
-    detail: 'Confirm the session is active and messages flow correctly.',
+    title:  '验证会话健康',
+    detail: '确认会话活跃且消息正常流转。',
     items: [
       'GET /channels/setup/wa-web/status → sessionStatus: CONNECTED',
-      'GET /activation/health → overallHealthLevel not WARN',
-      'Send a test message to a known internal number',
-      'Confirm message received on the other device',
+      'GET /activation/health → overallHealthLevel 非 WARN',
+      '向内部已知号码发送测试消息',
+      '在对端设备确认收到消息',
     ],
   },
   {
     n: 5,
-    title:  'Post-activation monitoring',
-    detail: 'WA Web sessions can drop. Monitor regularly.',
+    title:  '激活后监控',
+    detail: 'WA Web 会话可能断线，请定期监控。',
     items: [
-      'Check /channels/setup/wa-web/status daily',
-      'Set up alert if session drops (sessionStatus ≠ CONNECTED)',
-      'Keep the linked phone powered on and online',
-      'Plan for reconnect workflow if session expires',
+      '每日检查 /channels/setup/wa-web/status',
+      '会话断开（sessionStatus ≠ CONNECTED）触发告警',
+      '保持已链接的手机在线',
+      '为会话过期场景预先规划重连流程',
     ],
   },
 ]
@@ -118,85 +118,85 @@ const WA_WEB_STEPS: Step[] = [
 const META_STEPS: Step[] = [
   {
     n: 1,
-    title:  'Required: Meta WhatsApp Business account',
-    detail: 'You need a verified Meta Business Account and WhatsApp Business Account (WABA).',
+    title:  '前提：拥有 Meta WhatsApp 商业账号',
+    detail: '需要已认证的 Meta 商业账号与 WhatsApp 商业账号（WABA）。',
     items: [
-      'Meta Business Manager account (business.facebook.com)',
-      'WhatsApp Business Account (WABA) — approved by Meta',
-      'A phone number ID registered on Meta (not an ordinary number)',
-      'Meta System User token or App access token with whatsapp_business_messaging permission',
-      'Meta App with webhook subscription capability',
+      'Meta Business Manager 账号（business.facebook.com）',
+      '已获 Meta 批准的 WhatsApp 商业账号（WABA）',
+      '在 Meta 上注册的 Phone Number ID（非普通手机号）',
+      'Meta 系统用户 token 或 App access token，需具备 whatsapp_business_messaging 权限',
+      '具备 webhook 订阅能力的 Meta 应用',
     ],
   },
   {
     n: 2,
-    title:  'Store credentials via channel setup',
-    detail: 'Use the encrypted credential vault — never paste tokens in plaintext.',
+    title:  '通过渠道设置保存凭据',
+    detail: '使用加密凭据保险库 — 切勿明文粘贴 token。',
     items: [
-      'Navigate to /channels/setup',
-      'Save credentials via POST /channels/setup/credentials-draft',
-      'Verify credentialStatus: ENCRYPTED_STORED in response',
-      'Confirm no raw token appears in any API response',
+      '前往 /channels/setup',
+      '通过 POST /channels/setup/credentials-draft 保存凭据',
+      '确认响应中 credentialStatus: ENCRYPTED_STORED',
+      '确认任何 API 响应中均不会出现原始 token',
     ],
-    warning: 'Never store raw Meta access tokens in plaintext. Always use the credential vault (OMNI_API_KEY_ENCRYPTION_SECRET).',
+    warning: '绝不可明文保存 Meta access token；始终使用凭据保险库（OMNI_API_KEY_ENCRYPTION_SECRET）。',
   },
   {
     n: 3,
-    title:  'Configure and test webhook',
-    detail: 'Meta needs to verify your webhook endpoint before messages flow.',
+    title:  '配置并测试 Webhook',
+    detail: 'Meta 需先验证您的 Webhook 端点才能下发消息。',
     items: [
-      'Webhook URL: https://your-domain.com/webhooks/meta/whatsapp/{channelId}',
-      'Webhook verify token: set via /channels/setup/meta-webhook/save-draft',
-      'Subscribe your Meta App to the WABA webhooks in Meta Business Settings',
-      'Test with GET /channels/setup/meta-webhook/status → webhookSubscribed: true',
-      'Run /channels/setup/meta-webhook/test-stub to verify locally',
+      'Webhook URL：https://your-domain.com/webhooks/meta/whatsapp/{channelId}',
+      'Verify token：通过 /channels/setup/meta-webhook/save-draft 设置',
+      '在 Meta 商业设置中将应用订阅 WABA webhook',
+      '通过 GET /channels/setup/meta-webhook/status 确认 webhookSubscribed: true',
+      '运行 /channels/setup/meta-webhook/test-stub 完成本地安全演练',
     ],
   },
   {
     n: 4,
-    title:  'Set environment flag',
-    detail: 'In production .env only.',
+    title:  '设置环境变量',
+    detail: '仅在生产环境 .env 中设置。',
     items: [
-      'Set OMNI_ENABLE_REAL_META_SEND=true',
-      'Restart the API server',
-      'Confirm /activation/health → safetyFlags.realMetaSendEnabled: true',
+      '设置 OMNI_ENABLE_REAL_META_SEND=true',
+      '重启 API 服务',
+      '确认 /activation/health → safetyFlags.realMetaSendEnabled: true',
     ],
-    warning: 'This flag enables real Meta WhatsApp API calls. Ensure your credentials are valid and your webhook is subscribed first.',
+    warning: '此开关启用真实 Meta WhatsApp API 调用；启用前请先确认凭据有效且 webhook 已订阅。',
   },
   {
     n: 5,
-    title:  'Send test message and verify',
-    detail: 'Send a test message to a known number to confirm end-to-end flow.',
+    title:  '发送测试消息并验证',
+    detail: '向已知号码发送测试消息以确认端到端链路。',
     items: [
-      'Use /messages/send with a valid conversationId on the Meta channel',
-      'Confirm sendStatus: SENT (not META_SEND_DISABLED)',
-      'Confirm the message arrives on the destination phone',
-      'Monitor /webhooks/meta/whatsapp/{channelId} for incoming delivery receipts',
-      'Review /audit logs for the send attempt',
+      '使用 /messages/send 在 Meta 渠道上发送（提供有效 conversationId）',
+      '确认 sendStatus: SENT（而非 META_SEND_DISABLED）',
+      '在目标手机上确认消息送达',
+      '通过 /webhooks/meta/whatsapp/{channelId} 监控入站投递回执',
+      '在 /audit 日志中检查本次发送记录',
     ],
   },
   {
     n: 6,
-    title:  'Post-activation monitoring',
-    detail: 'Meta API has rate limits and may return errors. Monitor carefully.',
+    title:  '激活后监控',
+    detail: 'Meta API 有速率限制并可能返回错误，请持续监控。',
     items: [
-      'Monitor API error rate on /ops/health',
-      'Set up alert on /audit logs for FAILED send events',
-      'Review Meta message delivery reports in Meta Business Manager',
-      'Note: Meta charges per-conversation fees — track usage in /billing/usage-summary',
-      'Meta fees are NOT bundled in Omni plan pricing — billed as pass-through credits',
+      '监控 /ops/health 上的 API 错误率',
+      '为 /audit 日志中的 FAILED 发送事件配置告警',
+      '在 Meta Business Manager 中检查消息投递报告',
+      '提示：Meta 按会话计费 — 通过 /billing/usage-summary 跟踪用量',
+      'Meta 费用不打包到 Omni 套餐 — 按透传 credits 计费',
     ],
   },
 ]
 
 const ROLLBACK_STEPS = [
-  'Set OMNI_ALLOW_WA_SESSION=false OR OMNI_ENABLE_REAL_META_SEND=false in .env',
-  'Restart the API server',
-  'Confirm /activation/health shows realSendCurrentlyOff: true',
-  'Verify no further real messages are sent (check /audit logs)',
-  'If WA Web: disconnect session via /channels/setup/wa-web/disconnect',
-  'Investigate root cause before re-activating',
-  'Post incident report with timeline and action items',
+  '在 .env 中设置 OMNI_ALLOW_WA_SESSION=false 或 OMNI_ENABLE_REAL_META_SEND=false',
+  '重启 API 服务',
+  '确认 /activation/health 返回 realSendCurrentlyOff: true',
+  '验证不再发送真实消息（检查 /audit 日志）',
+  '若为 WA Web：通过 /channels/setup/wa-web/disconnect 断开会话',
+  '在重新激活前定位根因',
+  '撰写事件报告，记录时间线与待办',
 ]
 
 const POST_MONITORING = [
@@ -247,79 +247,77 @@ export default function ActivationGuidePage() {
 
       {/* Safety banner */}
       <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '0.875rem 1.25rem', marginBottom: '1.5rem', color: DANGER, lineHeight: 1.5, fontSize: '0.875rem' }}>
-        <strong>⚠️  Safety first:</strong> Omni is a WhatsApp AI 客服 + CRM + follow-up system — not a broadcast or ads platform.
-        Bulk sending, marketing blast, and ads are categorically not supported on any plan.
-        Real sends only activate 1:1 customer service conversations.
+        <strong>安全第一：</strong>Omni 是 WhatsApp AI 客服 + CRM + 自动跟进系统，不是广播或广告平台。所有套餐均不支持群发、营销 blast 与广告。真实发送仅用于 1:1 客户服务对话。
       </div>
 
       {/* Preflight status panel */}
       <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: preflight ? '0.875rem' : 0 }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>Pre-flight Status</div>
+            <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>上线前检查状态</div>
             <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: 2 }}>
-              {authed ? 'Live check from /activation/preflight' : 'Sign in to load live status'}
+              {authed ? '来自 /activation/preflight 的实时检查' : '登录后查看实时状态'}
             </div>
           </div>
           {authed && (
             <button onClick={loadPreflight} disabled={pfLoading} style={{ padding: '0.375rem 0.875rem', background: ACCENT, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8125rem' }}>
-              {pfLoading ? 'Checking…' : 'Run Pre-flight'}
+              {pfLoading ? '检查中…' : '运行上线前检查'}
             </button>
           )}
         </div>
         {preflight && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <Pill label="Readiness" value={String(preflight.readiness ?? '—')} color={String(preflight.readiness) === 'BLOCKED' ? DANGER : String(preflight.readiness).startsWith('READY') ? SUCCESS : WARN_COLOR} />
-            <Pill label="Critical blocks" value={String((preflight.summary as Record<string, unknown>)?.critical ?? 0)} color={(preflight.summary as Record<string, unknown>)?.critical === 0 ? SUCCESS : DANGER} />
-            <Pill label="Checks passed" value={`${(preflight.summary as Record<string, unknown>)?.passed ?? 0}/${(preflight.summary as Record<string, unknown>)?.total ?? 0}`} color={ACCENT} />
-            <Pill label="Real send" value={String((preflight.currentFlags as Record<string, unknown>)?.realSendCurrentlyOff) === 'true' ? 'OFF ✓' : 'ON ⚠'} color={String((preflight.currentFlags as Record<string, unknown>)?.realSendCurrentlyOff) === 'true' ? SUCCESS : WARN_COLOR} />
+            <Pill label="就绪度" value={String(preflight.readiness ?? '—')} color={String(preflight.readiness) === 'BLOCKED' ? DANGER : String(preflight.readiness).startsWith('READY') ? SUCCESS : WARN_COLOR} />
+            <Pill label="关键阻塞" value={String((preflight.summary as Record<string, unknown>)?.critical ?? 0)} color={(preflight.summary as Record<string, unknown>)?.critical === 0 ? SUCCESS : DANGER} />
+            <Pill label="通过项" value={`${(preflight.summary as Record<string, unknown>)?.passed ?? 0}/${(preflight.summary as Record<string, unknown>)?.total ?? 0}`} color={ACCENT} />
+            <Pill label="真实发送" value={String((preflight.currentFlags as Record<string, unknown>)?.realSendCurrentlyOff) === 'true' ? '关闭 ✓' : '开启 ⚠'} color={String((preflight.currentFlags as Record<string, unknown>)?.realSendCurrentlyOff) === 'true' ? SUCCESS : WARN_COLOR} />
           </div>
         )}
         {preflight && !!preflight.nextAction && (
           <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: '#374151', background: '#fff', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #e5e7eb' }}>
-            Next: {String(preflight.nextAction)}
+            下一步：{String(preflight.nextAction)}
           </div>
         )}
       </div>
 
       {/* Before activation */}
-      <Section title="Before Activation (Required for Both Paths)" accent={ACCENT}>
+      <Section title="激活前准备（两条路径通用）" accent={ACCENT}>
         {BEFORE_STEPS.map(step => <StepCard key={step.n} step={step} />)}
       </Section>
 
       {/* Path selection */}
-      <Section title="Choose Your Activation Path" accent={ACCENT}>
+      <Section title="选择您的激活路径" accent={ACCENT}>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
           <PathCard
             id="wa-web"
             selected={path === 'wa-web'}
             onSelect={() => setPath(p => p === 'wa-web' ? null : 'wa-web')}
-            title="Ordinary WhatsApp / WA Web"
-            icon="📱"
-            badge="Best-effort stability"
+            title="普通 WhatsApp / WA Web"
+            icon="WA"
+            badge="稳定性尽力而为"
             badgeColor={WARN_COLOR}
             badgeBg="#fffbeb"
-            desc="Link a real WhatsApp account via QR code. Simple setup but session can disconnect. Suitable for testing or low-volume operations."
+            desc="通过扫码连接真实 WhatsApp 账号，配置简单但会话可能断线。适合测试或小规模运营。"
           />
           <PathCard
             id="meta"
             selected={path === 'meta'}
             onSelect={() => setPath(p => p === 'meta' ? null : 'meta')}
-            title="Meta WhatsApp Business Platform"
-            icon="🏢"
-            badge="Production recommended"
+            title="Meta WhatsApp 商业平台"
+            icon="API"
+            badge="生产推荐"
             badgeColor={SUCCESS}
             badgeBg="#f0fdf4"
-            desc="Official Meta Business API. Requires WABA approval, system user token, and webhook setup. More stable and has official SLA."
+            desc="Meta 官方商业 API，需 WABA 审批、系统用户 token 与 webhook 配置，稳定性更高，并有官方 SLA。"
           />
         </div>
       </Section>
 
       {/* WA Web path */}
       {path === 'wa-web' && (
-        <Section title="WA Web Activation Steps" accent={WARN_COLOR}>
+        <Section title="WhatsApp Web 激活步骤" accent={WARN_COLOR}>
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', color: WARN_COLOR, fontSize: '0.875rem' }}>
-            <strong>WA Web Stability Warning:</strong> Ordinary WhatsApp (WA Web) session stability is best-effort per WhatsApp ToS. WhatsApp may disconnect sessions without notice. Plan for reconnect downtime. For production with SLA requirements, use Meta WhatsApp Business Platform instead.
+            <strong>WhatsApp Web 稳定性提示：</strong>普通 WhatsApp（WA Web）会话稳定性按 WhatsApp 服务条款属于「尽力而为」，WhatsApp 可能随时断开会话。请预先规划重连方案。如需 SLA 保障的生产环境，请改用 Meta WhatsApp 商业平台。
           </div>
           {WA_WEB_STEPS.map(step => <StepCard key={step.n} step={step} />)}
         </Section>
@@ -327,15 +325,15 @@ export default function ActivationGuidePage() {
 
       {/* Meta path */}
       {path === 'meta' && (
-        <Section title="Meta WhatsApp Business Platform Activation Steps" accent={SUCCESS}>
+        <Section title="Meta WhatsApp 商业平台激活步骤" accent={SUCCESS}>
           {META_STEPS.map(step => <StepCard key={step.n} step={step} />)}
         </Section>
       )}
 
       {/* Rollback */}
-      <Section title="Rollback Plan" accent={DANGER}>
+      <Section title="回滚预案" accent={DANGER}>
         <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.875rem' }}>
-          If anything goes wrong after activation, follow these steps to safely return to stub/demo mode:
+          若激活后出现异常，请按以下步骤安全回退到演示 / 安全演练模式：
         </p>
         <ol style={{ margin: 0, padding: '0 0 0 1.25rem', lineHeight: 1.8 }}>
           {ROLLBACK_STEPS.map((step, i) => (
@@ -345,9 +343,9 @@ export default function ActivationGuidePage() {
       </Section>
 
       {/* Post-activation monitoring */}
-      <Section title="Post-activation Monitoring" accent={SUCCESS}>
+      <Section title="激活后监控" accent={SUCCESS}>
         <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.875rem' }}>
-          After activation, these monitoring points should be checked regularly:
+          激活后需定期检查以下监控点：
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {POST_MONITORING.map(item => (
@@ -356,23 +354,23 @@ export default function ActivationGuidePage() {
                 <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{item.label}</span>
                 <span style={{ fontSize: '0.8125rem', color: '#6b7280', marginLeft: '0.5rem' }}>{item.detail}</span>
               </div>
-              <a href={item.href} style={{ color: ACCENT, fontSize: '0.8125rem', textDecoration: 'none' }}>Open →</a>
+              <a href={item.href} style={{ color: ACCENT, fontSize: '0.8125rem', textDecoration: 'none' }}>打开 →</a>
             </div>
           ))}
         </div>
       </Section>
 
       {/* API quick reference */}
-      <Section title="Activation API Quick Reference" accent="#374151">
+      <Section title="激活 API 速查" accent="#374151">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
           {[
-            { method: 'GET',  path: '/activation/preflight', desc: 'Run pre-flight readiness checks' },
-            { method: 'POST', path: '/activation/dry-run',   desc: 'Simulate activation — never enables real send' },
-            { method: 'GET',  path: '/activation/health',    desc: 'Post-activation safety flags + channel health' },
-            { method: 'GET',  path: '/release-checklist/status', desc: 'SaaS v1 release readiness' },
-            { method: 'GET',  path: '/production-qa/checklist',  desc: 'Full production QA checklist' },
-            { method: 'GET',  path: '/audit/logs',           desc: 'Admin activity audit trail' },
-            { method: 'GET',  path: '/ops/health',           desc: 'API + DB + Redis health check' },
+            { method: 'GET',  path: '/activation/preflight',      desc: '运行上线前就绪检查' },
+            { method: 'POST', path: '/activation/dry-run',        desc: '模拟激活 — 不会启用真实发送' },
+            { method: 'GET',  path: '/activation/health',         desc: '激活后安全标志与渠道健康度' },
+            { method: 'GET',  path: '/release-checklist/status',  desc: 'SaaS v1 发布就绪度' },
+            { method: 'GET',  path: '/production-qa/checklist',   desc: '完整生产 QA 清单' },
+            { method: 'GET',  path: '/audit/logs',                desc: '管理动作审计轨迹' },
+            { method: 'GET',  path: '/ops/health',                desc: 'API + DB + Redis 健康检查' },
           ].map(api => (
             <div key={api.path} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4375rem 0.75rem', background: '#f9fafb', borderRadius: 6, border: '1px solid #e5e7eb' }}>
               <span style={{ fontSize: '0.6875rem', fontWeight: 700, background: api.method === 'GET' ? '#eff6ff' : '#f5f3ff', color: api.method === 'GET' ? '#1e40af' : '#7c3aed', padding: '0.125rem 0.375rem', borderRadius: 3, flexShrink: 0 }}>
@@ -386,10 +384,10 @@ export default function ActivationGuidePage() {
       </Section>
 
       <footer style={{ marginTop: '2rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        <a href="/activation/monitoring" style={{ color: ACCENT }}>Activation Monitor</a> ·{' '}
-        <a href="/release-checklist" style={{ color: ACCENT }}>Release Checklist</a> ·{' '}
-        <a href="/ops/runbook" style={{ color: ACCENT }}>Ops Runbook</a> ·{' '}
-        <a href="/audit" style={{ color: ACCENT }}>Audit Logs</a>
+        <a href="/activation/monitoring" style={{ color: ACCENT }}>激活监控</a> ·{' '}
+        <a href="/release-checklist" style={{ color: ACCENT }}>发布检查清单</a> ·{' '}
+        <a href="/ops/runbook" style={{ color: ACCENT }}>运维手册</a> ·{' '}
+        <a href="/audit" style={{ color: ACCENT }}>审计日志</a>
       </footer>
     </main>
   )

@@ -200,17 +200,17 @@ export default function AccountPage() {
           </p>
         </div>
         <button onClick={loadOverview} disabled={loading} style={btnSecondary}>
-          {loading ? 'Refreshing…' : 'Refresh'}
+          {loading ? '刷新中…' : '刷新'}
         </button>
       </div>
 
       {/* Tabs (Phase 17C) */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', borderBottom: '1px solid #e5e7eb' }}>
         {([
-          { id: 'overview', label: 'Overview',  icon: '🏠' },
-          { id: 'activity', label: 'Activity',  icon: '📜' },
-          { id: 'security', label: 'Security',  icon: '🛡️' },
-          { id: 'export',   label: 'Export',    icon: '📦' },
+          { id: 'overview', label: '账户概览', icon: '' },
+          { id: 'activity', label: '活动记录', icon: '' },
+          { id: 'security', label: '安全事件', icon: '' },
+          { id: 'export',   label: '安全导出', icon: '' },
         ] as { id: Tab; label: string; icon: string }[]).map(t => (
           <button
             key={t.id}
@@ -243,7 +243,7 @@ export default function AccountPage() {
       )}
       {saveOk && (
         <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '0.625rem 0.875rem', color: SUCCESS, fontSize: '0.875rem', marginBottom: '1rem' }}>
-          ✓ Profile updated successfully.
+          ✓ 资料更新成功。
         </div>
       )}
 
@@ -252,22 +252,22 @@ export default function AccountPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
 
         {/* Tenant profile card */}
-        <Card title="Tenant Profile" action={isOwnerOrAdmin && !editing ? { label: 'Edit', onClick: () => setEditing(true) } : undefined}>
+        <Card title="租户资料" action={isOwnerOrAdmin && !editing ? { label: '编辑', onClick: () => setEditing(true) } : undefined}>
           {!editing ? (
             <>
-              <Row label="Business name" value={String(tenant.name ?? '—')} />
-              <Row label="Slug"           value={String(tenant.slug ?? '—')} mono />
-              <Row label="Default language" value={String(tenant.defaultLanguage ?? '—').toUpperCase()} />
-              <Row label="Plan"           value={String(tenant.plan ?? '—')} />
-              <Row label="Active"         value={tenant.isActive ? 'Yes' : 'No'} color={tenant.isActive ? SUCCESS : DANGER} />
-              <Row label="Member since"   value={tenant.memberSince ? new Date(String(tenant.memberSince)).toLocaleDateString() : '—'} />
+              <Row label="商家名称"    value={String(tenant.name ?? '—')} />
+              <Row label="租户标识"    value={String(tenant.slug ?? '—')} mono />
+              <Row label="默认语言"    value={String(tenant.defaultLanguage ?? '—').toUpperCase()} />
+              <Row label="套餐"        value={String(tenant.plan ?? '—')} />
+              <Row label="是否激活"    value={tenant.isActive ? '是' : '否'} color={tenant.isActive ? SUCCESS : DANGER} />
+              <Row label="开通日期"    value={tenant.memberSince ? new Date(String(tenant.memberSince)).toLocaleDateString('zh-CN') : '—'} />
             </>
           ) : (
             <>
-              <Field label="Business name">
+              <Field label="商家名称">
                 <input value={editName} onChange={e => setEditName(e.target.value)} style={inputCss} maxLength={120} minLength={2} />
               </Field>
-              <Field label="Default language">
+              <Field label="默认语言">
                 <select value={editLang} onChange={e => setEditLang(e.target.value)} style={inputCss}>
                   <option value="zh">中文 (zh)</option>
                   <option value="en">English (en)</option>
@@ -276,15 +276,15 @@ export default function AccountPage() {
               </Field>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button onClick={handleSave} disabled={saving} style={btnPrimary}>
-                  {saving ? 'Saving…' : 'Save'}
+                  {saving ? '保存中…' : '保存'}
                 </button>
                 <button onClick={() => { setEditing(false); setEditName(String(tenant.name ?? '')); setEditLang(String(tenant.defaultLanguage ?? 'zh')) }} disabled={saving} style={btnSecondary}>
-                  Cancel
+                  取消
                 </button>
               </div>
               {!isOwnerOrAdmin && (
                 <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: WARN_C }}>
-                  Only OWNER or ADMIN can edit profile.
+                  仅 OWNER 或 ADMIN 可编辑资料。
                 </div>
               )}
             </>
@@ -292,34 +292,34 @@ export default function AccountPage() {
         </Card>
 
         {/* Current user card */}
-        <Card title="Your Account">
-          <Row label="Name"   value={String(currentUser.name  ?? '—')} />
-          <Row label="Email"  value={String(currentUser.email ?? '—')} mono />
-          <Row label="Role"   value={String(currentUser.role  ?? '—')} color={ACCENT} />
-          <Row label="Status" value={currentUser.isActive ? 'Active' : 'Inactive'} color={currentUser.isActive ? SUCCESS : DANGER} />
-          <Row label="Member since" value={currentUser.memberSince ? new Date(String(currentUser.memberSince)).toLocaleDateString() : '—'} />
+        <Card title="您的账户">
+          <Row label="姓名"      value={String(currentUser.name  ?? '—')} />
+          <Row label="邮箱"      value={String(currentUser.email ?? '—')} mono />
+          <Row label="角色"      value={String(currentUser.role  ?? '—')} color={ACCENT} />
+          <Row label="状态"      value={currentUser.isActive ? '激活' : '停用'} color={currentUser.isActive ? SUCCESS : DANGER} />
+          <Row label="注册日期"  value={currentUser.memberSince ? new Date(String(currentUser.memberSince)).toLocaleDateString('zh-CN') : '—'} />
         </Card>
       </div>
 
       {/* Onboarding + Channel cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-        <Card title="Onboarding Status" action={{ label: 'Open →', onClick: () => window.location.href = '/onboarding' }}>
-          <Row label="Status"        value={String(onboarding.status ?? 'NOT_STARTED')} color={onboarding.status === 'ENABLED' ? SUCCESS : WARN_C} />
-          <Row label="Company name"  value={String(onboarding.companyName ?? '—')} />
-          <Row label="Industry"      value={String(onboarding.industry ?? '—')} />
-          <Row label="Goals"         value={Array.isArray(onboarding.goals) && onboarding.goals.length > 0 ? (onboarding.goals as unknown[]).join(', ') : '—'} />
+        <Card title="上线向导状态" action={{ label: '前往 →', onClick: () => window.location.href = '/onboarding' }}>
+          <Row label="状态"          value={String(onboarding.status ?? 'NOT_STARTED')} color={onboarding.status === 'ENABLED' ? SUCCESS : WARN_C} />
+          <Row label="公司名称"      value={String(onboarding.companyName ?? '—')} />
+          <Row label="行业"          value={String(onboarding.industry ?? '—')} />
+          <Row label="AI 目标"       value={Array.isArray(onboarding.goals) && onboarding.goals.length > 0 ? (onboarding.goals as unknown[]).join(', ') : '—'} />
         </Card>
 
-        <Card title="Channel Setup" action={{ label: 'Open →', onClick: () => window.location.href = '/channels/setup' }}>
-          <Row label="Channel type"  value={String(channel.channelType ?? 'Not configured')} />
-          <Row label="Setup status"  value={String(channel.setupStatus ?? 'NOT_STARTED')} />
-          <Row label="Credentials"   value={String(channel.credentialStatus ?? 'NONE')} color={channel.credentialStatus === 'ENCRYPTED_STORED' ? SUCCESS : NEUTRAL} />
-          <Row label="Active channels" value={String(channel.activeChannelCount ?? 0)} />
+        <Card title="渠道设置" action={{ label: '前往 →', onClick: () => window.location.href = '/channels/setup' }}>
+          <Row label="渠道类型"      value={String(channel.channelType ?? '未配置')} />
+          <Row label="配置状态"      value={String(channel.setupStatus ?? 'NOT_STARTED')} />
+          <Row label="凭据状态"      value={String(channel.credentialStatus ?? 'NONE')} color={channel.credentialStatus === 'ENCRYPTED_STORED' ? SUCCESS : NEUTRAL} />
+          <Row label="活跃渠道数"    value={String(channel.activeChannelCount ?? 0)} />
         </Card>
       </div>
 
       {/* Setup checklist */}
-      <Card title={`Continue Setup (${progress.completed ?? 0}/${progress.total ?? 0})`}>
+      <Card title={`继续设置（${progress.completed ?? 0}/${progress.total ?? 0}）`}>
         {/* Progress bar */}
         <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: '0.875rem' }}>
           <div style={{ height: '100%', width: `${progress.percent ?? 0}%`, background: ACCENT, borderRadius: 3, transition: 'width 0.3s' }} />
@@ -335,7 +335,7 @@ export default function AccountPage() {
               </span>
             </div>
             <a href={String(item.action)} style={{ color: ACCENT, fontSize: '0.8125rem', textDecoration: 'none', flexShrink: 0 }}>
-              {item.passed ? 'Review →' : 'Open →'}
+              {item.passed ? '回顾 →' : '前往 →'}
             </a>
           </div>
         ))}
@@ -343,15 +343,13 @@ export default function AccountPage() {
 
       {/* Safety status */}
       <div style={{ marginTop: '1.25rem' }}>
-        <Card title="Safety Status">
-          <Row label="Real send"             value={safety.realSendCurrentlyOff ? 'OFF ✓ (safe)' : 'ON ⚠️'} color={safety.realSendCurrentlyOff ? SUCCESS : DANGER} />
-          <Row label="WA Web session"         value={safety.realWaSessionEnabled ? 'Enabled ⚠️' : 'Disabled ✓'} color={safety.realWaSessionEnabled ? WARN_C : SUCCESS} />
-          <Row label="Meta API send"          value={safety.realMetaSendEnabled  ? 'Enabled ⚠️' : 'Disabled ✓'} color={safety.realMetaSendEnabled  ? WARN_C : SUCCESS} />
-          <Row label="Broadcast / bulk send"  value="Not supported on any plan ✓" color={SUCCESS} />
+        <Card title="安全状态">
+          <Row label="真实发送"           value={safety.realSendCurrentlyOff ? '关闭 ✓（安全）' : '开启 ⚠️'} color={safety.realSendCurrentlyOff ? SUCCESS : DANGER} />
+          <Row label="WhatsApp Web 会话"   value={safety.realWaSessionEnabled ? '已启用 ⚠️' : '已关闭 ✓'} color={safety.realWaSessionEnabled ? WARN_C : SUCCESS} />
+          <Row label="Meta API 发送"       value={safety.realMetaSendEnabled  ? '已启用 ⚠️' : '已关闭 ✓'} color={safety.realMetaSendEnabled  ? WARN_C : SUCCESS} />
+          <Row label="广播 / 群发"         value="所有套餐均不支持 ✓" color={SUCCESS} />
           <div style={{ marginTop: '0.625rem', fontSize: '0.75rem', color: NEUTRAL, lineHeight: 1.5, paddingTop: '0.5rem', borderTop: '1px solid #f3f4f6' }}>
-            Activation must go through the <a href="/activation-guide" style={{ color: ACCENT }}>activation guide</a> and pass{' '}
-            <a href="/activation/monitoring" style={{ color: ACCENT }}>monitoring checks</a>.
-            Omni is for 1:1 WhatsApp AI customer service — not for broadcast, ads, or bulk messaging.
+            正式激活必须通过 <a href="/activation-guide" style={{ color: ACCENT }}>上线激活指南</a> 并通过 <a href="/activation/monitoring" style={{ color: ACCENT }}>监控检查</a>。Omni 仅用于 1:1 WhatsApp AI 客服，不用于广播、广告或群发。
           </div>
         </Card>
       </div>
@@ -359,12 +357,12 @@ export default function AccountPage() {
       {/* Quick links footer */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1.5rem', justifyContent: 'center' }}>
         {[
-          { href: '/team',                 label: 'Team' },
-          { href: '/knowledge',            label: 'Knowledge Base' },
-          { href: '/channels/setup',       label: 'Channel Setup' },
-          { href: '/activation-guide',     label: 'Activation Guide' },
-          { href: '/activation/monitoring', label: 'Activation Monitor' },
-          { href: '/release-checklist',    label: 'Release Checklist' },
+          { href: '/team',                  label: '团队成员' },
+          { href: '/knowledge',             label: '知识库' },
+          { href: '/channels/setup',        label: '渠道设置' },
+          { href: '/activation-guide',      label: '上线激活指南' },
+          { href: '/activation/monitoring', label: '激活监控' },
+          { href: '/release-checklist',     label: '发布检查清单' },
         ].map(l => (
           <a key={l.href} href={l.href} style={{ padding: '0.3125rem 0.75rem', background: '#f3f4f6', color: '#374151', borderRadius: 6, textDecoration: 'none', fontSize: '0.8125rem', border: '1px solid #e5e7eb' }}>
             {l.label}
@@ -377,50 +375,50 @@ export default function AccountPage() {
       {tab === 'activity' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>📜 Recent Account Activity</h2>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>近期账户活动</h2>
             <button onClick={() => loadActivity()} disabled={activityLoading} style={btnSecondary}>
-              {activityLoading ? 'Loading…' : 'Refresh'}
+              {activityLoading ? '加载中…' : '刷新'}
             </button>
           </div>
 
           {/* Phase 17D: Activity filters */}
-          <Card title="Filters">
+          <Card title="筛选">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.625rem', alignItems: 'end' }}>
-              <Field label="Action group">
+              <Field label="动作分组">
                 <select value={filterGroup} onChange={e => setFilterGroup(e.target.value)} style={inputCss}>
-                  <option value="">All groups</option>
-                  <option value="account">Account</option>
-                  <option value="team">Team</option>
-                  <option value="billing">Billing</option>
-                  <option value="settings">Settings</option>
-                  <option value="activation">Activation</option>
+                  <option value="">全部分组</option>
+                  <option value="account">账户</option>
+                  <option value="team">团队</option>
+                  <option value="billing">计费</option>
+                  <option value="settings">设置</option>
+                  <option value="activation">激活</option>
                   <option value="security">安全事件</option>
                 </select>
               </Field>
-              <Field label="From">
+              <Field label="开始时间">
                 <input type="datetime-local" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} style={inputCss} />
               </Field>
-              <Field label="To">
+              <Field label="结束时间">
                 <input type="datetime-local" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={inputCss} />
               </Field>
               <div style={{ display: 'flex', gap: '0.375rem' }}>
                 <button onClick={() => loadActivity()} disabled={activityLoading} style={{ ...btnPrimary, flex: 1 }}>
-                  Apply
+                  应用
                 </button>
                 <button onClick={() => { setFilterGroup(''); setFilterFrom(''); setFilterTo(''); loadActivity('', '', '') }} style={btnSecondary}>
-                  Clear
+                  清除
                 </button>
               </div>
             </div>
           </Card>
 
           <p style={{ color: NEUTRAL, fontSize: '0.8125rem', margin: '0.875rem 0', lineHeight: 1.5 }}>
-            Audit-derived activity for your tenant. Raw metadata values are filtered to a safe whitelist; no secrets, tokens, or credentials are shown.
+            来自审计日志、按本租户隔离的活动记录。原始元数据经白名单过滤，不展示密钥、token 或凭据。
           </p>
-          <Card title={`Events (${((activity?.events ?? []) as AnyData[]).length})`}>
+          <Card title={`事件（${((activity?.events ?? []) as AnyData[]).length} 条）`}>
             {((activity?.events ?? []) as AnyData[]).length === 0 ? (
               <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>
-                {activityLoading ? 'Loading recent activity…' : 'No account activity recorded yet.'}
+                {activityLoading ? '正在加载近期活动…' : '暂无账户活动记录。'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -469,49 +467,49 @@ export default function AccountPage() {
         return (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>🛡️ Security Events</h2>
+              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111827' }}>安全事件</h2>
               <button onClick={loadSecurity} disabled={securityLoading} style={btnSecondary}>
-                {securityLoading ? 'Loading…' : 'Refresh'}
+                {securityLoading ? '加载中…' : '刷新'}
               </button>
             </div>
             <p style={{ color: NEUTRAL, fontSize: '0.8125rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-              Local audit-derived security view (last 7 days). No real provider calls. Restricted to OWNER and ADMIN.
+              基于本地审计日志的安全视图（近 7 日），不调用任何外部服务商，仅 OWNER 与 ADMIN 可见。
             </p>
 
             {!isOwnerOrAdmin && (
               <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.625rem 0.875rem', color: DANGER, fontSize: '0.875rem', marginBottom: '1rem' }}>
-                Security view is restricted to OWNER and ADMIN.
+                安全视图仅对 OWNER 与 ADMIN 开放。
               </div>
             )}
 
             {/* Severity summary cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
               {[
-                { key: 'critical', label: 'Critical (7d)', count: sev.critical ?? 0 },
-                { key: 'warning',  label: 'Warning (7d)',  count: sev.warning  ?? 0 },
-                { key: 'info',     label: 'Info (7d)',     count: sev.info     ?? 0 },
+                { key: 'critical', label: '严重（7 日）', count: sev.critical ?? 0 },
+                { key: 'warning',  label: '警告（7 日）', count: sev.warning  ?? 0 },
+                { key: 'info',     label: '信息（7 日）', count: sev.info     ?? 0 },
               ].map(s => (
                 <div key={s.key} style={{ background: sevBg(s.key), border: `1px solid ${sevColor(s.key)}33`, borderRadius: 10, padding: '0.875rem 1rem' }}>
-                  <div style={{ fontSize: '0.6875rem', color: NEUTRAL, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>{s.label}</div>
+                  <div style={{ fontSize: '0.6875rem', color: NEUTRAL, letterSpacing: '0.04em', marginBottom: '0.25rem' }}>{s.label}</div>
                   <div style={{ fontWeight: 700, fontSize: '1.375rem', color: sevColor(s.key) }}>{s.count}</div>
                 </div>
               ))}
             </div>
 
             {/* Last 24h summary */}
-            <Card title="Last 24 hours">
+            <Card title="最近 24 小时">
               <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
-                <div><strong>{last24h.total ?? 0}</strong> total events</div>
-                <div style={{ color: DANGER }}><strong>{last24h.critical ?? 0}</strong> critical</div>
-                <div style={{ color: WARN_C }}><strong>{last24h.warning ?? 0}</strong> warning</div>
-                <div style={{ color: SUCCESS }}><strong>{last24h.info ?? 0}</strong> info</div>
+                <div><strong>{last24h.total ?? 0}</strong> 起事件</div>
+                <div style={{ color: DANGER }}><strong>{last24h.critical ?? 0}</strong> 严重</div>
+                <div style={{ color: WARN_C }}><strong>{last24h.warning ?? 0}</strong> 警告</div>
+                <div style={{ color: SUCCESS }}><strong>{last24h.info ?? 0}</strong> 信息</div>
               </div>
             </Card>
 
             {/* Recommended actions */}
             {recommended.length > 0 && (
               <div style={{ marginTop: '1rem' }}>
-                <Card title="Recommended actions">
+                <Card title="建议动作">
                   <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
                     {recommended.map((r, i) => (
                       <li key={i}>{r}</li>
@@ -523,10 +521,10 @@ export default function AccountPage() {
 
             {/* Event list */}
             <div style={{ marginTop: '1rem' }}>
-              <Card title={`Recent events (${events.length})`}>
+              <Card title={`近期事件（${events.length} 条）`}>
                 {events.length === 0 ? (
                   <div style={{ color: NEUTRAL, fontSize: '0.875rem', padding: '0.5rem 0' }}>
-                    {securityLoading ? 'Loading security events…' : 'No security-relevant events in the last 7 days.'}
+                    {securityLoading ? '正在加载安全事件…' : '近 7 日无安全相关事件。'}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
@@ -555,7 +553,7 @@ export default function AccountPage() {
 
             {/* Safety footer */}
             <div style={{ marginTop: '1rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.75rem', color: NEUTRAL, lineHeight: 1.5 }}>
-              Safety status: realSendEnabled = <strong>{String(safety.realSendEnabled ?? false)}</strong> · realWaSessionEnabled = <strong>{String(safety.realWaSessionEnabled ?? false)}</strong> · realMetaSendEnabled = <strong>{String(safety.realMetaSendEnabled ?? false)}</strong>
+              安全状态：realSendEnabled = <strong>{String(safety.realSendEnabled ?? false)}</strong> · realWaSessionEnabled = <strong>{String(safety.realWaSessionEnabled ?? false)}</strong> · realMetaSendEnabled = <strong>{String(safety.realMetaSendEnabled ?? false)}</strong>
             </div>
           </div>
         )
@@ -564,50 +562,50 @@ export default function AccountPage() {
       {/* ── Export tab (Phase 17C) ─────────────────────────────────────── */}
       {tab === 'export' && (
         <div>
-          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700, color: '#111827' }}>📦 Safe Tenant Export</h2>
-          <Card title="What this export includes">
+          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700, color: '#111827' }}>安全导出</h2>
+          <Card title="导出包含的内容">
             <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
-              <li>Tenant profile (id, slug, name, language, plan, active status)</li>
-              <li>Users list (id, email, name, role, isActive — NO passwordHash)</li>
-              <li>Onboarding draft fields (company name, industry, goals)</li>
-              <li>Channel setup status only (no credentialRef, no tokens)</li>
-              <li>Knowledge base questions list (NOT answers)</li>
-              <li>AI config provider label only (no API key refs)</li>
-              <li>Follow-up rule keys + delay (NOT message templates)</li>
-              <li>Handoff rule conditions</li>
-              <li>Counts: users, customers, conversations, audit events</li>
-              <li>Safety flags and redaction summary</li>
+              <li>租户资料（id、slug、名称、语言、套餐、是否激活）</li>
+              <li>用户列表（id、邮箱、姓名、角色、是否激活 — 不含 passwordHash）</li>
+              <li>上线向导草稿字段（公司名称、行业、AI 目标）</li>
+              <li>仅渠道配置状态（不含 credentialRef、不含 token）</li>
+              <li>知识库问题列表（不含答案）</li>
+              <li>AI 配置服务商标签（不含 API key 引用）</li>
+              <li>自动跟进规则键与延迟（不含话术模板）</li>
+              <li>人工转接规则条件</li>
+              <li>计数：用户、客户、对话、审计事件</li>
+              <li>安全开关与脱敏摘要</li>
             </ul>
           </Card>
-          <Card title="What this export excludes">
+          <Card title="导出不包含的内容">
             <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem', color: '#374151', lineHeight: 1.7 }}>
-              <li>Password hashes</li>
-              <li>Encrypted credential blobs (credentialRef, metaAccessTokenRef, webhookVerifyTokenRef, apiKeyRef)</li>
-              <li>Raw tokens of any kind</li>
-              <li>WhatsApp / Meta provider session or QR data</li>
-              <li>Full customer conversations or message content</li>
-              <li>Knowledge base answers (questions only, to avoid leaking pasted content)</li>
-              <li>Follow-up message templates</li>
+              <li>密码哈希</li>
+              <li>加密凭据块（credentialRef、metaAccessTokenRef、webhookVerifyTokenRef、apiKeyRef）</li>
+              <li>任何原始 token</li>
+              <li>WhatsApp / Meta 服务商会话或 QR 数据</li>
+              <li>完整客户对话或消息内容</li>
+              <li>知识库答案（仅导出问题，避免泄漏粘贴内容）</li>
+              <li>自动跟进话术模板</li>
             </ul>
           </Card>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
             <button onClick={loadExport} disabled={exportLoading} style={btnPrimary}>
-              {exportLoading ? 'Generating…' : (exportData ? 'Regenerate' : 'Generate Safe Export')}
+              {exportLoading ? '生成中…' : (exportData ? '重新生成' : '生成安全导出')}
             </button>
             {exportData && (
               <button onClick={downloadExport} style={btnSecondary}>
-                ⬇  Download JSON
+                下载 JSON
               </button>
             )}
           </div>
           {!isOwnerOrAdmin && (
             <div style={{ marginTop: '0.625rem', fontSize: '0.75rem', color: WARN_C }}>
-              Note: Export is restricted to OWNER and ADMIN.
+              提示：导出仅对 OWNER 与 ADMIN 开放。
             </div>
           )}
           {exportData && (
             <div style={{ marginTop: '1rem' }}>
-              <Card title={`Export Preview (generated ${String(exportData.generatedAt ?? '')})`}>
+              <Card title={`导出预览（生成于 ${String(exportData.generatedAt ?? '')}）`}>
                 <pre style={{ fontSize: '0.6875rem', fontFamily: 'monospace', background: '#f9fafb', padding: '0.75rem', borderRadius: 6, border: '1px solid #e5e7eb', overflow: 'auto', maxHeight: 360, margin: 0 }}>
                   {JSON.stringify(exportData, null, 2)}
                 </pre>
