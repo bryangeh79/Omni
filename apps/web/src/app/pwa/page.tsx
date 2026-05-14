@@ -13,20 +13,15 @@ import {
   type CustomerDetail, type FollowUpTask, type SseTransport, type BossToday,
 } from '@/lib/api'
 import { toChineseError } from '@/lib/errorText'
+import {
+  stageLabel,
+  conversationStatusLabel,
+  channelTypeLabel,
+  followUpScenarioLabel,
+} from '@/lib/enumLabels'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STAGES = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST','AFTER_SALES'] as const
-
-const STAGE_LABEL: Record<string, string> = {
-  NEW: '新客户', INTERESTED: '已确认需求', HIGH_INTENT: '高意向',
-  QUOTED: '已报价', BOOKED: '已预约', WON: '已成交', LOST: '已流失', AFTER_SALES: '售后',
-}
-const STATUS_LABEL: Record<string, string> = {
-  AI_HANDLING:     'AI 处理中',
-  PENDING_HANDOFF: '待人工接管',
-  HUMAN_HANDLING:  '人工处理中',
-  CLOSED:          '已关闭',
-}
 
 const STAGE_COLORS: Record<string, string> = {
   NEW:         'bg-gray-100 text-gray-600',
@@ -142,7 +137,7 @@ function ConvCard({ conv, onTap }: { conv: ConversationSummary; onTap: () => voi
           <p className="text-xs text-gray-500 truncate">{conv.lastMessage?.content ?? '暂无消息'}</p>
           <div className="flex items-center gap-1.5 mt-1">
             <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${STAGE_COLORS[conv.customer.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-              {STAGE_LABEL[conv.customer.stage] ?? conv.customer.stage}
+              {stageLabel(conv.customer.stage)}
             </span>
             {conv.needsHuman && (
               <span className="text-xs bg-amber-100 text-amber-700 rounded-md px-1.5 py-0.5 font-medium">
@@ -289,7 +284,7 @@ function ThreadView({
         <button onClick={onBack} className="text-blue-600 font-medium text-sm flex-shrink-0">← 返回</button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
-          <p className="text-xs text-gray-500">{STATUS_LABEL[conv.status] ?? conv.status} · {conv.channel.type}</p>
+          <p className="text-xs text-gray-500">{conversationStatusLabel(conv.status)} · {channelTypeLabel(conv.channel.type)}</p>
         </div>
         <button
           onClick={loadCustomer}
@@ -305,6 +300,8 @@ function ThreadView({
           {canTakeover && (
             <button
               onClick={() => handleAction('takeover')} disabled={actionBusy}
+              title="暂停 AI 自动回复，由人工客服处理此对话"
+              aria-label="人工接管对话"
               className="flex-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg py-2 text-xs font-semibold active:bg-amber-100"
             >
               人工接管
@@ -313,6 +310,8 @@ function ThreadView({
           {canRelease && (
             <button
               onClick={() => handleAction('release')} disabled={actionBusy}
+              title="恢复 AI 自动回复"
+              aria-label="释放对话给 AI"
               className="flex-1 bg-green-50 text-green-700 border border-green-200 rounded-lg py-2 text-xs font-semibold active:bg-green-100"
             >
               释放给 AI
@@ -320,6 +319,8 @@ function ThreadView({
           )}
           <button
             onClick={() => handleAction('close')} disabled={actionBusy}
+            title="关闭后不可继续回复，除非重新开启"
+            aria-label="关闭对话"
             className="px-3 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg py-2 text-xs font-medium active:bg-gray-100"
           >
             关闭
@@ -402,13 +403,13 @@ function ThreadView({
                       onClick={() => handleStageChange(s)}
                       className={`py-2 px-3 rounded-xl text-xs font-medium text-left ${customerDetail.stage === s ? 'ring-2 ring-blue-400' : ''} ${STAGE_COLORS[s] ?? 'bg-gray-100 text-gray-600'}`}
                     >
-                      {STAGE_LABEL[s] ?? s}
+                      {stageLabel(s)}
                     </button>
                   ))}
                 </div>
               ) : (
                 <span className={`inline-block px-3 py-1.5 rounded-xl text-sm font-medium ${STAGE_COLORS[customerDetail.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {STAGE_LABEL[customerDetail.stage] ?? customerDetail.stage}
+                  {stageLabel(customerDetail.stage)}
                 </span>
               )}
             </div>
@@ -518,7 +519,7 @@ function FollowUpTab({ onOpenConversation }: { onOpenConversation: (id: string) 
         <div className="flex items-start justify-between mb-2">
           <div>
             <p className="text-sm font-semibold text-gray-900">{name}</p>
-            <p className="text-xs text-gray-400">{task.scenario.replace(/_/g, ' ')}</p>
+            <p className="text-xs text-gray-400">{followUpScenarioLabel(task.scenario)}</p>
           </div>
           <div className="text-right">
             {task.requiresHuman && (

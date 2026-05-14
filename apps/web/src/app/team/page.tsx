@@ -6,6 +6,7 @@ import {
   fetchTeamMembers, inviteDraft, updateMemberRole, updateMemberStatus,
   type TeamMember, type TeamMembersResponse,
 } from '@/lib/api'
+import { actorRoleLabel } from '@/lib/enumLabels'
 
 const ROLES = ['OWNER', 'ADMIN', 'MANAGER', 'AGENT', 'VIEWER']
 
@@ -46,7 +47,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 function RoleBadge({ role }: { role: string }) {
   return (
-    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROLE_COLORS[role] ?? 'bg-gray-100 text-gray-500'}`}>{role}</span>
+    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROLE_COLORS[role] ?? 'bg-gray-100 text-gray-500'}`} title={role}>{actorRoleLabel(role)}</span>
   )
 }
 
@@ -88,7 +89,7 @@ export default function TeamPage() {
     e.preventDefault(); setInviting(true); setError('')
     try {
       const r = await inviteDraft({ email: invEmail, name: invName || undefined, role: invRole })
-      setInvResult(`已记录 ${r.invited.email} 的 ${r.invited.role} 邀请草稿。${r.note}`)
+      setInvResult(`已记录 ${r.invited.email} 的 ${actorRoleLabel(r.invited.role)} 邀请草稿。${r.note}`)
       setInvEmail(''); setInvName('')
       setTimeout(() => setInvResult(null), 8000)
     } catch (ex) { setError(ex instanceof Error ? ex.message : '邀请失败') }
@@ -99,7 +100,7 @@ export default function TeamPage() {
     setSavingRole(true); setError('')
     try {
       await updateMemberRole(member.id, editingRole)
-      setNotice(`角色已更新为 ${editingRole}`)
+      setNotice(`角色已更新为 ${actorRoleLabel(editingRole)}`)
       setEditingId(null)
       setTimeout(() => setNotice(''), 3000)
       await load()
@@ -127,7 +128,7 @@ export default function TeamPage() {
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">TM</span></div>
             <div>
               <h1 className="text-base font-semibold text-gray-900">团队管理</h1>
-              <p className="text-xs text-gray-400">{team ? `活跃 ${team.active} · 总计 ${team.total}` : '加载中…'}{myRole ? ` · 您的角色：${myRole}` : ''}</p>
+              <p className="text-xs text-gray-400">{team ? `活跃 ${team.active} · 总计 ${team.total}` : '加载中…'}{myRole ? ` · 您的角色：${actorRoleLabel(myRole)}` : ''}</p>
             </div>
           </div>
           <nav className="flex items-center gap-2 text-xs flex-wrap">
@@ -175,7 +176,7 @@ export default function TeamPage() {
                             onChange={e => setEditingRole(e.target.value)}
                             className="text-xs border border-indigo-200 rounded-lg px-2 py-1 outline-none"
                           >
-                            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            {ROLES.map(r => <option key={r} value={r}>{actorRoleLabel(r)}</option>)}
                           </select>
                           <button onClick={() => { void handleRoleSave(m) }} disabled={savingRole} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">{savingRole ? '…' : '保存'}</button>
                           <button onClick={() => setEditingId(null)} className="text-xs text-gray-400 px-1">✕</button>
@@ -246,7 +247,7 @@ export default function TeamPage() {
                       onChange={e => setInvRole(e.target.value)}
                       className="border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                     >
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {ROLES.map(r => <option key={r} value={r}>{actorRoleLabel(r)}</option>)}
                     </select>
                   </div>
                   <div className="flex items-center gap-3">

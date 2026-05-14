@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getToken, login, fetchSettingsOverview, updateCompanyProfile, type SettingsOverview } from '@/lib/api'
+import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel } from '@/lib/enumLabels'
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [slug, setSlug] = useState(''); const [email, setEmail] = useState(''); const [pass, setPass] = useState('')
@@ -187,9 +188,9 @@ export default function SettingsPage() {
             <Section title="渠道设置">
               <div className="grid grid-cols-3 gap-3 mb-3">
                 {[
-                  { label: '类型',   value: o.channel.type ?? '—' },
-                  { label: '状态',   value: o.channel.setupStatus },
-                  { label: '凭据',   value: o.channel.credentialStatus },
+                  { label: '类型',   value: o.channel.type ? channelTypeLabel(o.channel.type) : '—' },
+                  { label: '状态',   value: channelSetupStatusLabel(o.channel.setupStatus) },
+                  { label: '凭据',   value: credentialStatusLabel(o.channel.credentialStatus) },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-gray-50 rounded-xl px-3 py-2">
                     <p className="text-xs text-gray-400">{label}</p>
@@ -226,7 +227,7 @@ export default function SettingsPage() {
                 {o.team.users.slice(0, 5).map(u => (
                   <div key={u.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
                     <div className="w-7 h-7 bg-slate-200 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">{(u.name?.[0] ?? u.email[0]).toUpperCase()}</div>
-                    <div><p className="text-xs font-medium text-gray-800">{u.name ?? u.email}</p><p className="text-xs text-gray-400">{u.role}</p></div>
+                    <div><p className="text-xs font-medium text-gray-800">{u.name ?? u.email}</p><p className="text-xs text-gray-400">{actorRoleLabel(u.role)}</p></div>
                   </div>
                 ))}
               </div>

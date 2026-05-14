@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getToken } from '@/lib/api'
+import { activationStatusLabel, auditActionLabel, actorRoleLabel } from '@/lib/enumLabels'
 
 const ACCENT   = '#6366f1'
 const SUCCESS  = '#15803d'
@@ -158,8 +159,8 @@ export default function ActivationMonitoringPage() {
 
       {/* Status row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
-        <StatusCard title="就绪等级" value={pfReadiness} color={readinessColor(pfReadiness)} sub={`通过 ${pfSummary.passed ?? 0}/${pfSummary.total ?? 0} 项检查`} />
-        <StatusCard title="健康等级" value={healthLevel} color={healthColor(healthLevel)} sub={`${channelHealth.length} 个活跃渠道`} />
+        <StatusCard title="就绪等级" value={activationStatusLabel(pfReadiness)} color={readinessColor(pfReadiness)} sub={`通过 ${pfSummary.passed ?? 0}/${pfSummary.total ?? 0} 项检查`} />
+        <StatusCard title="健康等级" value={activationStatusLabel(healthLevel)} color={healthColor(healthLevel)} sub={`${channelHealth.length} 个活跃渠道`} />
         <StatusCard title="真实发送" value={safetyFlags.realSendCurrentlyOff === true ? '关闭 ✓' : '开启 ⚠'} color={safetyFlags.realSendCurrentlyOff === true ? SUCCESS : DANGER} sub={safetyFlags.realSendCurrentlyOff ? '安全 — 安全演练模式' : '已激活 — 请持续监控'} />
         <StatusCard title="上线清单" value={`自动通过 ${clSummary.automatedPassed ?? 0}/${(Number(clSummary.automatedPassed ?? 0) + Number(clSummary.automatedFailed ?? 0))}`} color={clSummary.automatedFailed === 0 ? SUCCESS : WARN_C} sub={`${clSummary.manualRequired ?? 0} 项人工待处理`} />
       </div>
@@ -253,11 +254,11 @@ export default function ActivationMonitoringPage() {
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: ACCENT, marginTop: 5, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#111827' }}>{String(e.action)}</span>
+                        <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#111827' }}>{auditActionLabel(e.action)}</span>
                         <span style={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>{relTime(String(e.createdAt))}</span>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: NEUTRAL }}>
-                        {!!e.actorRole && <span style={{ marginRight: '0.5rem' }}>{String(e.actorRole)}</span>}
+                        {!!e.actorRole && <span style={{ marginRight: '0.5rem' }}>{actorRoleLabel(e.actorRole)}</span>}
                         {!!e.safeMetadata && Object.keys(e.safeMetadata as object).length > 0 && (
                           <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{JSON.stringify(e.safeMetadata)}</span>
                         )}

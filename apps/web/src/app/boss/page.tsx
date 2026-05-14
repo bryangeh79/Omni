@@ -7,6 +7,7 @@ import {
   type BossToday, type BossMetrics, type ActionItem, type BossPipeline, type SseTransport,
   type ChannelHealth,
 } from '@/lib/api'
+import { stageLabel, channelTypeLabel } from '@/lib/enumLabels'
 
 // SSE event types that should trigger a Boss refresh
 const BOSS_REFRESH_EVENTS = new Set([
@@ -126,7 +127,7 @@ function PipelineSection({ pipeline }: { pipeline: BossPipeline }) {
         <div className="space-y-2.5">
           {visible.map((item) => (
             <div key={item.stage} className="flex items-center gap-3">
-              <div className="w-24 text-xs font-medium text-gray-600 flex-shrink-0">{item.stage}</div>
+              <div className="w-24 text-xs font-medium text-gray-600 flex-shrink-0" title={item.stage}>{stageLabel(item.stage)}</div>
               <div className="flex-1 bg-gray-50 rounded-full h-7 overflow-hidden relative">
                 <div
                   className="h-full rounded-full flex items-center px-3 transition-all"
@@ -341,7 +342,7 @@ export default function BossDashboardPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`text-xs px-2 py-0.5 rounded-lg font-medium ${STAGE_COLOR[c.customer.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-                              {c.customer.stage}
+                              {stageLabel(c.customer.stage)}
                             </span>
                           </td>
                           <td className="px-4 py-3 font-medium text-gray-700">{c.customer.score}</td>
@@ -416,8 +417,8 @@ export default function BossDashboardPage() {
                 <p className="text-sm font-semibold text-gray-700 mb-3">客户阶段分布</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(m.customers.stageBreakdown).sort(([,a],[,b]) => b-a).map(([stage, count]) => (
-                    <div key={stage} className={`text-sm rounded-xl px-3 py-1.5 font-medium ${STAGE_COLOR[stage] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {stage}: {count}
+                    <div key={stage} className={`text-sm rounded-xl px-3 py-1.5 font-medium ${STAGE_COLOR[stage] ?? 'bg-gray-100 text-gray-600'}`} title={stage}>
+                      {stageLabel(stage)}：{count}
                     </div>
                   ))}
                 </div>
@@ -442,7 +443,7 @@ export default function BossDashboardPage() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
               {[
-                { label: '渠道类型',  value: channelHealth.channelType ?? '—' },
+                { label: '渠道类型',  value: channelHealth.channelType ? channelTypeLabel(channelHealth.channelType) : '—' },
                 { label: '配置状态',  value: channelHealth.setupStatus },
                 { label: '上线状态',  value: channelHealth.liveStatus.replace(/_/g, ' ') },
                 { label: '真实发送',  value: channelHealth.realSendEnabled ? '已开启' : '已关闭（安全）' },

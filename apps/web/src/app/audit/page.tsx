@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getToken, fetchAuditLogs, type AuditLog, type AuditLogsResponse } from '@/lib/api'
+import { AUDIT_ACTION_LABELS, auditActionLabel, actorRoleLabel } from '@/lib/enumLabels'
 
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [email,    setEmail]    = useState('')
@@ -35,14 +36,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   )
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  TEAM_INVITE_DRAFT:      '记录团队邀请草稿',
-  TEAM_ROLE_UPDATE:       '修改成员角色',
-  TEAM_STATUS_UPDATE:     '修改成员状态',
-  BILLING_PLAN_SELECTED:  '选择计费套餐',
-  SETTINGS_PROFILE_UPDATE: '更新公司资料',
-  SMOKE_TEST_EVENT:       '冒烟测试事件',
-}
+// ACTION 标签来自共用 enumLabels（参见 apps/web/src/lib/enumLabels.ts）
 
 const ROLE_COLORS: Record<string, string> = {
   OWNER:   '#7c3aed',
@@ -128,7 +122,7 @@ export default function AuditPage() {
           style={{ padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.875rem' }}
         >
           <option value="">全部动作</option>
-          {Object.entries(ACTION_LABELS).map(([k, v]) => (
+          {Object.entries(AUDIT_ACTION_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
@@ -202,7 +196,7 @@ export default function AuditPage() {
 
 function AuditCard({ log }: { log: AuditLog }) {
   // Phase 18B: prefer server `summary`; fall back to label map for older codepaths
-  const label     = log.summary ?? ACTION_LABELS[log.action] ?? log.action
+  const label     = log.summary ?? auditActionLabel(log.action)
   const roleColor = log.actorRole ? (ROLE_COLORS[log.actorRole] ?? '#374151') : '#9ca3af'
   const meta      = formatSafeMetadata(log.safeMetadata)
 
@@ -236,7 +230,7 @@ function AuditCard({ log }: { log: AuditLog }) {
                 padding: '0.125rem 0.5rem',
                 borderRadius: 12,
               }}>
-                {log.actorRole}
+                {actorRoleLabel(log.actorRole)}
               </span>
             )}
           </div>

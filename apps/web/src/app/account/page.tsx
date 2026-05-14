@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getToken } from '@/lib/api'
+import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel } from '@/lib/enumLabels'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:43111'
 const ACCENT   = '#6366f1'
@@ -295,7 +296,7 @@ export default function AccountPage() {
         <Card title="您的账户">
           <Row label="姓名"      value={String(currentUser.name  ?? '—')} />
           <Row label="邮箱"      value={String(currentUser.email ?? '—')} mono />
-          <Row label="角色"      value={String(currentUser.role  ?? '—')} color={ACCENT} />
+          <Row label="角色"      value={actorRoleLabel(currentUser.role)} color={ACCENT} />
           <Row label="状态"      value={currentUser.isActive ? '激活' : '停用'} color={currentUser.isActive ? SUCCESS : DANGER} />
           <Row label="注册日期"  value={currentUser.memberSince ? new Date(String(currentUser.memberSince)).toLocaleDateString('zh-CN') : '—'} />
         </Card>
@@ -311,9 +312,9 @@ export default function AccountPage() {
         </Card>
 
         <Card title="渠道设置" action={{ label: '前往 →', onClick: () => window.location.href = '/channels/setup' }}>
-          <Row label="渠道类型"      value={String(channel.channelType ?? '未配置')} />
-          <Row label="配置状态"      value={String(channel.setupStatus ?? 'NOT_STARTED')} />
-          <Row label="凭据状态"      value={String(channel.credentialStatus ?? 'NONE')} color={channel.credentialStatus === 'ENCRYPTED_STORED' ? SUCCESS : NEUTRAL} />
+          <Row label="渠道类型"      value={channel.channelType ? channelTypeLabel(channel.channelType) : '未配置'} />
+          <Row label="配置状态"      value={channelSetupStatusLabel(channel.setupStatus ?? 'DRAFT')} />
+          <Row label="凭据状态"      value={credentialStatusLabel(channel.credentialStatus ?? 'NONE')} color={channel.credentialStatus === 'ENCRYPTED_STORED' ? SUCCESS : NEUTRAL} />
           <Row label="活跃渠道数"    value={String(channel.activeChannelCount ?? 0)} />
         </Card>
       </div>

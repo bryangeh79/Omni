@@ -11,32 +11,14 @@ import {
   type SseTransport,
 } from '@/lib/api'
 import { toChineseError } from '@/lib/errorText'
+import {
+  stageLabel,
+  conversationStatusLabel,
+  channelTypeLabel,
+  messageSenderLabel,
+} from '@/lib/enumLabels'
 
 const STAGES = ['NEW','INTERESTED','HIGH_INTENT','QUOTED','BOOKED','WON','LOST','AFTER_SALES'] as const
-
-// Stage / status / channel / sender enum → 中文 label
-const STAGE_LABEL: Record<string, string> = {
-  NEW: '新客户', INTERESTED: '已确认需求', HIGH_INTENT: '高意向',
-  QUOTED: '已报价', BOOKED: '已预约', WON: '已成交', LOST: '已流失', AFTER_SALES: '售后',
-}
-const STATUS_LABEL: Record<string, string> = {
-  AI_HANDLING:     'AI 处理中',
-  PENDING_HANDOFF: '待人工接管',
-  HUMAN_HANDLING:  '人工处理中',
-  CLOSED:          '已关闭',
-}
-// Reserved for future use in message bubble metadata
-const _SENDER_LABEL: Record<string, string> = {
-  AI:          'AI 客服',
-  HUMAN_AGENT: '人工客服',
-  CUSTOMER:    '客户',
-  SYSTEM:      '系统',
-}
-const _DIRECTION_LABEL: Record<string, string> = {
-  INBOUND:  '客户消息',
-  OUTBOUND: '已发送',
-}
-void _SENDER_LABEL; void _DIRECTION_LABEL;
 
 // ── Login Form ────────────────────────────────────────────────────────────────
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -125,7 +107,7 @@ function ConvItem({
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-gray-800 truncate">{name}</span>
         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-          <span className={`w-2 h-2 rounded-full ${statusColor}`} title={STATUS_LABEL[conv.status] ?? conv.status} />
+          <span className={`w-2 h-2 rounded-full ${statusColor}`} title={conversationStatusLabel(conv.status)} />
           {conv.unreadCount > 0 && (
             <span className="bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
               {conv.unreadCount}
@@ -150,7 +132,7 @@ function MsgBubble({ msg }: { msg: Message }) {
   const isSystem   = msg.senderType === 'SYSTEM'
   const isAi       = msg.senderType === 'AI'
   const ts         = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  const label      = isAi ? 'AI 客服' : msg.senderType === 'HUMAN_AGENT' ? '我' : ''
+  const label      = msg.senderType === 'HUMAN_AGENT' ? '我' : isAi ? messageSenderLabel('AI') : ''
 
   if (isSystem) {
     return (
@@ -252,13 +234,13 @@ function CustomerCard({
                 onClick={() => handleStageChange(s)}
                 className={`text-xs rounded px-2 py-0.5 font-medium cursor-pointer transition-opacity ${STAGE_COLORS[s] ?? 'bg-gray-100 text-gray-600'} ${c.stage === s ? 'ring-2 ring-offset-1 ring-blue-400' : 'opacity-60 hover:opacity-100'}`}
               >
-                {STAGE_LABEL[s] ?? s}
+                {stageLabel(s)}
               </button>
             ))}
           </div>
         ) : (
           <span className={`text-xs rounded px-2 py-0.5 font-medium ${STAGE_COLORS[c.stage] ?? 'bg-gray-100 text-gray-600'}`}>
-            {STAGE_LABEL[c.stage] ?? c.stage}
+            {stageLabel(c.stage)}
           </span>
         )}
       </div>
@@ -295,8 +277,8 @@ function CustomerCard({
       </div>
 
       <div className="border-t pt-3 space-y-1 text-xs text-gray-500">
-        <div><span className="font-medium">渠道：</span>{detail.channel.type}</div>
-        <div><span className="font-medium">对话状态：</span>{STATUS_LABEL[detail.status] ?? detail.status}</div>
+        <div><span className="font-medium">渠道：</span>{channelTypeLabel(detail.channel.type)}</div>
+        <div><span className="font-medium">对话状态：</span>{conversationStatusLabel(detail.status)}</div>
         {detail.assignedUserId && (
           <div><span className="font-medium">负责人：</span>{detail.assignedUserId.slice(0, 8)}…</div>
         )}
@@ -571,7 +553,7 @@ export default function InboxPage() {
                     : '…'}
                 </span>
                 {detail && (
-                  <span className="ml-2 text-xs text-gray-400">{STATUS_LABEL[detail.status] ?? detail.status}</span>
+                  <span className="ml-2 text-xs text-gray-400">{conversationStatusLabel(detail.status)}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -579,6 +561,8 @@ export default function InboxPage() {
                   <button
                     onClick={handleTakeover}
                     disabled={actionBusy}
+                    title="暂停 AI 自动回复，由人工客服处理此对话"
+                    aria-label="人工接管对话"
                     className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded disabled:opacity-50"
                   >
                     人工接管
@@ -588,6 +572,8 @@ export default function InboxPage() {
                   <button
                     onClick={handleReleaseAi}
                     disabled={actionBusy}
+                    title="恢复 AI 自动回复"
+                    aria-label="释放对话给 AI"
                     className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded disabled:opacity-50"
                   >
                     释放给 AI
@@ -597,6 +583,8 @@ export default function InboxPage() {
                   <button
                     onClick={handleClose}
                     disabled={actionBusy}
+                    title="关闭后不可继续回复，除非重新开启"
+                    aria-label="关闭对话"
                     className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded disabled:opacity-50"
                   >
                     关闭对话
@@ -646,6 +634,8 @@ export default function InboxPage() {
               <button
                 type="submit"
                 disabled={sending || !composer.trim()}
+                title="发送回复（Enter）"
+                aria-label="发送回复"
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 flex-shrink-0"
               >
                 {sending ? '发送中…' : '发送'}

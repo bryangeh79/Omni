@@ -12,27 +12,30 @@ import {
   type CredentialsStatus, type ActivationResult,
   type WaWebStatus, type MetaLiveStatus,
 } from '@/lib/api'
+import { channelSetupStatusLabel, credentialStatusLabel, activationStatusLabel } from '@/lib/enumLabels'
 
 // ── Status badge helpers ──────────────────────────────────────────────────────
-const SETUP_STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  DRAFT:                  { label: '草稿',           cls: 'bg-gray-100 text-gray-600' },
-  TESTED_STUB:            { label: '演练已通过',     cls: 'bg-blue-50 text-blue-700' },
-  READY_FOR_CREDENTIALS:  { label: '待填凭据',       cls: 'bg-amber-50 text-amber-700' },
-  CREDENTIALS_SAVED:      { label: '凭据已保存',     cls: 'bg-indigo-50 text-indigo-700' },
-  ACTIVATION_PENDING:     { label: '激活等待中',     cls: 'bg-orange-50 text-orange-700' },
-  ACTIVE:                 { label: '已激活',         cls: 'bg-emerald-50 text-emerald-700' },
-  FAILED:                 { label: '失败',           cls: 'bg-red-50 text-red-700' },
+// Labels 来自共用 enumLabels；本地仅保留颜色样式 → 单一事实来源 + 视觉一致
+const SETUP_STATUS_CLS: Record<string, string> = {
+  DRAFT:                  'bg-gray-100 text-gray-600',
+  TESTED_STUB:            'bg-blue-50 text-blue-700',
+  READY_FOR_CREDENTIALS:  'bg-amber-50 text-amber-700',
+  CREDENTIALS_SAVED:      'bg-indigo-50 text-indigo-700',
+  ACTIVATION_PENDING:     'bg-orange-50 text-orange-700',
+  ACTIVE:                 'bg-emerald-50 text-emerald-700',
+  FAILED:                 'bg-red-50 text-red-700',
 }
 
-const CRED_STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  NONE:             { label: '未设置',           cls: 'bg-gray-100 text-gray-500' },
-  DRAFT:            { label: '草稿（未加密）',   cls: 'bg-amber-50 text-amber-600' },
-  ENCRYPTED_STORED: { label: '已加密保存',       cls: 'bg-emerald-50 text-emerald-700' },
+const CRED_STATUS_CLS: Record<string, string> = {
+  NONE:             'bg-gray-100 text-gray-500',
+  DRAFT:            'bg-amber-50 text-amber-600',
+  ENCRYPTED_STORED: 'bg-emerald-50 text-emerald-700',
 }
 
-function StatusBadge({ status, cfg }: { status: string; cfg: Record<string, { label: string; cls: string }> }) {
-  const c = cfg[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600' }
-  return <span className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full ${c.cls}`}>{c.label}</span>
+function StatusBadge({ status, kind }: { status: string; kind: 'setup' | 'cred' }) {
+  const cls = (kind === 'setup' ? SETUP_STATUS_CLS : CRED_STATUS_CLS)[status] ?? 'bg-gray-100 text-gray-600'
+  const label = kind === 'setup' ? channelSetupStatusLabel(status) : credentialStatusLabel(status)
+  return <span className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full ${cls}`}>{label}</span>
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -264,8 +267,8 @@ export default function ChannelSetupPage() {
             <div>
               <h1 className="text-base font-bold text-gray-900">渠道设置</h1>
               <div className="flex items-center gap-2 mt-0.5">
-                <StatusBadge status={setupStatus} cfg={SETUP_STATUS_CFG} />
-                <StatusBadge status={credStat}   cfg={CRED_STATUS_CFG} />
+                <StatusBadge status={setupStatus} kind="setup" />
+                <StatusBadge status={credStat}    kind="cred" />
               </div>
             </div>
           </div>
@@ -332,10 +335,10 @@ export default function ChannelSetupPage() {
             <p className="text-xs text-gray-500">已保存手机末尾：****{status.phoneLast4}</p>
           )}
           <div className="flex gap-2">
-            <button onClick={() => { void handleSaveDraft() }} disabled={saving || !selected} className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+            <button onClick={() => { void handleSaveDraft() }} disabled={saving || !selected} title="保存渠道草稿到数据库（不会触发真实连接）" className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
               {saving ? '保存中…' : '保存草稿'}
             </button>
-            <button onClick={() => { void handleTest() }} disabled={testing} className="px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
+            <button onClick={() => { void handleTest() }} disabled={testing} title="仅检查配置，不会发送真实 WhatsApp 消息或调用 Meta API" className="px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
               {testing ? '测试中…' : '安全演练'}
             </button>
           </div>
@@ -372,7 +375,7 @@ export default function ChannelSetupPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-800">凭据保险库</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <StatusBadge status={credStat} cfg={CRED_STATUS_CFG} />
+                  <StatusBadge status={credStat} kind="cred" />
                   {credStatus?.credentialLast4 && <span className="text-xs text-gray-500">凭据末尾：****{credStatus.credentialLast4}</span>}
                   {credStatus && <span className="text-xs text-gray-400">保险库：{credStatus.vaultConfigured ? '✓ 已配置' : '⚠ 未配置'}</span>}
                 </div>
@@ -416,7 +419,7 @@ export default function ChannelSetupPage() {
                   />
                   <p className="text-xs text-gray-400 mt-0.5">仅末四位用于显示，原始 token 永远不会返回。</p>
                 </div>
-                <button onClick={() => { void handleSaveCreds() }} disabled={savingCreds || (!wabaId && !phoneId && !accessToken)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                <button onClick={() => { void handleSaveCreds() }} disabled={savingCreds || (!wabaId && !phoneId && !accessToken)} title="保存前会加密处理，不会在页面回显原始凭据" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
                   {savingCreds ? '加密保存中…' : '保存凭据（加密）'}
                 </button>
               </div>
@@ -451,10 +454,10 @@ export default function ChannelSetupPage() {
           </div>
 
           <div className="flex gap-2 pt-1">
-            <button onClick={() => { void handleRequestActivation() }} disabled={requestingAct || !selected} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+            <button onClick={() => { void handleRequestActivation() }} disabled={requestingAct || !selected} title="发起激活流程，仍受环境门控保护；不会自动开启真实发送" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
               {requestingAct ? '请求中…' : '发起激活请求'}
             </button>
-            <button onClick={() => { void handleConfirmActivation() }} disabled={confirmingAct || setupStatus !== 'ACTIVATION_PENDING'} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+            <button onClick={() => { void handleConfirmActivation() }} disabled={confirmingAct || setupStatus !== 'ACTIVATION_PENDING'} title="将渠道标记为已激活；真实发送仍需运维显式开启 env 标志" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
               {confirmingAct ? '确认中…' : '确认激活'}
             </button>
           </div>
@@ -497,7 +500,7 @@ export default function ChannelSetupPage() {
               <h3 className="text-sm font-semibold text-gray-800">WhatsApp Web 真实激活</h3>
               {waWebStatus && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${waWebStatus.waSessionAllowed ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                  {waWebStatus.sessionStatus}
+                  {activationStatusLabel(waWebStatus.sessionStatus)}
                 </span>
               )}
             </div>
@@ -531,7 +534,7 @@ export default function ChannelSetupPage() {
               <h3 className="text-sm font-semibold text-gray-800">Meta Webhook 真实验证</h3>
               {metaLiveStatus && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${metaLiveStatus.liveStatus === 'READY_FOR_LIVE_TEST' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {metaLiveStatus.liveStatus.replace(/_/g, ' ')}
+                  {activationStatusLabel(metaLiveStatus.liveStatus)}
                 </span>
               )}
             </div>

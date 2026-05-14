@@ -1,5 +1,22 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 UAT Round-4 — Enum Label Utility + Operator Tooltips
+
+继 Round-3 之后，Round-4 集中前端 enum → 中文 label 映射并接入操作者帮助提示：
+
+- **新增 `apps/web/src/lib/enumLabels.ts`**：单一事实来源，导出 `stageLabel / conversationStatusLabel / channelTypeLabel / channelSetupStatusLabel / credentialStatusLabel / actorRoleLabel / messageSenderLabel / messageDirectionLabel / followUpScenarioLabel / followUpStatusLabel / activationStatusLabel / auditActionLabel / severityLabel / booleanLabel / safeEnumLabel`，未知值安全回退到原始字符串或 `—`。
+- **Inbox / PWA**：移除重复的 STAGE_LABEL / STATUS_LABEL 本地副本，全部改用共用 util；MsgBubble 用 `messageSenderLabel`、PWA FollowUp 用 `followUpScenarioLabel`。
+- **Channels Setup**：StatusBadge 抽取「颜色 class + 共用 label」，移除冗余 CFG dict；waWeb / Meta 真实激活状态显示用 `activationStatusLabel`。
+- **Audit**：ACTION_LABELS 移至共用 util；actorRole 显示用 `actorRoleLabel`。
+- **Activation Monitoring**：就绪等级 / 健康等级 / actor / action 全部走共用 util。
+- **Team**：RoleBadge / 顶部 myRole / 角色更新通知 / 邀请草稿通知用 `actorRoleLabel`；ROLES select option 显示中文。
+- **Account**：currentUser.role / channel.channelType / setupStatus / credentialStatus 全部走共用 util。
+- **Settings**：team users / channel section 同步走共用 util。
+- **Boss Dashboard**：管道阶段、紧急客户表格 stage、阶段分布、渠道健康度 channelType 全部走共用 util。
+- **操作者 tooltips**：Inbox 人工接管 / 释放给 AI / 关闭对话 / 发送 + PWA 同样 + Channels 保存草稿 / 安全演练 / 保存凭据 / 发起激活 / 确认激活 — 添加 `title` 与 `aria-label`，简短说明影响（如「暂停 AI 自动回复，由人工客服处理此对话」「仅检查配置，不会发送真实 WhatsApp 消息」「保存前会加密处理，不会在页面回显原始凭据」）。
+- **未触碰**：API 字段名、env、route paths、enum value 本体、smoke 测试。
+- **真实发送门控、产品定位（非广播 / 非广告 / 非群发）不变。**
+
 ## Post-v1 UAT Round-3 — Inbox / PWA / Signup + Error Mapping
 
 继 Round-2 之后，Round-3 完成 Inbox 工作流、PWA 移动端与 Signup 注册流的深度中文化，并引入前端错误文案中文映射工具：
