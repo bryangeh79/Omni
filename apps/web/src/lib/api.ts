@@ -576,6 +576,73 @@ export async function saveFaqToKnowledge(
   })
 }
 
+// ── Round-9A: Quota + AI Smart Reply + Add-ons ───────────────────────────────
+export interface QuotaCounter           { included: number; used: number; remaining: number; overLimit: boolean }
+export interface QuotaCounterWithCredits extends QuotaCounter {
+  monthlyIncluded:  number
+  monthlyUsed:      number
+  monthlyRemaining: number
+  purchasedCredits: number
+  totalRemaining:   number
+}
+export interface QuotaSummary {
+  plan: {
+    id:                  string
+    name:                string
+    priceRm:             number
+    period:              'monthly'
+    metaApiFeeIncluded:  false
+    metaApiFeeNote:      string
+    visibleRoles:        string[]
+    aiSmartReplyDefault: boolean
+    launchCommitmentOffer?: {
+      priceRm:           number
+      period:            'monthly'
+      commitmentMonths:  number
+      upfront:           number
+      originalSixMonth:  number
+      savings:           number
+      note:              string
+    }
+  }
+  aiSmartReplyEnabled: boolean
+  whatsapp:    QuotaCounter
+  products:    QuotaCounter
+  faq:         QuotaCounterWithCredits
+  aiReply:     QuotaCounterWithCredits
+  teamUsers:   QuotaCounter
+  warnings:    string[]
+  cta:         { productExpansion?: string; faqCredits?: string; aiReplyCredits?: string }
+  addOns:      Array<{ id: string; kind: string; tier: string; priceRm: number; recurring: string; slots?: number; credits?: number; label: string; validMonths?: number }>
+  recommendedAddOnIds: string[]
+  metaApiFeeNote: string
+}
+
+export async function fetchQuotaSummary(): Promise<QuotaSummary> {
+  return apiFetch<QuotaSummary>('/billing/quota-summary')
+}
+
+export async function setAiSmartReply(enabled: boolean): Promise<{ aiSmartReplyEnabled: boolean }> {
+  return apiFetch('/billing/ai-smart-reply', { method: 'POST', body: JSON.stringify({ enabled }) })
+}
+
+export async function createPurchaseIntent(addOnId: string): Promise<{ intentId: string; addOn: { id: string; label: string; priceRm: number; recurring: string }; status: 'pending'; charged: false; note: string }> {
+  return apiFetch('/billing/purchase-intent', { method: 'POST', body: JSON.stringify({ addOnId }) })
+}
+
+export async function processStubPaymentEvent(args: { intentId: string; externalEventId: string; status: 'success' | 'failed' | 'pending'; note?: string }): Promise<{ applied: boolean; status: string; ledgerEntryId: string; alreadyProcessed: boolean; note: string }> {
+  return apiFetch('/billing/payment-event', { method: 'POST', body: JSON.stringify(args) })
+}
+
+export async function fetchPlanDefinitions(): Promise<{
+  plans: Record<string, unknown>
+  addOns: QuotaSummary['addOns']
+  recommendedAddOnIds: Record<string, string[]>
+  metaApiFeeNote: string
+}> {
+  return apiFetch('/billing/plan-definitions')
+}
+
 // ── Knowledge Base (Phase 12A) ────────────────────────────────────────────────
 export interface KnowledgeItem {
   id:        string

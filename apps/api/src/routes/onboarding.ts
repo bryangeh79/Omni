@@ -26,6 +26,7 @@ import { prisma, OnboardingStatus, KnowledgeItemType } from '@omni/db'
 import type { AiProvider, AiAgentInput } from '@omni/shared'
 import { requireAuth, getAuthUser } from '../auth'
 import { generateProductSalesConfig, type ProductSetupInput, type ProductSalesConfig } from '../lib/product-sales-config-generator'
+import { tryDeductFaqGeneration } from '../lib/quota'
 
 // ── Type: enriched preview shape ────────────────────────────────────────────
 interface FaqSample { question: string; answer: string }
@@ -625,6 +626,18 @@ export async function onboardingRoutes(app: FastifyInstance) {
       // Reject raw file bytes — uploaded-file metadata only.
       if (body.uploadedFile && typeof (body.uploadedFile as Record<string, unknown>).rawBytes !== 'undefined') {
         return reply.status(400).send({ error: 'Raw file bytes are not accepted. Send metadata + extractedText only.' })
+      }
+
+      // Round-9A quota: 1 click = 1 FAQ generation. Monthly first, then purchased credits.
+      const tenantRow = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true } })
+      const quota = await tryDeductFaqGeneration(tenantId, tenantRow?.plan ?? 'trial')
+      if (!quota.ok) {
+        return reply.status(429).send({
+          error: 'AI FAQ generation quota exhausted',
+          quotaExhausted: true,
+          cta: quota.cta ?? '购买 AI FAQ 生成包',
+          realAiProviderCalled: false,
+        })
       }
 
       const config = generateProductSalesConfig(body)

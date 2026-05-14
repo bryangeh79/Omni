@@ -4147,6 +4147,9 @@ async function smoke() {
   // Round-8: Product Intelligence Setup + Sales Config Generator
   // ════════════════════════════════════════════════════════════════════════
 
+  // Round-9A: reset demo tenant billing state so quota counters are clean for this run.
+  await prismaResetBillingState('demo-tenant-001')
+
   console.log('\n220. Round-8: generate-sales-config requires auth')
   check('POST /onboarding/products/generate-sales-config no token → 401',
     (await post('/onboarding/products/generate-sales-config', { productName: 'X' })).status === 401)
@@ -4305,6 +4308,230 @@ async function smoke() {
   const r8MeBody = await (await get('/auth/me', accessToken)).json() as Record<string, unknown>
   check('still authenticated (no token side-effect)',  typeof r8MeBody.tenantId === 'string')
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9A: Quota + AI Smart Reply + Add-on Foundation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n235. Round-9A: plan-definitions returns Starter + Pro spec')
+  check('plan-definitions no token → 401', (await get('/billing/plan-definitions')).status === 401)
+  const r9PlansRes = await get('/billing/plan-definitions', accessToken)
+  check('plan-definitions → 200', r9PlansRes.status === 200)
+  const r9PlansBody = await r9PlansRes.json() as Record<string, unknown>
+  const r9Plans = r9PlansBody.plans as Record<string, Record<string, unknown>>
+  // Starter
+  check('Starter priceRm = 199',                  r9Plans.starter?.priceRm === 199)
+  check('Starter productSlots = 10',              r9Plans.starter?.productSlots === 10)
+  check('Starter aiFaqGenerationsPerMonth = 10',  r9Plans.starter?.aiFaqGenerationsPerMonth === 10)
+  check('Starter aiRepliesPerMonth = 1000',       r9Plans.starter?.aiRepliesPerMonth === 1000)
+  check('Starter whatsappConnections = 1',        r9Plans.starter?.whatsappConnections === 1)
+  check('Starter aiSmartReplyDefault = true',     r9Plans.starter?.aiSmartReplyDefault === true)
+  check('Starter metaApiFeeIncluded = false',     r9Plans.starter?.metaApiFeeIncluded === false)
+  // Pro
+  check('Pro priceRm = 399 (normal monthly)',     r9Plans.pro?.priceRm === 399)
+  check('Pro productSlots = 30',                  r9Plans.pro?.productSlots === 30)
+  check('Pro aiFaqGenerationsPerMonth = 50',      r9Plans.pro?.aiFaqGenerationsPerMonth === 50)
+  check('Pro aiRepliesPerMonth = 5000',           r9Plans.pro?.aiRepliesPerMonth === 5000)
+  check('Pro teamUsers = 5',                      r9Plans.pro?.teamUsers === 5)
+  check('Pro metaApiFeeIncluded = false',         r9Plans.pro?.metaApiFeeIncluded === false)
+  const proOffer = r9Plans.pro?.launchCommitmentOffer as Record<string, unknown> | undefined
+  check('Pro Launch Commitment Offer exists',       !!proOffer)
+  check('Pro Offer priceRm = 299',                  proOffer?.priceRm === 299)
+  check('Pro Offer commitmentMonths = 6',           proOffer?.commitmentMonths === 6)
+  check('Pro Offer upfront = 1794',                 proOffer?.upfront === 1794)
+  check('Pro Offer originalSixMonth = 2394',        proOffer?.originalSixMonth === 2394)
+  check('Pro Offer savings = 600',                  proOffer?.savings === 600)
+  check('Pro normal monthly ≠ RM299',               r9Plans.pro?.priceRm !== 299)
+  // Meta API note
+  check('plan-definitions includes Meta API pass-through note',
+    typeof r9PlansBody.metaApiFeeNote === 'string' && (r9PlansBody.metaApiFeeNote as string).includes('Meta'))
+
+  console.log('\n236. Round-9A: add-on definitions S/M/L for all three categories')
+  const r9AddOns = r9PlansBody.addOns as Array<Record<string, unknown>>
+  for (const kind of ['product_expansion', 'faq_credits', 'ai_reply_credits']) {
+    const tiers = r9AddOns.filter(a => a.kind === kind).map(a => a.tier)
+    check(`addOns has S/M/L for ${kind}`, ['S','M','L'].every(t => tiers.includes(t)))
+  }
+  // Specific price spot-checks
+  check('product_exp_s = RM29',    r9AddOns.find(a => a.id === 'product_exp_s')?.priceRm === 29)
+  check('product_exp_m = RM79',    r9AddOns.find(a => a.id === 'product_exp_m')?.priceRm === 79)
+  check('product_exp_l = RM129',   r9AddOns.find(a => a.id === 'product_exp_l')?.priceRm === 129)
+  check('faq_credit_s = RM19',     r9AddOns.find(a => a.id === 'faq_credit_s')?.priceRm === 19)
+  check('faq_credit_l = RM129',    r9AddOns.find(a => a.id === 'faq_credit_l')?.priceRm === 129)
+  check('ai_reply_l = RM299',      r9AddOns.find(a => a.id === 'ai_reply_l')?.priceRm === 299)
+  check('faq_credits one_time + validMonths=12',
+    r9AddOns.filter(a => a.kind === 'faq_credits').every(a => a.recurring === 'one_time' && a.validMonths === 12))
+  check('ai_reply_credits one_time + validMonths=12',
+    r9AddOns.filter(a => a.kind === 'ai_reply_credits').every(a => a.recurring === 'one_time' && a.validMonths === 12))
+  check('product_expansion is recurring monthly',
+    r9AddOns.filter(a => a.kind === 'product_expansion').every(a => a.recurring === 'monthly'))
+
+  // ── Reset billing state for the demo tenant so quota tests start fresh.
+  await prismaResetBillingState('demo-tenant-001')
+
+  console.log('\n237. Round-9A: quota-summary auth + shape')
+  check('quota-summary no token → 401', (await get('/billing/quota-summary')).status === 401)
+  const r9QsRes = await get('/billing/quota-summary', accessToken)
+  check('quota-summary → 200',          r9QsRes.status === 200)
+  const r9Qs = await r9QsRes.json() as Record<string, unknown>
+  for (const key of ['plan', 'aiSmartReplyEnabled', 'whatsapp', 'products', 'faq', 'aiReply', 'teamUsers', 'warnings', 'cta', 'addOns', 'recommendedAddOnIds', 'metaApiFeeNote']) {
+    check(`quota-summary has "${key}"`, key in r9Qs)
+  }
+  check('aiSmartReplyEnabled default true', r9Qs.aiSmartReplyEnabled === true)
+  const r9Faq = r9Qs.faq as Record<string, unknown>
+  const r9Air = r9Qs.aiReply as Record<string, unknown>
+  for (const key of ['monthlyIncluded', 'monthlyUsed', 'monthlyRemaining', 'purchasedCredits', 'totalRemaining']) {
+    check(`faq counter has "${key}"`,     key in r9Faq)
+    check(`aiReply counter has "${key}"`, key in r9Air)
+  }
+  const r9Prod = r9Qs.products as Record<string, unknown>
+  check('products counter has included/used/remaining/overLimit',
+    ['included','used','remaining','overLimit'].every(k => k in r9Prod))
+
+  console.log('\n238. Round-9A: AI Smart Reply toggle ON/OFF + persist')
+  check('toggle no token → 401', (await post('/billing/ai-smart-reply', { enabled: false })).status === 401)
+  check('toggle missing enabled → 400', (await post('/billing/ai-smart-reply', {}, accessToken)).status === 400)
+  check('toggle invalid type → 400', (await post('/billing/ai-smart-reply', { enabled: 'yes' }, accessToken)).status === 400)
+  const r9Off = await (await post('/billing/ai-smart-reply', { enabled: false }, accessToken)).json() as Record<string, unknown>
+  check('toggle off persists',   r9Off.aiSmartReplyEnabled === false)
+  const r9QsAfterOff = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('quota-summary reflects OFF', r9QsAfterOff.aiSmartReplyEnabled === false)
+  const r9On = await (await post('/billing/ai-smart-reply', { enabled: true }, accessToken)).json() as Record<string, unknown>
+  check('toggle on persists',    r9On.aiSmartReplyEnabled === true)
+
+  console.log('\n239. Round-9A: FAQ generation deducts quota')
+  await prismaResetBillingState('demo-tenant-001')
+  const r9QsBefore = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  const r9FaqBefore = (r9QsBefore.faq as Record<string, unknown>).monthlyUsed as number
+  const r9FaqGen = await post('/onboarding/products/generate-sales-config',
+    { productName: 'Smoke R9 Quota Product', desiredFaqCount: 30 }, accessToken)
+  check('generate succeeds (within quota) → 200', r9FaqGen.status === 200)
+  const r9QsAfter = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  const r9FaqAfter = (r9QsAfter.faq as Record<string, unknown>).monthlyUsed as number
+  check('faq.monthlyUsed incremented by exactly 1', r9FaqAfter === r9FaqBefore + 1)
+
+  console.log('\n240. Round-9A: FAQ quota exhaustion blocks regenerate')
+  // trial plan = 3 generations. We've used 1 so far. Bring up to 3 then expect 429.
+  await prismaForceFaqUsage('demo-tenant-001', 3)
+  const r9FaqBlocked = await post('/onboarding/products/generate-sales-config',
+    { productName: 'Smoke R9 Blocked', desiredFaqCount: 30 }, accessToken)
+  check('blocked when exhausted → 429',     r9FaqBlocked.status === 429)
+  const r9BlockedBody = await r9FaqBlocked.json() as Record<string, unknown>
+  check('429 has quotaExhausted=true',      r9BlockedBody.quotaExhausted === true)
+  check('429 has cta',                      typeof r9BlockedBody.cta === 'string')
+  check('429 realAiProviderCalled=false',   r9BlockedBody.realAiProviderCalled === false)
+
+  console.log('\n241. Round-9A: stub purchase intent creates pending entry')
+  check('intent no token → 401',
+    (await post('/billing/purchase-intent', { addOnId: 'faq_credit_s' })).status === 401)
+  check('intent missing addOnId → 400',
+    (await post('/billing/purchase-intent', {}, accessToken)).status === 400)
+  check('intent unknown addOnId → 400',
+    (await post('/billing/purchase-intent', { addOnId: 'bogus' }, accessToken)).status === 400)
+  const r9IntentRes = await post('/billing/purchase-intent', { addOnId: 'faq_credit_s' }, accessToken)
+  check('intent created → 201',         r9IntentRes.status === 201)
+  const r9Intent = await r9IntentRes.json() as Record<string, unknown>
+  check('intent has intentId',          typeof r9Intent.intentId === 'string')
+  check('intent status = pending',      r9Intent.status === 'pending')
+  check('intent charged = false',       r9Intent.charged === false)
+  check('intent paymentGateway=NOT_CONFIGURED', r9Intent.paymentGateway === 'NOT_CONFIGURED')
+  check('intent realPaymentGatewayCalled=false', r9Intent.realPaymentGatewayCalled === false)
+  const r9IntentId = r9Intent.intentId as string
+
+  console.log('\n242. Round-9A: pending/failed events do NOT add credits')
+  const r9QsBeforePending = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  const r9FaqCreditsBefore = (r9QsBeforePending.faq as Record<string, unknown>).purchasedCredits as number
+  const r9Pending = await post('/billing/payment-event', { intentId: r9IntentId, externalEventId: 'evt-r9a-pending-1', status: 'pending' }, accessToken)
+  check('pending event → 200',           r9Pending.status === 200)
+  const r9PendingBody = await r9Pending.json() as Record<string, unknown>
+  check('pending applied = false',       r9PendingBody.applied === false)
+  const r9Failed = await post('/billing/payment-event', { intentId: r9IntentId, externalEventId: 'evt-r9a-failed-1', status: 'failed' }, accessToken)
+  check('failed event → 200',            r9Failed.status === 200)
+  const r9FailedBody = await r9Failed.json() as Record<string, unknown>
+  check('failed applied = false',        r9FailedBody.applied === false)
+  const r9QsAfterPending = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('faq.purchasedCredits unchanged after pending/failed',
+    (r9QsAfterPending.faq as Record<string, unknown>).purchasedCredits === r9FaqCreditsBefore)
+
+  console.log('\n243. Round-9A: success event adds credits + idempotency')
+  const r9Success = await post('/billing/payment-event', { intentId: r9IntentId, externalEventId: 'evt-r9a-success-1', status: 'success' }, accessToken)
+  check('success event → 200',            r9Success.status === 200)
+  const r9SuccessBody = await r9Success.json() as Record<string, unknown>
+  check('success applied = true',         r9SuccessBody.applied === true)
+  const r9QsAfterSuccess = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('faq.purchasedCredits +10 after success',
+    ((r9QsAfterSuccess.faq as Record<string, unknown>).purchasedCredits as number) === r9FaqCreditsBefore + 10)
+  // Idempotent replay with same externalEventId
+  const r9Replay = await post('/billing/payment-event', { intentId: r9IntentId, externalEventId: 'evt-r9a-success-1', status: 'success' }, accessToken)
+  const r9ReplayBody = await r9Replay.json() as Record<string, unknown>
+  check('duplicate success event applied = false',           r9ReplayBody.applied === false)
+  check('duplicate success event alreadyProcessed = true',   r9ReplayBody.alreadyProcessed === true)
+  const r9QsAfterReplay = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('faq.purchasedCredits unchanged on replay',
+    ((r9QsAfterReplay.faq as Record<string, unknown>).purchasedCredits as number) === r9FaqCreditsBefore + 10)
+
+  console.log('\n244. Round-9A: purchased FAQ credits unblock generation after monthly exhaustion')
+  const r9FaqAfterCredit = await post('/onboarding/products/generate-sales-config',
+    { productName: 'Smoke R9 Post-Credit', desiredFaqCount: 30 }, accessToken)
+  check('generate succeeds via purchased credits → 200', r9FaqAfterCredit.status === 200)
+
+  console.log('\n245. Round-9A: product expansion add-on increases productSlots')
+  const r9ExpIntent = await (await post('/billing/purchase-intent', { addOnId: 'product_exp_m' }, accessToken)).json() as Record<string, unknown>
+  await post('/billing/payment-event', { intentId: r9ExpIntent.intentId, externalEventId: 'evt-r9a-exp-1', status: 'success' }, accessToken)
+  const r9QsExp = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  const r9ExpProducts = r9QsExp.products as Record<string, unknown>
+  // trial = 3 + +15 = 18 (or current plan slots + 15 if non-trial)
+  check('products.included grew by 15 (M tier)',
+    (r9ExpProducts.included as number) >= 15)
+
+  console.log('\n246. Round-9A: AI Reply credit foundation (no real AI call)')
+  // Buy small AI reply credit pack and confirm aiReply.purchasedCredits increases.
+  const r9AirIntent = await (await post('/billing/purchase-intent', { addOnId: 'ai_reply_s' }, accessToken)).json() as Record<string, unknown>
+  await post('/billing/payment-event', { intentId: r9AirIntent.intentId, externalEventId: 'evt-r9a-air-1', status: 'success' }, accessToken)
+  const r9QsAir = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('aiReply.purchasedCredits ≥ 1000 after S pack',
+    ((r9QsAir.aiReply as Record<string, unknown>).purchasedCredits as number) >= 1000)
+
+  console.log('\n247. Round-9A: AI Smart Reply OFF — direct FAQ reply path does NOT deduct AI Reply credits')
+  // Foundation invariant: no endpoint in Round-9A deducts AI Reply on its own.
+  // Confirm by comparing aiReply.monthlyUsed before/after several non-AI ops
+  // (FAQ retrieval, manual customer creation, knowledge fetch).
+  await post('/billing/ai-smart-reply', { enabled: false }, accessToken)
+  const r9QsAirOffBefore = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  const r9AirUsedBefore = (r9QsAirOffBefore.aiReply as Record<string, unknown>).monthlyUsed as number
+  await get('/knowledge?type=PRODUCT_FAQ&pageSize=5', accessToken)             // direct FAQ list
+  await get('/customers?page=1&pageSize=5', accessToken)                       // manual CRM list
+  await get('/onboarding/status', accessToken)                                 // onboarding read
+  const r9QsAirOffAfter = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('aiReply.monthlyUsed unchanged after direct-FAQ + manual + read calls',
+    ((r9QsAirOffAfter.aiReply as Record<string, unknown>).monthlyUsed as number) === r9AirUsedBefore)
+  // Re-enable for downstream consistency
+  await post('/billing/ai-smart-reply', { enabled: true }, accessToken)
+
+  console.log('\n248. Round-9A: response is clean — no secrets / payment tokens / metadataJson')
+  const r9Endpoints: Array<[string, () => Promise<Response>]> = [
+    ['plan-definitions',  () => get('/billing/plan-definitions',  accessToken)],
+    ['quota-summary',     () => get('/billing/quota-summary',     accessToken)],
+    ['intent',            () => post('/billing/purchase-intent',  { addOnId: 'faq_credit_s' }, accessToken)],
+  ]
+  const R9_FORBIDDEN = ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'apiKeyRef', 'JWT_SECRET', 'DATABASE_URL', 'accessToken', 'refreshToken', 'metadataJson', 'stripeSecretKey', 'razorpayKey', 'paymentSecret', 'webhookSignature']
+  for (const [label, fn] of r9Endpoints) {
+    const body = await (await fn()).text()
+    for (const pat of R9_FORBIDDEN) {
+      check(`${label} has no "${pat}"`, !body.includes(pat))
+    }
+  }
+
+  console.log('\n249. Round-9A: safety flags unchanged')
+  check('OMNI_ALLOW_WA_SESSION env reachable but not opted in',
+    process.env.OMNI_ALLOW_WA_SESSION !== 'true' && process.env.OMNI_ALLOW_WA_SESSION !== '1')
+  check('OMNI_ENABLE_REAL_META_SEND env not enabled',
+    process.env.OMNI_ENABLE_REAL_META_SEND !== 'true' && process.env.OMNI_ENABLE_REAL_META_SEND !== '1')
+  check('OMNI_ENABLE_ONBOARDING_AI env not enabled',
+    process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true' && process.env.OMNI_ENABLE_ONBOARDING_AI !== '1')
+
+  // Final billing-state reset so this smoke run leaves the demo tenant clean.
+  await prismaResetBillingState('demo-tenant-001')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -4330,6 +4557,26 @@ async function smoke() {
 }
 
 // ── DB helpers ─────────────────────────────────────────────────────────────
+
+async function prismaResetBillingState(tenantId: string): Promise<void> {
+  const { PrismaClient } = await import('@omni/db')
+  const p = new PrismaClient()
+  // deleteMany is no-op if not found, safe between runs
+  await p.tenantBillingState.deleteMany({ where: { tenantId } })
+  await p.$disconnect()
+}
+
+async function prismaForceFaqUsage(tenantId: string, used: number): Promise<void> {
+  const { PrismaClient } = await import('@omni/db')
+  const p = new PrismaClient()
+  const ym = (() => { const d = new Date(); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}` })()
+  await p.tenantBillingState.upsert({
+    where:  { tenantId },
+    create: { tenantId, currentMonthKey: ym, monthlyUsage: { faqGenerations: used, aiReplies: 0 } as object },
+    update: { currentMonthKey: ym, monthlyUsage: { faqGenerations: used, aiReplies: 0 } as object, purchasedCredits: { faq: 0, aiReply: 0 } as object },
+  })
+  await p.$disconnect()
+}
 
 async function prismaSetupConversation(channelId: string, customerId: string): Promise<{ convId: string }> {
   const { PrismaClient } = await import('@omni/db')

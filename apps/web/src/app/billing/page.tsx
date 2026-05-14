@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
-import { getToken, login, fetchBillingPlans, fetchUsageSummary, selectPlanDraft, type BillingPlan, type UsageSummary } from '@/lib/api'
+import { getToken, login, fetchBillingPlans, fetchUsageSummary, selectPlanDraft, fetchQuotaSummary, createPurchaseIntent, processStubPaymentEvent, type BillingPlan, type UsageSummary, type QuotaSummary } from '@/lib/api'
 import { planLabel, planPeriodLabel } from '@/lib/enumLabels'
 import { toChineseError } from '@/lib/errorText'
 
@@ -61,11 +61,48 @@ function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; c
   )
 }
 
+function QuotaRow({ label, included, used, overLimit, cta }: { label: string; included: number; used: number; remaining: number; overLimit: boolean; cta?: string }) {
+  const pct = included > 0 ? Math.min(100, Math.round((used / included) * 100)) : 0
+  const barColor = overLimit ? 'bg-red-500' : pct >= 90 ? 'bg-amber-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500'
+  return (
+    <div className="bg-gray-50 rounded-xl px-3 py-2.5">
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className="text-gray-600 font-medium">{label}</span>
+        <span className={`font-mono ${overLimit ? 'text-red-600' : 'text-gray-700'}`}>{used} / {included}{overLimit ? ' (超额)' : ''}</span>
+      </div>
+      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      {cta && <p className="text-[10px] text-amber-700 mt-1">⚠ {cta}</p>}
+    </div>
+  )
+}
+
+function QuotaCreditRow({ label, counter, cta }: { label: string; counter: { monthlyIncluded: number; monthlyUsed: number; monthlyRemaining: number; purchasedCredits: number; totalRemaining: number }; cta?: string }) {
+  const pct = counter.monthlyIncluded > 0 ? Math.min(100, Math.round((counter.monthlyUsed / counter.monthlyIncluded) * 100)) : 0
+  const barColor = counter.totalRemaining <= 0 ? 'bg-red-500' : pct >= 90 ? 'bg-amber-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500'
+  return (
+    <div className="bg-gray-50 rounded-xl px-3 py-2.5">
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className="text-gray-600 font-medium">{label}</span>
+        <span className={`font-mono ${counter.totalRemaining <= 0 ? 'text-red-600' : 'text-gray-700'}`}>{counter.monthlyUsed} / {counter.monthlyIncluded}{counter.purchasedCredits > 0 ? ` + ${counter.purchasedCredits} 已购` : ''}</span>
+      </div>
+      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[10px] text-gray-500 mt-1">剩余：本月 {counter.monthlyRemaining}{counter.purchasedCredits > 0 ? ` + 已购 ${counter.purchasedCredits}` : ''} = 总计 {counter.totalRemaining}</p>
+      {cta && <p className="text-[10px] text-amber-700">⚠ {cta}</p>}
+    </div>
+  )
+}
+
 export default function BillingPage() {
   const [authed,   setAuthed]   = useState<boolean | null>(null)
   const [plans,    setPlans]    = useState<{ plans: BillingPlan[]; currentPlan: string; boundary: Record<string,string>; paymentGateway: string } | null>(null)
   const [usage,    setUsage]    = useState<UsageSummary | null>(null)
+  const [quota,    setQuota]    = useState<QuotaSummary | null>(null)
   const [selecting, setSelecting] = useState(false)
+  const [buying,    setBuying]    = useState(false)
   const [notice,   setNotice]   = useState('')
   const [error,    setError]    = useState('')
 
@@ -75,9 +112,24 @@ export default function BillingPage() {
 
   async function load() {
     try {
-      const [p, u] = await Promise.all([fetchBillingPlans(), fetchUsageSummary().catch(() => null)])
-      setPlans(p); if (u) setUsage(u)
+      const [p, u, q] = await Promise.all([fetchBillingPlans(), fetchUsageSummary().catch(() => null), fetchQuotaSummary().catch(() => null)])
+      setPlans(p); if (u) setUsage(u); if (q) setQuota(q)
     } catch { /* ignore */ }
+  }
+
+  // Stub purchase flow: create intent, then immediately fire stub success event.
+  // In production this would redirect to a real payment provider checkout.
+  async function handleBuyAddOn(addOnId: string, label: string) {
+    if (!confirm(`确认购买「${label}」？\n\n仍在模拟模式：不会真实扣费；点击确认后会创建购买意向并立即标记为 success（stub），相应余额会加入您的账户。`)) return
+    setBuying(true); setError(''); setNotice('')
+    try {
+      const intent = await createPurchaseIntent(addOnId)
+      await processStubPaymentEvent({ intentId: intent.intentId, externalEventId: `stub-${intent.intentId}`, status: 'success', note: '前端模拟成功事件' })
+      setNotice(`已购买：${label}（stub mode，无真实扣费）。余额已更新。`)
+      setTimeout(() => setNotice(''), 4000)
+      await load()
+    } catch (e) { setError(toChineseError(e, '购买失败')) }
+    finally { setBuying(false) }
   }
 
   async function handleSelect(planId: string) {
@@ -124,6 +176,49 @@ export default function BillingPage() {
           <p><strong>规划模式：</strong>套餐选择仅为草稿偏好。尚未配置真实支付网关，完成支付集成前不会产生任何扣费。</p>
           <p><strong>权限：</strong>仅 OWNER 或 ADMIN 可选择套餐。MANAGER / AGENT / VIEWER 为只读权限。</p>
         </div>
+
+        {/* Round-9A: Quota counter */}
+        {quota && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h2 className="text-sm font-semibold text-gray-700">配额与用量（{planLabel(quota.plan.id)}）</h2>
+              <div className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${quota.aiSmartReplyEnabled ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                AI 智能回复 {quota.aiSmartReplyEnabled ? '已开启' : '已关闭'}
+              </div>
+            </div>
+            {quota.plan.launchCommitmentOffer && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5">
+                Pro 套餐 RM{quota.plan.launchCommitmentOffer.priceRm}/月仅作为 6 个月 Launch Commitment Offer 提供；6 个月预付 RM{quota.plan.launchCommitmentOffer.upfront}（原价 RM{quota.plan.launchCommitmentOffer.originalSixMonth}，节省 RM{quota.plan.launchCommitmentOffer.savings}）。正常月度价为 RM{quota.plan.priceRm}/月。
+              </p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <QuotaRow label="WhatsApp 连接" included={quota.whatsapp.included} used={quota.whatsapp.used} remaining={quota.whatsapp.remaining} overLimit={quota.whatsapp.overLimit} />
+              <QuotaRow label="产品 / 服务配置位" included={quota.products.included} used={quota.products.used} remaining={quota.products.remaining} overLimit={quota.products.overLimit} cta={quota.cta.productExpansion} />
+              <QuotaRow label="团队用户" included={quota.teamUsers.included} used={quota.teamUsers.used} remaining={quota.teamUsers.remaining} overLimit={quota.teamUsers.overLimit} />
+              <QuotaCreditRow label="AI FAQ 生成（本月）" counter={quota.faq} cta={quota.cta.faqCredits} />
+              <QuotaCreditRow label="AI 客户回复（本月）" counter={quota.aiReply} cta={quota.cta.aiReplyCredits} />
+            </div>
+            {quota.warnings.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 space-y-0.5">
+                {quota.warnings.map((w, i) => <p key={i} className="text-xs text-amber-700">⚠ {w}</p>)}
+              </div>
+            )}
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              <strong>说明：</strong>AI 智能回复开启时仅在 AI 生成被实际调用时扣 1 条 AI 回复配额；关闭时直接发送匹配的 FAQ 答案，不调用 AI、不扣配额。人工回复不扣配额。{quota.metaApiFeeNote}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {quota.addOns.map(a => {
+                const recommended = quota.recommendedAddOnIds.includes(a.id)
+                return (
+                  <button key={a.id} onClick={() => handleBuyAddOn(a.id, a.label)} disabled={buying} className={`text-[11px] px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${recommended ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`} title={a.label}>
+                    {recommended ? '⭐ ' : ''}{a.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Usage summary */}
         {usage && (

@@ -14,6 +14,12 @@ import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, requireRole, getAuthUser } from '../auth'
 import { createAuditLog }                        from '../lib/audit'
+import {
+  PLANS as PLAN_DEFS, ADD_ONS, RECOMMENDED_ADD_ONS, META_API_FEE_NOTE,
+} from '../lib/plans'
+import {
+  getQuotaSummary, setAiSmartReplyEnabled, createPurchaseIntent, processStubPaymentEvent,
+} from '../lib/quota'
 
 // ── Plan definitions ───────────────────────────────────────────────────────
 const PLANS = [
@@ -215,5 +221,134 @@ export async function billingRoutes(app: FastifyInstance) {
         note: 'Plan preference saved. No real charging occurs — payment gateway not configured in this phase.',
       }
     }
+  )
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9A: Quota + AI Smart Reply + Add-on Foundation
+  // No real payment gateway. All endpoints tenant-scoped and auditable.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── GET /billing/plan-definitions ───────────────────────────────────────
+  // Returns Round-9A plan + add-on spec for tenant-facing UI.
+  app.get('/plan-definitions', { preHandler: requireAuth }, async () => {
+    return {
+      plans: PLAN_DEFS,
+      addOns: ADD_ONS,
+      recommendedAddOnIds: RECOMMENDED_ADD_ONS,
+      metaApiFeeNote: META_API_FEE_NOTE,
+      noBroadcastNote: 'Omni 仅用于 1:1 WhatsApp AI 客服与成交跟进，不支持广播 / 广告 / 群发。',
+      realAiProviderCalled: false,
+      realPaymentGatewayCalled: false,
+    }
+  })
+
+  // ── GET /billing/quota-summary ──────────────────────────────────────────
+  app.get('/quota-summary', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true } })
+    const planId = tenant?.plan ?? 'trial'
+
+    // Compute current usage counters from existing tables.
+    const [usedProductSlots, usedWhatsapp, usedTeamUsers] = await Promise.all([
+      // Active products live in OnboardingDraft.generatedPreview.products[] (Round-8).
+      prisma.onboardingDraft.findUnique({ where: { tenantId }, select: { generatedPreview: true } })
+        .then(d => {
+          const p = (d?.generatedPreview as Record<string, unknown> | null)?.products
+          return Array.isArray(p) ? p.length : 0
+        }),
+      prisma.channel.count({ where: { tenantId, isActive: true } }).catch(() => 0),
+      prisma.user.count({ where: { tenantId, isActive: true } }),
+    ])
+
+    const summary = await getQuotaSummary(tenantId, planId, usedProductSlots, usedWhatsapp, usedTeamUsers)
+    return {
+      ...summary,
+      addOns: ADD_ONS,
+      recommendedAddOnIds: RECOMMENDED_ADD_ONS[planId as keyof typeof RECOMMENDED_ADD_ONS] ?? [],
+      metaApiFeeNote: META_API_FEE_NOTE,
+      realAiProviderCalled: false,
+      realPaymentGatewayCalled: false,
+    }
+  })
+
+  // ── POST /billing/ai-smart-reply ────────────────────────────────────────
+  // Body: { enabled: boolean }
+  app.post<{ Body: { enabled?: boolean } }>(
+    '/ai-smart-reply',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const enabled = req.body?.enabled
+      if (typeof enabled !== 'boolean') return reply.status(400).send({ error: 'enabled (boolean) is required' })
+      const value = await setAiSmartReplyEnabled(tenantId, enabled)
+      await createAuditLog({
+        tenantId, actorUserId: getAuthUser(req).userId, actorRole: getAuthUser(req).role,
+        action: 'BILLING_AI_SMART_REPLY_TOGGLED', entityType: 'TenantBillingState', entityId: tenantId,
+        metadata: { enabled: value },
+      })
+      return { aiSmartReplyEnabled: value, realAiProviderCalled: false }
+    },
+  )
+
+  // ── POST /billing/purchase-intent ───────────────────────────────────────
+  // Body: { addOnId: string }
+  // Creates a pending purchase intent in the ledger. Does NOT charge.
+  app.post<{ Body: { addOnId?: string } }>(
+    '/purchase-intent',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const addOnId = req.body?.addOnId
+      if (!addOnId) return reply.status(400).send({ error: 'addOnId is required' })
+      try {
+        const result = await createPurchaseIntent(tenantId, addOnId)
+        return reply.status(201).send({
+          intentId: result.intentId,
+          addOn:    { id: result.addOn.id, label: result.addOn.label, priceRm: result.addOn.priceRm, recurring: result.addOn.recurring },
+          status:   'pending',
+          charged:  false,
+          paymentGateway: 'NOT_CONFIGURED',
+          note: '已创建购买意向。未触发真实付款；需后续 stub payment event 才会应用余额。',
+          realPaymentGatewayCalled: false,
+        })
+      } catch (e) {
+        return reply.status(400).send({ error: e instanceof Error ? e.message : 'create intent failed' })
+      }
+    },
+  )
+
+  // ── POST /billing/payment-event ─────────────────────────────────────────
+  // Stub-mode payment event. In production this will be a signed webhook from a
+  // payment provider. For now we accept trusted server-side calls and apply on success.
+  // Body: { intentId, externalEventId, status, note? }
+  app.post<{ Body: { intentId?: string; externalEventId?: string; status?: 'success' | 'failed' | 'pending'; note?: string } }>(
+    '/payment-event',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const { intentId, externalEventId, status, note } = req.body ?? {}
+      if (!intentId)        return reply.status(400).send({ error: 'intentId is required' })
+      if (!externalEventId) return reply.status(400).send({ error: 'externalEventId is required (idempotency)' })
+      if (!status || !['success', 'failed', 'pending'].includes(status))
+        return reply.status(400).send({ error: 'status must be success | failed | pending' })
+      try {
+        const result = await processStubPaymentEvent(tenantId, { intentId, externalEventId, status, note })
+        await createAuditLog({
+          tenantId, actorUserId: getAuthUser(req).userId, actorRole: getAuthUser(req).role,
+          action: 'BILLING_PAYMENT_EVENT_PROCESSED', entityType: 'TenantBillingState', entityId: tenantId,
+          metadata: { intentId, status, applied: result.applied, alreadyProcessed: result.alreadyProcessed },
+        })
+        return {
+          ...result,
+          realPaymentGatewayCalled: false,
+          paymentGateway: 'NOT_CONFIGURED',
+          note: result.alreadyProcessed
+            ? '该 externalEventId 已处理过；返回之前的结果（idempotent）。'
+            : (result.applied ? '付款成功，已应用余额。' : 'pending / failed — 未应用任何余额变更。'),
+        }
+      } catch (e) {
+        return reply.status(400).send({ error: e instanceof Error ? e.message : 'process failed' })
+      }
+    },
   )
 }

@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
-import { getToken, login, fetchSettingsOverview, updateCompanyProfile, type SettingsOverview } from '@/lib/api'
+import { getToken, login, fetchSettingsOverview, updateCompanyProfile, fetchQuotaSummary, setAiSmartReply, type SettingsOverview, type QuotaSummary } from '@/lib/api'
 import { actorRoleLabel, channelTypeLabel, channelSetupStatusLabel, credentialStatusLabel, planLabel } from '@/lib/enumLabels'
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -51,6 +51,9 @@ export default function SettingsPage() {
   const [companyName,   setCompanyName]   = useState('')
   const [businessHours, setBusinessHours] = useState('')
   const [editing,       setEditing]       = useState(false)
+  // Round-9A: AI Smart Reply
+  const [quota,            setQuota]            = useState<QuotaSummary | null>(null)
+  const [togglingSmartReply, setTogglingSmartReply] = useState(false)
 
   useEffect(() => {
     if (getToken()) { setAuthed(true); void load() }
@@ -59,12 +62,23 @@ export default function SettingsPage() {
   async function load() {
     setLoading(true)
     try {
-      const o = await fetchSettingsOverview()
+      const [o, q] = await Promise.all([fetchSettingsOverview(), fetchQuotaSummary().catch(() => null)])
       setOverview(o)
       setCompanyName(o.onboarding.companyName ?? '')
       setBusinessHours(o.onboarding.businessHours ?? '')
+      if (q) setQuota(q)
     } catch { /* ignore */ }
     finally { setLoading(false) }
+  }
+
+  async function handleToggleSmartReply(next: boolean) {
+    setTogglingSmartReply(true); setError(''); setNotice('')
+    try {
+      const res = await setAiSmartReply(next)
+      setQuota(q => q ? { ...q, aiSmartReplyEnabled: res.aiSmartReplyEnabled } : q)
+      setNotice(`AI 智能回复已${res.aiSmartReplyEnabled ? '开启' : '关闭'}`); setTimeout(() => setNotice(''), 3000)
+    } catch (e) { setError(e instanceof Error ? e.message : '切换失败') }
+    finally { setTogglingSmartReply(false) }
   }
 
   async function handleSaveProfile() {
@@ -169,6 +183,29 @@ export default function SettingsPage() {
               </div>
               <a href="/onboarding" className="inline-block mt-3 text-xs text-blue-600 hover:text-blue-800">更新 AI 配置 →</a>
             </Section>
+
+            {/* Round-9A: AI Smart Reply toggle */}
+            {quota && (
+              <Section title="AI 智能回复">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800">
+                      当前状态：<span className={`font-semibold ${quota.aiSmartReplyEnabled ? 'text-emerald-700' : 'text-gray-500'}`}>{quota.aiSmartReplyEnabled ? '已开启' : '已关闭'}</span>
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5 text-[11px] text-gray-600 leading-relaxed">
+                      <li>• <strong>开启时</strong>：仅在 AI 生成被实际调用时扣 1 条 AI 回复配额。</li>
+                      <li>• <strong>关闭时</strong>：匹配到 FAQ 直接发送 — 不调用 AI，不扣配额。</li>
+                      <li>• 人工回复、固定模板、安全回退均不扣 AI 回复配额。</li>
+                      <li>• Meta 官方 WhatsApp API 费用为 pass-through，不包含在套餐内。</li>
+                    </ul>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleToggleSmartReply(true)}  disabled={togglingSmartReply || quota.aiSmartReplyEnabled}   title="开启 AI 智能回复"  aria-label="开启 AI 智能回复"  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${quota.aiSmartReplyEnabled ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'} disabled:opacity-60`}>开启</button>
+                    <button onClick={() => handleToggleSmartReply(false)} disabled={togglingSmartReply || !quota.aiSmartReplyEnabled} title="关闭 AI 智能回复" aria-label="关闭 AI 智能回复" className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!quota.aiSmartReplyEnabled ? 'bg-gray-700 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'} disabled:opacity-60`}>关闭</button>
+                  </div>
+                </div>
+              </Section>
+            )}
 
             {/* Knowledge Base */}
             <Section title="知识库">

@@ -35,6 +35,36 @@ model Tenant {
   handoffRules      HandoffRule[]
   onboardingDraft   OnboardingDraft?
   channelSetupDraft ChannelSetupDraft?
+  billingState      TenantBillingState?
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round-9A: COMMERCIAL FOUNDATION
+// Single per-tenant row holding quota counters, add-ons, credits, AI smart-reply
+// toggle, and a stub purchase ledger. No real payment gateway. Auditable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TenantBillingState {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique
+  // AI Smart Reply default ON for Starter and Pro. Tenant can toggle.
+  aiSmartReplyEnabled   Boolean  @default(true)
+  // Tracks the "year-month" string e.g. "2026-05" the monthlyUsage row applies to.
+  // Used to auto-reset monthly counters on month rollover.
+  currentMonthKey       String   @default("")
+  // monthlyUsage = { faqGenerations: int, aiReplies: int }
+  monthlyUsage          Json     @default("{\"faqGenerations\":0,\"aiReplies\":0}")
+  // addOnsActive = [{ id, kind, slots?|credits?, priceRm, purchasedAt, expiresAt?, recurring? }, ...]
+  addOnsActive          Json     @default("[]")
+  // purchasedCredits = { faq: int, aiReply: int } — non-expired one-time credit balance
+  purchasedCredits      Json     @default("{\"faq\":0,\"aiReply\":0}")
+  // ledger = [{ id, eventType, status, externalEventId?, payload, beforeBalance, afterBalance, at }, ...]
+  // Append-only stub. No real payment provider keys/tokens are ever stored.
+  ledger                Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 model User {

@@ -1,5 +1,34 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 Round-9A — Starter / Pro Quota + AI Smart Reply + Add-on Foundation
+
+继 Round-8 之后，Round-9A 是 Omni 第一次真正落地的"商业基础层"——把套餐 / 配额 / Add-on / 付款 / Ledger 从 UI 静态文案升级为后端可执行、可计费、可审计的 foundation：
+
+- **新增表 `TenantBillingState`**（schema migration `20260515000000_add_tenant_billing_state`）：每个租户一行，字段 `aiSmartReplyEnabled` (默认 true) + `currentMonthKey` + JSON `monthlyUsage / addOnsActive / purchasedCredits / ledger`。月份切换时 `getOrCreateBillingState` 自动清零 monthlyUsage。
+- **新增 `apps/api/src/lib/plans.ts`**（单一事实来源）：
+  - Starter: RM199/月 · 1 WA · 10 产品位 · 10 次 FAQ 生成/月 · 1000 AI 回复/月 · 1 团队用户 · 智能回复默认 ON
+  - Pro: RM399/月 · 3 WA · 30 产品位 · 50 次 FAQ/月 · 5000 AI 回复/月 · 5 团队用户（Admin/User）· 智能回复默认 ON
+  - Pro 6 个月 Launch Commitment Offer：RM299/月 · upfront RM1794 · 原价 RM2394 · 节省 RM600 · **明确标注非常规月度价**
+  - 9 个 add-ons：产品扩容包 S/M/L（recurring monthly，stackable）· AI FAQ 生成包 S/M/L（one-time，12 个月有效）· AI 回复包 S/M/L（one-time，12 个月有效）
+  - Meta API 费用 pass-through：`metaApiFeeIncluded: false`，文案 META_API_FEE_NOTE 统一引用
+- **新增 `apps/api/src/lib/quota.ts`**：
+  - `getQuotaSummary(tenantId, plan, usedProductSlots, usedWhatsapp, usedTeamUsers)` — 返回 plan + counter（WA / products / faq / aiReply / team）+ warnings（80/90/100%）+ cta（按超额建议）
+  - `tryDeductFaqGeneration` / `tryDeductAiReplyCredit` — 月度配额先用，购买 credits 次用；耗尽返回 `{ ok: false, cta }`
+  - `setAiSmartReplyEnabled` — 切换状态
+  - `createPurchaseIntent` — 创建 pending ledger entry（未真实扣费）
+  - `processStubPaymentEvent` — idempotent（通过 `externalEventId` 去重）；只有 `status === 'success'` 才应用余额；`pending` / `failed` 不应用；every entry 记录 beforeBalance + afterBalance
+- **四个新 endpoint**（`apps/api/src/routes/billing.ts`，auth required，tenant-scoped，audit-logged）：
+  - `GET /billing/plan-definitions` — 全量 plan + add-on 规范，供前端展示
+  - `GET /billing/quota-summary` — 计算并返回当前 counters + warnings + cta
+  - `POST /billing/ai-smart-reply` — `{ enabled: boolean }` 切换
+  - `POST /billing/purchase-intent` — `{ addOnId }` 创建 pending intent
+  - `POST /billing/payment-event` — `{ intentId, externalEventId, status, note? }` stub 付款事件；返回 `{ applied, status, ledgerEntryId, alreadyProcessed }`；显式字段 `realPaymentGatewayCalled: false` 与 `paymentGateway: 'NOT_CONFIGURED'`
+- **Round-8 quota hook**：`POST /onboarding/products/generate-sales-config` 在生成器调用前 `tryDeductFaqGeneration`；配额耗尽返回 429 + `quotaExhausted: true` + `cta: '购买 AI FAQ 生成包'`。手动 FAQ 编辑 / 删除 / 保存到知识库不扣配额。
+- **Web `/billing` page**：新增配额计数器 section（带颜色条 + 80/90/100% 告警 + 警示文字 + CTA 列表）；每个 add-on 一键购买（前端模拟成功 stub flow — 创建 intent → 立即 fire success event）；Pro Launch Commitment Offer 黄色 banner 明确"非常规月度价"；助手文案明确说明 ON/OFF 扣费规则与 Meta API 边界
+- **Web `/settings` page**：新增 AI 智能回复 toggle Section（带 4 条文案说明：开启时仅 AI 生成实际调用扣 1 条配额、关闭时直接发 FAQ 不扣、人工 / 固定模板 / 安全回退不扣、Meta API 费用 pass-through）
+- **Smoke 新增 15 个 block / 80+ check（test 235–249）**：plan-definitions 全字段 + Pro RM299 是 offer 非常规月度 + add-ons S/M/L + quota-summary auth/shape + smart-reply 持久化 + FAQ 生成扣 1 配额 + 配额耗尽 429 + 创建 intent + pending/failed 不加余额 + success 加余额 + 重复 externalEventId 幂等 + 购买后 FAQ 解锁生成 + 产品扩容增加 slots + AI 回复 credits 增加 + smart-reply OFF 时 FAQ list / customers / onboarding/status 不消耗 AI 回复配额 + 无 secrets / payment tokens 泄漏 + 安全 flag 全 false
+- **未触碰**：API 现有 contract、route paths、enum value、Round-8 endpoints 输出 shape、smoke 旧用例；真实支付网关 / 真实 AI / 真实 Meta / 真实 WhatsApp / 真实邮件 / 广播 / 群发均**未启用**
+
 ## Post-v1 UAT Round-8 — Product Intelligence Setup + AI Sales Config Generator
 
 继 Round-7 之后，Round-8 解决"租户上线时被要求自己写 FAQ / 自己搭流程"的 UX 痛点，让产品体验对齐核心价值主张「上传产品资料，Omni 自动生成 AI 客服、CRM、跟进规则」：
