@@ -213,3 +213,10 @@ The new `/account/activity` filters and `/account/security-events` endpoint cont
 - Both filter metadata through the same safe whitelist
 - Security events do NOT include raw tokens, credential refs, encrypted blobs, actorUserId, ip, or userAgent
 - The 7-day security window is deterministic and based on existing AuditLog records
+
+
+## v1 Landing References
+
+- `docs/V1_HANDOFF_PACKAGE.md` — complete v1 delivery
+- `docs/FINAL_PRODUCTION_READINESS.md` — env vars + checklists
+- `docs/GO_LIVE_REHEARSAL.md` — pre-go-live rehearsal

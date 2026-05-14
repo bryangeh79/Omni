@@ -149,3 +149,11 @@ New Phase 16B additions:
 - AppNav: Activation Monitor added to Release group
 
 See `docs/ACTIVATION_MONITORING.md` for full documentation.
+
+
+## v1 Handoff References
+
+- `docs/V1_HANDOFF_PACKAGE.md` — complete v1 delivery
+- `docs/FINAL_PRODUCTION_READINESS.md` — production checklist
+- `docs/GO_LIVE_REHEARSAL.md` — go-live rehearsal
+- `docs/RELEASE_CANDIDATE_V1.md` — release candidate notes

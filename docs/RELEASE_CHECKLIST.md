@@ -92,3 +92,13 @@ Returns:
 - **Not an ads platform** — no marketing automation
 - **Not live WhatsApp** — real sends require manual operator activation
 - **Not charged** — billing plan selection is a draft until payment gateway is configured
+
+
+## Final v1 Landing Pack
+
+This `/release-checklist` page is the **runtime** release status. For the **document-level** handoff package, see:
+- `docs/V1_HANDOFF_PACKAGE.md` — complete handoff
+- `docs/RELEASE_CANDIDATE_V1.md` — RC notes
+- `docs/FINAL_PRODUCTION_READINESS.md` — production checklist
+- `docs/GO_LIVE_REHEARSAL.md` — rehearsal
+- `docs/PRODUCT_COMPLETENESS_MATRIX.md` — completeness matrix

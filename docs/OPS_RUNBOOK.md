@@ -134,3 +134,13 @@ When debugging audit-related issues:
 - The API NEVER echoes `metadataJson` back to clients; it is read in the route handler only to feed the sanitizer
 - Operators querying audit data via `/audit/logs` see only `safeMetadata` + `summary` — for raw forensics, query the database directly
 - The shared `apps/api/src/lib/audit-safe.ts` is the only path to expose metadata in API responses
+
+
+## Final Landing Pack (v1 Handoff)
+
+For v1 production handoff, see:
+- `docs/V1_HANDOFF_PACKAGE.md` — **start here** for v1 handoff
+- `docs/RELEASE_CANDIDATE_V1.md` — RC summary + acceptance criteria
+- `docs/FINAL_PRODUCTION_READINESS.md` — go-live checklist
+- `docs/GO_LIVE_REHEARSAL.md` — staging rehearsal
+- `docs/PRODUCT_COMPLETENESS_MATRIX.md` — feature completeness vs. positioning

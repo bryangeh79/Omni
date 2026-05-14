@@ -273,3 +273,8 @@ See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.
 - Smoke tests 214 / 216 / 218 / 219 now hard-scan for `metadataJson` substring and fail if it appears anywhere in audit/activity/timeline/security responses
 
 Future tenant-facing audit/event endpoints MUST NOT include raw `metadataJson` in responses. Use `apps/api/src/lib/audit-safe.ts`.
+
+
+## Final v1 Landing Pack
+
+See `docs/V1_HANDOFF_PACKAGE.md` for the complete v1 handoff. Production readiness checklist at `docs/FINAL_PRODUCTION_READINESS.md`. Go-live rehearsal at `docs/GO_LIVE_REHEARSAL.md`.
