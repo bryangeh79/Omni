@@ -459,6 +459,123 @@ export async function enableOnboarding(): Promise<{ enabled: boolean; status: st
   return apiFetch<{ enabled: boolean; status: string; note: string }>('/onboarding/enable', { method: 'POST' })
 }
 
+// ── Round-8: Product Intelligence + Sales Config Generator ───────────────────
+export interface ProductSetupInput {
+  productId?:            string
+  productName:           string
+  productCategory?:      string
+  suitableCustomers?:    string
+  sellingPoints?:        string
+  pricing?:              string
+  purchaseFlow?:         string
+  requiredCustomerInfo?: string
+  handoffConditions?:    string
+  extraNotes?:           string
+  pastedMaterialText?:   string
+  referenceUrl?:         string
+  uploadedFile?:         { filename?: string; sizeBytes?: number; mimeType?: string; extractedText?: string }
+  desiredFaqCount?:      number
+}
+
+export interface FaqDraft {
+  id:           string
+  question:     string
+  answer:       string
+  category:     string
+  productName:  string
+  isSelected:   boolean
+  source:       'generated_draft'
+}
+
+export interface SalesScript           { title: string; scenario: string; script: string; tone: 'friendly' | 'professional' | 'concise' }
+export interface QualificationQuestion { question: string; purpose: string }
+export interface LeadScoringRuleDraft  { trigger: string; adjustment: number; description: string }
+export interface FollowUpRuleDraft     { scenario: string; delay: string; message: string; description: string }
+export interface HandoffRuleDraft      { trigger: string; description: string }
+
+export interface ProductProfile {
+  summary:           string
+  suitableCustomers: string
+  sellingPoints:     string
+  pricing:           string
+  purchaseFlow:      string
+  restrictions:      string
+  afterSales:        string
+  aiReplyBoundary:   string
+}
+
+export interface ProductSalesConfig {
+  productId:              string
+  productName:            string
+  generatedAt:            string
+  mode:                   'deterministic_stub'
+  productProfile:         ProductProfile
+  faqDrafts:              FaqDraft[]
+  salesScripts:           SalesScript[]
+  qualificationQuestions: QualificationQuestion[]
+  suggestedTags:          string[]
+  leadScoringRules:       LeadScoringRuleDraft[]
+  followUpRules:          FollowUpRuleDraft[]
+  handoffRules:           HandoffRuleDraft[]
+  summary: {
+    faqCount:           number
+    pricingFaqCount:    number
+    handoffFaqCount:    number
+    objectionFaqCount:  number
+    processFaqCount:    number
+    missingFields:      string[]
+    hasPricing:         boolean
+    hasPurchaseFlow:    boolean
+    hasUploadedFile:    boolean
+    hasReferenceUrl:    boolean
+    materialCharCount:  number
+    coverageNote:       string
+  }
+}
+
+export type ProductSetupStatus =
+  | 'PENDING_INPUT'
+  | 'PENDING_GENERATION'
+  | 'GENERATED'
+  | 'FAQ_SAVED'
+  | 'ENABLED'
+
+export interface ProductSetupRecord extends ProductSetupInput {
+  productId:     string
+  productName:   string
+  salesConfig?:  ProductSalesConfig
+  status?:       ProductSetupStatus
+  lastUpdatedAt?: string
+}
+
+export async function generateProductSalesConfig(
+  input: ProductSetupInput,
+): Promise<{ config: ProductSalesConfig; tenantId: string; mode: string; realAiProviderCalled: false; note: string }> {
+  return apiFetch('/onboarding/products/generate-sales-config', {
+    method: 'POST',
+    body:   JSON.stringify(input),
+  })
+}
+
+export async function saveProductSalesConfig(
+  products: ProductSetupRecord[],
+): Promise<{ saved: boolean; productCount: number; draftId: string; updatedAt: string }> {
+  return apiFetch('/onboarding/products/save-sales-config', {
+    method: 'POST',
+    body:   JSON.stringify({ products }),
+  })
+}
+
+export async function saveFaqToKnowledge(
+  productName: string,
+  faqs: Array<{ question: string; answer: string; category?: string; language?: string }>,
+): Promise<{ saved: number; skippedDuplicates: number; knowledgeItemIds: string[]; productName: string; note: string }> {
+  return apiFetch('/onboarding/products/save-faq-to-knowledge', {
+    method: 'POST',
+    body:   JSON.stringify({ productName, faqs }),
+  })
+}
+
 // ── Knowledge Base (Phase 12A) ────────────────────────────────────────────────
 export interface KnowledgeItem {
   id:        string

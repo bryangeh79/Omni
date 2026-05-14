@@ -1,24 +1,31 @@
-// Onboarding Wizard API — Phase 11B → 12A
+// Onboarding Wizard API — Phase 11B → 12A → Round-8 Product Intelligence
 //
-// GET  /onboarding/status           — check current onboarding state
-// POST /onboarding/draft            — save/update wizard draft
-// POST /onboarding/ingest-materials — parse materialsText into KB items (Phase 12A)
-// POST /onboarding/generate-preview — generate config preview
+// GET  /onboarding/status                                — check current onboarding state
+// POST /onboarding/draft                                 — save/update wizard draft
+// POST /onboarding/ingest-materials                      — parse materialsText into KB items (Phase 12A)
+// POST /onboarding/generate-preview                      — generate config preview
 //         Default: deterministic templates (no AI provider call, always safe for tests)
 //         ?mode=ai: AI-provider-enhanced if configured + OMNI_ENABLE_ONBOARDING_AI=true
-// POST /onboarding/enable           — mark ENABLED (does NOT connect WhatsApp or enable real send)
+// POST /onboarding/enable                                — mark ENABLED (does NOT connect WhatsApp or enable real send)
+// POST /onboarding/products/generate-sales-config        — Round-8: deterministic product sales-config draft
+// POST /onboarding/products/save-sales-config            — Round-8: persist edited product setup back to draft
+// POST /onboarding/products/save-faq-to-knowledge        — Round-8: bulk-save selected FAQ drafts as PRODUCT_FAQ KnowledgeItems
 //
 // Safety:
 //   - All endpoints are tenant-scoped via JWT.
 //   - Default generate-preview never calls real AI provider.
 //   - AI mode requires explicit opt-in AND env flag AND provider configuration.
 //   - enable does NOT set OMNI_ENABLE_REAL_META_SEND or connect WhatsApp session.
-//   - No secrets in responses.
+//   - Round-8 product sales-config generator is fully deterministic; never calls AI provider.
+//   - Round-8 save-faq-to-knowledge stores into KnowledgeItem with PRODUCT_FAQ type;
+//     duplicate detection by (tenantId + question) avoids unbounded duplicates.
+//   - No secrets in responses; uploaded-file metadata only (no raw bytes).
 
 import type { FastifyInstance } from 'fastify'
 import { prisma, OnboardingStatus, KnowledgeItemType } from '@omni/db'
 import type { AiProvider, AiAgentInput } from '@omni/shared'
 import { requireAuth, getAuthUser } from '../auth'
+import { generateProductSalesConfig, type ProductSetupInput, type ProductSalesConfig } from '../lib/product-sales-config-generator'
 
 // ── Type: enriched preview shape ────────────────────────────────────────────
 interface FaqSample { question: string; answer: string }
@@ -596,4 +603,227 @@ export async function onboardingRoutes(app: FastifyInstance) {
       realMetaSendEnabled:   false,
     }
   })
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-8: Product Intelligence Setup + Sales Config Generator
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── POST /onboarding/products/generate-sales-config ────────────────────
+  // Deterministic stub generator. NEVER calls AI provider. Returns FAQ drafts +
+  // sales scripts + qualification questions + tags + scoring + follow-up +
+  // handoff rules. Tenant reviews and edits before saving.
+  app.post<{ Body: ProductSetupInput }>(
+    '/products/generate-sales-config',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const body = req.body ?? ({} as ProductSetupInput)
+
+      if (!body.productName || !body.productName.trim()) {
+        return reply.status(400).send({ error: 'productName is required' })
+      }
+      // Reject raw file bytes — uploaded-file metadata only.
+      if (body.uploadedFile && typeof (body.uploadedFile as Record<string, unknown>).rawBytes !== 'undefined') {
+        return reply.status(400).send({ error: 'Raw file bytes are not accepted. Send metadata + extractedText only.' })
+      }
+
+      const config = generateProductSalesConfig(body)
+
+      return reply.status(200).send({
+        config,
+        tenantId,
+        mode:                  config.mode,
+        realAiProviderCalled:  false,
+        realWhatsAppSent:      false,
+        realMetaCalled:        false,
+        note: '本结果为确定性草稿；不会自动保存到知识库或自动跟进规则表。请检查后再保存。',
+      })
+    },
+  )
+
+  // ── POST /onboarding/products/save-sales-config ────────────────────────
+  // Persist tenant-edited product setup (basic fields + generated config) into
+  // OnboardingDraft.generatedPreview.products[]. No schema migration required.
+  app.post<{
+    Body: {
+      products: Array<{
+        productId:        string
+        productName:      string
+        productCategory?: string
+        suitableCustomers?: string
+        sellingPoints?:   string
+        pricing?:         string
+        purchaseFlow?:    string
+        requiredCustomerInfo?: string
+        handoffConditions?: string
+        extraNotes?:      string
+        pastedMaterialText?: string
+        referenceUrl?:    string
+        uploadedFile?: { filename?: string; sizeBytes?: number; mimeType?: string }
+        salesConfig?:     ProductSalesConfig
+        status?:          'PENDING_INPUT' | 'PENDING_GENERATION' | 'GENERATED' | 'FAQ_SAVED' | 'ENABLED'
+        lastUpdatedAt?:   string
+      }>
+    }
+  }>(
+    '/products/save-sales-config',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const products = req.body?.products
+      if (!Array.isArray(products)) {
+        return reply.status(400).send({ error: 'products[] is required' })
+      }
+      if (products.length > 20) {
+        return reply.status(400).send({ error: 'Maximum 20 products per tenant supported' })
+      }
+      for (const p of products) {
+        if (!p.productId || !p.productName) {
+          return reply.status(400).send({ error: 'Each product needs productId + productName' })
+        }
+      }
+
+      // Strip any accidental sensitive keys before storing
+      const sanitized = products.map(p => {
+        // Defensive: remove any unknown sensitive-looking keys
+        const { uploadedFile, ...rest } = p
+        const safeFile = uploadedFile
+          ? { filename: uploadedFile.filename, sizeBytes: uploadedFile.sizeBytes, mimeType: uploadedFile.mimeType }
+          : undefined
+        return {
+          ...rest,
+          uploadedFile: safeFile,
+          lastUpdatedAt: p.lastUpdatedAt ?? new Date().toISOString(),
+        }
+      })
+
+      // Upsert: merge into existing generatedPreview JSON
+      const existing = await prisma.onboardingDraft.findUnique({
+        where:  { tenantId },
+        select: { id: true, generatedPreview: true },
+      })
+      const prevPreview = (existing?.generatedPreview as Record<string, unknown> | null) ?? {}
+
+      const nextPreview = { ...prevPreview, products: sanitized, productsUpdatedAt: new Date().toISOString() }
+      // Round-trip through JSON to satisfy Prisma's InputJsonValue (same pattern as generate-preview).
+      const nextPreviewJson = JSON.parse(JSON.stringify(nextPreview))
+
+      const draft = await prisma.onboardingDraft.upsert({
+        where:  { tenantId },
+        create: { tenantId, generatedPreview: nextPreviewJson },
+        update: { generatedPreview: nextPreviewJson },
+        select: { id: true, updatedAt: true },
+      })
+
+      return reply.status(200).send({
+        saved:           true,
+        productCount:    sanitized.length,
+        draftId:         draft.id,
+        updatedAt:       draft.updatedAt,
+        realAiProviderCalled: false,
+      })
+    },
+  )
+
+  // ── POST /onboarding/products/save-faq-to-knowledge ────────────────────
+  // Bulk-save selected FAQ drafts as PRODUCT_FAQ KnowledgeItem rows.
+  // Duplicate detection: (tenantId + normalised question text + active).
+  // Returns counts: saved, skippedDuplicates, knowledgeItemIds.
+  app.post<{
+    Body: {
+      productName: string
+      faqs: Array<{ question: string; answer: string; category?: string; language?: string }>
+    }
+  }>(
+    '/products/save-faq-to-knowledge',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const { productName, faqs } = req.body ?? ({} as Record<string, unknown>) as {
+        productName?: string
+        faqs?: Array<{ question?: string; answer?: string; category?: string; language?: string }>
+      }
+
+      if (!productName || !productName.trim()) {
+        return reply.status(400).send({ error: 'productName is required' })
+      }
+      if (!Array.isArray(faqs) || faqs.length === 0) {
+        return reply.status(400).send({ error: 'faqs[] must be a non-empty array' })
+      }
+      if (faqs.length > 100) {
+        return reply.status(400).send({ error: 'Maximum 100 FAQ items per call' })
+      }
+      for (const f of faqs) {
+        if (!f.question || !f.question.trim()) return reply.status(400).send({ error: 'every FAQ needs a question' })
+        if (!f.answer   || !f.answer.trim())   return reply.status(400).send({ error: 'every FAQ needs an answer' })
+      }
+
+      const trimmedProduct = productName.trim()
+
+      // Fetch existing active PRODUCT_FAQ questions for duplicate detection
+      const existing = await prisma.knowledgeItem.findMany({
+        where:  { tenantId, type: KnowledgeItemType.PRODUCT_FAQ, isActive: true, question: { not: null } },
+        select: { id: true, question: true },
+      })
+      const existingQs = new Set(existing.map(e => (e.question ?? '').trim().toLowerCase()))
+
+      let skippedDuplicates = 0
+      const toCreate: Array<{ tenantId: string; type: KnowledgeItemType; question: string; answer: string; language: string; isActive: boolean }> = []
+      const seenInBatch = new Set<string>()
+
+      for (const f of faqs) {
+        const q = f.question!.trim()
+        const norm = q.toLowerCase()
+        if (existingQs.has(norm) || seenInBatch.has(norm)) {
+          skippedDuplicates++
+          continue
+        }
+        seenInBatch.add(norm)
+        // Prefix question with product tag so 知识库 list shows context without schema migration.
+        toCreate.push({
+          tenantId,
+          type:     KnowledgeItemType.PRODUCT_FAQ,
+          question: `[${trimmedProduct}] ${q}`,
+          answer:   f.answer!.trim(),
+          language: f.language?.trim() || 'zh',
+          isActive: true,
+        })
+      }
+
+      if (toCreate.length === 0) {
+        return reply.status(200).send({
+          saved:               0,
+          skippedDuplicates,
+          knowledgeItemIds:    [],
+          productName:         trimmedProduct,
+          realAiProviderCalled: false,
+          note: '所有 FAQ 已经存在或重复，未新增。',
+        })
+      }
+
+      // Bulk insert
+      await prisma.knowledgeItem.createMany({ data: toCreate })
+
+      // Fetch the inserted rows (Prisma createMany doesn't return ids on PG with @id default cuid)
+      const inserted = await prisma.knowledgeItem.findMany({
+        where: {
+          tenantId,
+          type:     KnowledgeItemType.PRODUCT_FAQ,
+          question: { in: toCreate.map(t => t.question) },
+        },
+        select: { id: true, question: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: toCreate.length,
+      })
+
+      return reply.status(201).send({
+        saved:               inserted.length,
+        skippedDuplicates,
+        knowledgeItemIds:    inserted.map(i => i.id),
+        productName:         trimmedProduct,
+        realAiProviderCalled: false,
+        note: '已保存到知识库（type=PRODUCT_FAQ）。可在知识库页面查看 / 编辑 / 停用。',
+      })
+    },
+  )
 }

@@ -15,6 +15,8 @@ This is the canonical handoff document. If you are receiving Omni v1, **start he
 > **Post-v1 UAT Round-6 (2026-05)：** 修复点击侧边栏菜单时短暂闪登录表单的问题。18 个 client page 把 `authed` 改为三态 `boolean | null`，初次 SSR / hydration 渲染 `null`（什么都不渲染）而不是 `LoginForm`，等 `useEffect` 跑完才决定显示登录或内容，消除 1 帧 flash。
 >
 > **Post-v1 UAT Round-7 (2026-05)：** AppNav 信息架构重组 — 顶部 4 个分组为**租户日常**（日常工作 / 客户与成交 / 新客户上线 / 账户管理），底部新增 **SaaS Admin · 平台运维**分组（含分隔线 + section label + muted 视觉层级），把上线激活指南 / 激活监控 / 上线清单 / 审计日志 / 生产 QA / 运维手册 / 发布检查清单 / 演示流程从原"启动配置"和"运维与安全"两个分组合并到此处。`localStorage` 键升级为 `omni.nav.expanded.v2`；默认仅展开当前活跃分组（无活跃路由时默认展开"日常工作"）。所有路由与页面均保留可访问，无 RBAC 隐藏（comment 中标注 future RBAC hook 位置）。
+>
+> **Post-v1 UAT Round-8 (2026-05)：** 产品智能配置中心 + AI 成交配置生成器。Onboarding 第 3 步「产品资料」从单一大文本框升级为**多产品**配置中心 — 租户可创建/选择多个产品，每个产品提供基础引导字段（名称 / 分类 / 适合客户 / 卖点 / 价格 / 流程 / 客户资料 / 转人工条件 / 补充）+ 三种资料输入模式（粘贴 / URL / 文件上传）；点击「一键生成产品成交配置」由新增确定性生成器 `apps/api/src/lib/product-sales-config-generator.ts` 输出 30–50 条 FAQ 草稿 + 销售话术 + 客户资格问题 + 标签 + 评分规则 + 跟进规则 + 转人工规则；review UI 支持 FAQ 勾选 / 编辑 / 删除 / 批量保存到知识库。三个新 API：`POST /onboarding/products/generate-sales-config`、`POST /onboarding/products/save-sales-config`、`POST /onboarding/products/save-faq-to-knowledge`，全部 tenant-scoped、默认 **不调用真实 AI / Meta / WhatsApp / 邮件 / 支付**。产品配置持久化在 `OnboardingDraft.generatedPreview.products[]` JSON 字段（**无 schema 迁移**）。知识库页面对已保存的产品 FAQ 显示「产品：{name}」绿色徽章。文件上传当前版本只记录元数据 + .txt/.md 文本提取，PDF/DOCX/图片建议同时粘贴关键文字以生成 FAQ。
 
 ---
 

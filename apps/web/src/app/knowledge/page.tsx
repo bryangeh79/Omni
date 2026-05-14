@@ -232,11 +232,16 @@ function KbRow({
           <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeCfg.badge}`}>{typeCfg.label}</span>
             <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">{langLabel}</span>
+            {/* Round-8: surface product tag if question was saved via product sales-config flow */}
+            {(() => {
+              const m = item.question?.match(/^\[([^\]]+)\]\s*/)
+              return m ? <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full" title={`来自产品配置：${m[1]}`}>产品：{m[1]}</span> : null
+            })()}
             {!item.isActive && <span className="text-xs text-orange-500 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">已停用</span>}
           </div>
-          {/* Question */}
+          {/* Question (strip product tag prefix if present, since shown as badge above) */}
           {item.question && (
-            <p className="text-sm font-semibold text-gray-800 leading-snug mb-1">{item.question}</p>
+            <p className="text-sm font-semibold text-gray-800 leading-snug mb-1">{item.question.replace(/^\[[^\]]+\]\s*/, '')}</p>
           )}
           {/* Answer */}
           {!editing && (

@@ -1,5 +1,38 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 UAT Round-8 — Product Intelligence Setup + AI Sales Config Generator
+
+继 Round-7 之后，Round-8 解决"租户上线时被要求自己写 FAQ / 自己搭流程"的 UX 痛点，让产品体验对齐核心价值主张「上传产品资料，Omni 自动生成 AI 客服、CRM、跟进规则」：
+
+- **新增确定性生成器** `apps/api/src/lib/product-sales-config-generator.ts`：纯函数，无任何外部调用，根据产品基础字段 + 资料文本生成完整 sales-config bundle：
+  - `productProfile` — 产品简介 / 适合客户 / 核心卖点 / 价格说明 / 购买流程 / 限制 / 售后 / AI 回复边界
+  - `faqDrafts` — 30–50 条 FAQ 草稿（默认 40），分 11 类（产品介绍 / 适合对象 / 价格 / 套餐 / 付款 / 购买流程 / 预约 / Demo / 售后 / 限制条件 / 比较 / 犹豫处理 / 常见疑虑 / 转人工问题）；保证 ≥3 条价格、≥3 条转人工、≥3 条异议处理、≥3 条流程类；资料不足时答案标注「资料中未明确说明，建议转人工确认。」
+  - `salesScripts` — 8 个销售场景（欢迎 / 问价 / 犹豫 / 求优惠 / 预约 Demo / 比较竞品 / 长时间无回复 / 要求人工）
+  - `qualificationQuestions` — 客户资格问题（需求 / 预算 / 时间 / 团队规模等）
+  - `suggestedTags` — 11 个 CRM 标签（含产品名 tag）
+  - `leadScoringRules` — 9 条意向评分规则（问价 +20 / 问 Demo +25 / 问付款 +30 / 要真人 +30 / 投诉 -50 / 黑名单 -100 等）
+  - `followUpRules` — 5 条跟进规则（PRICE_ASKED_NO_REPLY / CONSIDERING / BOOKING_NOT_CONFIRMED / HIGH_INTENT_UNHANDLED / LONG_NO_REPLY）
+  - `handoffRules` — 8+ 条转人工触发器（要求人工 / 不确定 / 价格不全 / 付款 / 投诉 / 法律 / 医疗高风险 / 高意向阈值），+ 租户自定义规则
+  - `summary` — 包含 coverageNote、missingFields、各类 FAQ 计数
+  - **永不幻觉**：具体价格 / 保修期 / 配送承诺 / 医疗 / 法律声明若资料中缺失，输出"建议转人工确认"
+- **三个新 API endpoint**（全部 `apps/api/src/routes/onboarding.ts` 内 tenant-scoped + JWT auth）：
+  - `POST /onboarding/products/generate-sales-config` — 返回完整 ProductSalesConfig 草稿；拒绝原始文件 bytes；响应含 `realAiProviderCalled: false` / `realWhatsAppSent: false` / `realMetaCalled: false` 显式安全字段
+  - `POST /onboarding/products/save-sales-config` — 持久化租户编辑后的 product setup 到 `OnboardingDraft.generatedPreview.products[]`（≤20 个产品 / 每租户），**无 schema migration** — 利用现有 JSON 字段；存储前剥离 `uploadedFile.rawBytes` 等敏感键
+  - `POST /onboarding/products/save-faq-to-knowledge` — bulk 保存 FAQ 草稿到 `KnowledgeItem` 表 `type=PRODUCT_FAQ`；问题前缀 `[ProductName] ` 保留产品上下文；按 `(tenantId + question normalized lowercase)` 做去重（同问题幂等，安全跳过）；返回 `{ saved, skippedDuplicates, knowledgeItemIds }`
+- **Web 端 (`apps/web/src/app/onboarding/page.tsx`) — Step 2 重设计**：
+  - 多产品选择器（chips：产品 1 / 产品 2 / + 新增产品 / 删除当前产品；最多 20 个）
+  - 每产品状态徽章（待填写资料 / 待生成配置 / 已生成配置 / 已保存 FAQ / 已启用）
+  - 引导式基础字段（产品名 / 分类 / 适合客户 / 卖点 / 价格 / 流程 / 客户资料 / 转人工条件 / 补充）
+  - 三种资料输入模式：粘贴 / URL / 文件上传（accept .pdf/.doc/.docx/.txt/.md/images；≤10 MB；.txt/.md 自动提取文本到粘贴区；PDF/DOCX/图片仅记录元数据并提示同时粘贴文字内容）
+  - Primary action 「一键生成产品成交配置」+ 中文 helper copy 三段
+  - Review section（生成后展开）：产品档案 / FAQ 草稿（可勾选 / 编辑问答 / 修改分类 / 删除）/ 销售话术 / 客户资格问题 / 标签 / 评分规则 / 跟进规则 / 转人工规则 / 覆盖提示
+  - 操作按钮：「保存选中的 FAQ 到知识库」+「保存产品配置」+「继续下一步：预览 AI 配置」
+  - **旧版单文本框 + URL + 「解析旧版资料」按钮**保留在 `<details>` 折叠区作为兼容回退，确保 `/onboarding/ingest-materials` 老流程不破坏
+- **Knowledge page 集成**：列表项若 `question` 以 `[ProductName] ` 前缀开头，提取出绿色「产品：{name}」徽章；问题正文显示时自动剥离前缀（向后兼容 — 旧条目无前缀仍正常显示）
+- **Smoke tests 新增 15 个 block / 60+ check**（test 220-234）：endpoint auth / 必填校验 / FAQ 数量与分类约束 / sales scripts / qualification / tags / scoring / follow-up / handoff 形状 / response 无 secrets 扫描 / save-sales-config 持久化 / FAQ 重复保存幂等性 / 知识库可检索性 / 拒绝 raw file bytes / safety flags 未被改动
+- **持久化策略**：`OnboardingDraft.generatedPreview` 已是 JSON 列；Round-8 在该 JSON 下新增 `products[]` / `productsUpdatedAt` 子键，**保留** Round-7 之前的 `EnrichedPreview` 字段（aiPersona / faqSamples / ingestedAt 等），后续 `generate-preview` 与 `ingest-materials` 行为完全兼容
+- **未触碰**：API contract（仅新增 endpoint）、route paths、enum value、schema、真实发送门控、产品定位（非广播 / 非广告 / 非群发）；旧 onboarding 流程（textarea + ingest-materials + generate-preview + enable）保持工作
+
 ## Post-v1 UAT Round-7 — Sidebar IA Cleanup / SaaS Admin Separation
 
 继 Round-6 之后，Round-7 在 UAT 反馈基础上重组 `AppNav.tsx` 的信息架构，让租户日常功能与 SaaS Admin / 平台运维清晰分离：

@@ -4143,6 +4143,168 @@ async function smoke() {
     check(`no "${pat}" across audit/timeline/activity/security responses`, !found)
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-8: Product Intelligence Setup + Sales Config Generator
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n220. Round-8: generate-sales-config requires auth')
+  check('POST /onboarding/products/generate-sales-config no token → 401',
+    (await post('/onboarding/products/generate-sales-config', { productName: 'X' })).status === 401)
+
+  console.log('\n221. Round-8: generate-sales-config validates productName')
+  check('missing productName → 400',
+    (await post('/onboarding/products/generate-sales-config', {}, accessToken)).status === 400)
+  check('empty productName → 400',
+    (await post('/onboarding/products/generate-sales-config', { productName: '   ' }, accessToken)).status === 400)
+
+  console.log('\n222. Round-8: generate-sales-config returns full bundle')
+  const r8GenRes = await post('/onboarding/products/generate-sales-config', {
+    productId:           'smoke-prod-001',
+    productName:         'Smoke 阳光课程',
+    productCategory:     '教育',
+    suitableCustomers:   '想学英文的上班族',
+    sellingPoints:       '小班、真人导师、可分期',
+    pricing:             '基础 199 / 专业 499',
+    purchaseFlow:        '咨询 → 试听 → 报名 → 上课',
+    requiredCustomerInfo:'联系方式、英文水平',
+    handoffConditions:   '要谈优惠 / 要看合同',
+    extraNotes:          '提供学习报告',
+    pastedMaterialText:  '本课程为期 12 周，适合在职人士。',
+    desiredFaqCount:     40,
+  }, accessToken)
+  check('generate-sales-config → 200', r8GenRes.status === 200)
+  const r8GenBody = await r8GenRes.json() as Record<string, unknown>
+  const r8Cfg = r8GenBody.config as Record<string, unknown>
+  check('config.productName matches',                  r8Cfg.productName === 'Smoke 阳光课程')
+  check('config.mode is deterministic_stub',           r8Cfg.mode === 'deterministic_stub')
+  check('config.realAiProviderCalled === false',       r8GenBody.realAiProviderCalled === false)
+  check('config.realWhatsAppSent === false',           r8GenBody.realWhatsAppSent === false)
+  check('config.realMetaCalled === false',             r8GenBody.realMetaCalled === false)
+  check('config has productProfile',                   typeof r8Cfg.productProfile === 'object')
+  check('config has summary.faqCount ≥ 30',            Number((r8Cfg.summary as Record<string, unknown>).faqCount) >= 30)
+  check('config has summary.faqCount ≤ 50',            Number((r8Cfg.summary as Record<string, unknown>).faqCount) <= 50)
+
+  console.log('\n223. Round-8: FAQ drafts shape + counts')
+  const r8Faqs = r8Cfg.faqDrafts as Array<Record<string, unknown>>
+  check('faqDrafts is array',                          Array.isArray(r8Faqs))
+  check('every FAQ has id/question/answer/category',   r8Faqs.every(f => typeof f.id === 'string' && typeof f.question === 'string' && typeof f.answer === 'string' && typeof f.category === 'string'))
+  check('every FAQ has productName',                   r8Faqs.every(f => f.productName === 'Smoke 阳光课程'))
+  check('every FAQ has source=generated_draft',        r8Faqs.every(f => f.source === 'generated_draft'))
+  check('every FAQ isSelected=true by default',        r8Faqs.every(f => f.isSelected === true))
+  check('≥ 3 pricing/payment FAQs',                    r8Faqs.filter(f => f.category === '价格 / 套餐' || f.category === '付款').length >= 3)
+  check('≥ 3 handoff FAQs',                            r8Faqs.filter(f => f.category === '转人工问题').length >= 3)
+  check('≥ 3 objection FAQs',                          r8Faqs.filter(f => f.category === '比较 / 犹豫处理' || f.category === '常见疑虑').length >= 3)
+  check('≥ 3 process FAQs',                            r8Faqs.filter(f => f.category === '购买流程' || f.category === '预约 / Demo').length >= 3)
+
+  console.log('\n224. Round-8: sales scripts + qualification + tags')
+  const r8Scripts = r8Cfg.salesScripts as Array<Record<string, unknown>>
+  check('salesScripts ≥ 6',                            r8Scripts.length >= 6)
+  check('every script has title+scenario+script+tone', r8Scripts.every(s => typeof s.title === 'string' && typeof s.scenario === 'string' && typeof s.script === 'string' && typeof s.tone === 'string'))
+  const r8Qs = r8Cfg.qualificationQuestions as Array<Record<string, unknown>>
+  check('qualificationQuestions ≥ 5',                  r8Qs.length >= 5)
+  const r8Tags = r8Cfg.suggestedTags as string[]
+  check('suggestedTags ≥ 5',                           r8Tags.length >= 5)
+  check('product-specific tag present',                r8Tags.some(t => t.includes('Smoke 阳光课程')))
+
+  console.log('\n225. Round-8: scoring + follow-up + handoff rules')
+  const r8Scoring = r8Cfg.leadScoringRules as Array<Record<string, unknown>>
+  check('leadScoringRules ≥ 5',                        r8Scoring.length >= 5)
+  check('scoring rules have trigger+adjustment',       r8Scoring.every(r => typeof r.trigger === 'string' && typeof r.adjustment === 'number'))
+  const r8Followups = r8Cfg.followUpRules as Array<Record<string, unknown>>
+  check('followUpRules ≥ 4',                           r8Followups.length >= 4)
+  check('handoffRules ≥ 5',                            (r8Cfg.handoffRules as unknown[]).length >= 5)
+
+  console.log('\n226. Round-8: generator output has no secrets / tokens / credentials')
+  const r8Json = JSON.stringify(r8GenBody)
+  const R8_FORBIDDEN = ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'apiKeyRef', 'JWT_SECRET', 'DATABASE_URL', 'accessToken', 'refreshToken', 'metadataJson']
+  for (const pat of R8_FORBIDDEN) {
+    check(`generate-sales-config response has no "${pat}"`, !r8Json.includes(pat))
+  }
+
+  console.log('\n227. Round-8: save-sales-config persists product setup')
+  const r8SaveRes = await post('/onboarding/products/save-sales-config', {
+    products: [{
+      productId:   'smoke-prod-001',
+      productName: 'Smoke 阳光课程',
+      pricing:     '基础 199 / 专业 499',
+      status:      'GENERATED',
+    }],
+  }, accessToken)
+  check('save-sales-config → 200',                     r8SaveRes.status === 200)
+  const r8SaveBody = await r8SaveRes.json() as Record<string, unknown>
+  check('save-sales-config saved=true',                r8SaveBody.saved === true)
+  check('save-sales-config productCount=1',            r8SaveBody.productCount === 1)
+  check('save-sales-config realAiProviderCalled=false',r8SaveBody.realAiProviderCalled === false)
+
+  console.log('\n228. Round-8: save-sales-config validation')
+  check('missing products[] → 400',
+    (await post('/onboarding/products/save-sales-config', {}, accessToken)).status === 400)
+  check('product without productId → 400',
+    (await post('/onboarding/products/save-sales-config', { products: [{ productName: 'X' }] }, accessToken)).status === 400)
+  check('more than 20 products → 400',
+    (await post('/onboarding/products/save-sales-config', { products: Array.from({ length: 21 }, (_, i) => ({ productId: `p${i}`, productName: `P${i}` })) }, accessToken)).status === 400)
+
+  console.log('\n229. Round-8: save-faq-to-knowledge auth + validation')
+  check('save-faq-to-knowledge no token → 401',
+    (await post('/onboarding/products/save-faq-to-knowledge', { productName: 'X', faqs: [{ question: 'q', answer: 'a' }] })).status === 401)
+  check('missing productName → 400',
+    (await post('/onboarding/products/save-faq-to-knowledge', { faqs: [{ question: 'q', answer: 'a' }] }, accessToken)).status === 400)
+  check('empty faqs[] → 400',
+    (await post('/onboarding/products/save-faq-to-knowledge', { productName: 'X', faqs: [] }, accessToken)).status === 400)
+  check('FAQ without question → 400',
+    (await post('/onboarding/products/save-faq-to-knowledge', { productName: 'X', faqs: [{ answer: 'a' }] }, accessToken)).status === 400)
+
+  console.log('\n230. Round-8: save-faq-to-knowledge saves tenant-scoped KB items')
+  const r8FaqSaveRes = await post('/onboarding/products/save-faq-to-knowledge', {
+    productName: 'Smoke R8 Product',
+    faqs: [
+      { question: 'Smoke R8 Q1 价格?', answer: 'Smoke R8 A1', category: '价格 / 套餐', language: 'zh' },
+      { question: 'Smoke R8 Q2 怎么买?', answer: 'Smoke R8 A2', category: '购买流程', language: 'zh' },
+      { question: 'Smoke R8 Q3 转人工', answer: 'Smoke R8 A3', category: '转人工问题', language: 'zh' },
+    ],
+  }, accessToken)
+  check('save-faq-to-knowledge → 201',                 r8FaqSaveRes.status === 201)
+  const r8FaqSaveBody = await r8FaqSaveRes.json() as Record<string, unknown>
+  check('saved count = 3',                             r8FaqSaveBody.saved === 3)
+  check('skippedDuplicates = 0 on first save',         r8FaqSaveBody.skippedDuplicates === 0)
+  const r8KbIds = r8FaqSaveBody.knowledgeItemIds as string[]
+  check('knowledgeItemIds[] length = 3',               r8KbIds.length === 3)
+  for (const id of r8KbIds) kbIds.push(id)  // queue for cleanup
+  check('save-faq-to-knowledge realAiProviderCalled=false', r8FaqSaveBody.realAiProviderCalled === false)
+
+  console.log('\n231. Round-8: duplicate FAQ save is handled safely')
+  const r8DupRes = await post('/onboarding/products/save-faq-to-knowledge', {
+    productName: 'Smoke R8 Product',
+    faqs: [
+      { question: 'Smoke R8 Q1 价格?', answer: 'duplicate answer', category: '价格 / 套餐' },  // already exists
+      { question: 'Smoke R8 Q4 NEW',  answer: 'new answer',       category: '产品介绍' },     // new
+    ],
+  }, accessToken)
+  check('duplicate save → 201',                        r8DupRes.status === 201)
+  const r8DupBody = await r8DupRes.json() as Record<string, unknown>
+  check('saved=1 (only new)',                          r8DupBody.saved === 1)
+  check('skippedDuplicates=1',                         r8DupBody.skippedDuplicates === 1)
+  const r8DupIds = r8DupBody.knowledgeItemIds as string[]
+  for (const id of r8DupIds) kbIds.push(id)
+
+  console.log('\n232. Round-8: saved FAQ retrievable via /knowledge with PRODUCT_FAQ filter')
+  const r8KbList = await (await get('/knowledge?type=PRODUCT_FAQ&pageSize=100', accessToken)).json() as Record<string, unknown>
+  const r8KbData = r8KbList.data as Array<Record<string, unknown>>
+  check('GET /knowledge?type=PRODUCT_FAQ → 200',       Array.isArray(r8KbData))
+  check('contains [Smoke R8 Product] prefixed questions',
+    r8KbData.some(k => typeof k.question === 'string' && (k.question as string).startsWith('[Smoke R8 Product] ')))
+
+  console.log('\n233. Round-8: rejects raw file bytes in uploadedFile')
+  const r8FileRes = await post('/onboarding/products/generate-sales-config', {
+    productName: 'X',
+    uploadedFile: { filename: 'a.pdf', sizeBytes: 100, rawBytes: 'BINARY_DATA_NOT_ALLOWED' },
+  }, accessToken)
+  check('rawBytes rejected → 400',                     r8FileRes.status === 400)
+
+  console.log('\n234. Round-8: safety flags still off after Round-8 calls')
+  const r8MeBody = await (await get('/auth/me', accessToken)).json() as Record<string, unknown>
+  check('still authenticated (no token side-effect)',  typeof r8MeBody.tenantId === 'string')
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
