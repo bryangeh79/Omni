@@ -287,3 +287,23 @@ Security tab includes:
 - Recent events list with severity badge, reason, action code, role, timestamp
 - Footer showing live `realSendEnabled` / `realWaSessionEnabled` / `realMetaSendEnabled` flags
 - OWNER/ADMIN gate — non-admin users see a restriction notice
+
+
+## Phase 18A: Shared Audit Sanitization
+
+All audit/event metadata exposed to tenant-facing endpoints now passes through a single shared utility: `apps/api/src/lib/audit-safe.ts`.
+
+Exports:
+- `SAFE_AUDIT_METADATA_KEYS` — single source-of-truth whitelist
+- `parseAuditMetadataSafe(metadataJson)` — tolerant whitelist-based parser
+- `summarizeAuditAction(action)` — deterministic one-line summary
+- `classifySecuritySeverity(action, safeMetadata)` — severity classification
+- `sanitizeAuditEvent(rawEvent)` — full safe shape (no metadataJson, no actorUserId/ip/userAgent)
+
+**Rule:** New audit/event-exposing endpoints MUST use this utility. Raw `metadataJson` must NOT be exposed in tenant-facing endpoints. Existing `/audit/logs` retains the legacy `metadataJson` field for compatibility with the audit UI (already filtered at write-time) and is augmented with `safeMetadata` + `summary`.
+
+Endpoints using the shared utility (Phase 18A):
+- `GET /account/activity` — sanitized events, whitelisted safeMetadata
+- `GET /account/security-events` — uses `classifySecuritySeverity` + sanitized events
+- `GET /activation/timeline` — raw `metadataJson` replaced with `safeMetadata` + `summary`
+- `GET /audit/logs` — adds `safeMetadata` + `summary` alongside legacy `metadataJson`

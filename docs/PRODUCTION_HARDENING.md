@@ -253,3 +253,12 @@ See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.
 - No new permission tiers introduced — uses existing OWNER/ADMIN gate via `requireRole`
 
 See `docs/TENANT_ACCOUNT_MANAGEMENT.md` for full reference.
+
+
+## Phase 18A: Audit Metadata Sanitization Consolidation
+
+- New module: `apps/api/src/lib/audit-safe.ts`
+- Single whitelist (`SAFE_AUDIT_METADATA_KEYS`) governs what audit metadata can be returned by any tenant-facing endpoint
+- Refactored: `/account/activity`, `/account/security-events`, `/activation/timeline`, `/audit/logs`
+- Future audit/event endpoints MUST use this utility — do not duplicate sanitization logic
+- Raw `metadataJson` is NOT exposed by `/account/*` or `/activation/timeline`; `/audit/logs` keeps it for legacy UI compat and tests assert no secret substrings

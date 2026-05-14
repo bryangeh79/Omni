@@ -3979,6 +3979,110 @@ async function smoke() {
   check('security safety.realSendCurrentlyOff=true',  secSafety.realSendCurrentlyOff === true)
   check('security safety.broadcastEnabled=false',     secSafety.broadcastEnabled     === false)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 18A — Shared Audit Safe Metadata Utility Consolidation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n211. Phase 18A: /account/activity uses shared sanitizer — no raw metadataJson')
+  const p18aActRes  = await get('/account/activity?limit=50', accessToken)
+  const p18aActBody = await p18aActRes.json() as Record<string, unknown>
+  check('GET /account/activity → 200',                p18aActRes.status === 200)
+  const p18aActEvents = (p18aActBody.events ?? []) as Record<string, unknown>[]
+  if (p18aActEvents.length > 0) {
+    check('activity event has no metadataJson key',   !('metadataJson' in p18aActEvents[0]))
+    check('activity event has safeMetadata',          typeof p18aActEvents[0].safeMetadata === 'object')
+    check('activity event has summary',               typeof p18aActEvents[0].summary === 'string')
+  } else {
+    check('activity event has no metadataJson key (skip)', true)
+    check('activity event has safeMetadata (skip)',         true)
+    check('activity event has summary (skip)',              true)
+  }
+  // Hard scan: no secret substrings anywhere in response
+  const p18aActJson = JSON.stringify(p18aActBody)
+  check('activity no passwordHash',          !p18aActJson.includes('passwordHash'))
+  check('activity no credentialRef',         !p18aActJson.includes('credentialRef'))
+  check('activity no metaAccessTokenRef',    !p18aActJson.includes('metaAccessTokenRef'))
+  check('activity no webhookVerifyTokenRef', !p18aActJson.includes('webhookVerifyTokenRef'))
+  check('activity no apiKeyRef',             !p18aActJson.includes('apiKeyRef'))
+  check('activity no JWT_SECRET',            !p18aActJson.includes('JWT_SECRET'))
+
+  console.log('\n212. Phase 18A: /account/security-events uses shared sanitizer')
+  const p18aSecRes  = await get('/account/security-events', accessToken)
+  const p18aSecBody = await p18aSecRes.json() as Record<string, unknown>
+  check('GET /account/security-events → 200',     p18aSecRes.status === 200)
+  const p18aSecEvents = (p18aSecBody.events ?? []) as Record<string, unknown>[]
+  if (p18aSecEvents.length > 0) {
+    check('security event has severity',          ['info', 'warning', 'critical'].includes(String(p18aSecEvents[0].severity)))
+    check('security event has reason',            typeof p18aSecEvents[0].reason === 'string')
+    check('security event has safeMetadata',      typeof p18aSecEvents[0].safeMetadata === 'object')
+    check('security event no metadataJson',       !('metadataJson' in p18aSecEvents[0]))
+  } else {
+    check('security event has severity (skip)',   true)
+    check('security event has reason (skip)',     true)
+    check('security event has safeMetadata (skip)', true)
+    check('security event no metadataJson (skip)', true)
+  }
+  const p18aSecJson = JSON.stringify(p18aSecBody)
+  check('security no passwordHash',          !p18aSecJson.includes('passwordHash'))
+  check('security no credentialRef',         !p18aSecJson.includes('credentialRef'))
+  check('security no apiKeyRef',             !p18aSecJson.includes('apiKeyRef'))
+
+  console.log('\n213. Phase 18A: /activation/timeline now returns sanitized events (no raw metadataJson)')
+  const p18aTlRes  = await get('/activation/timeline', accessToken)
+  const p18aTlBody = await p18aTlRes.json() as Record<string, unknown>
+  check('GET /activation/timeline → 200',          p18aTlRes.status === 200)
+  const p18aTlEvents = (p18aTlBody.events ?? []) as Record<string, unknown>[]
+  if (p18aTlEvents.length > 0) {
+    const e = p18aTlEvents[0]
+    check('timeline event has safeMetadata',        typeof e.safeMetadata === 'object')
+    check('timeline event has summary',             typeof e.summary === 'string')
+    check('timeline event no raw metadataJson',     !('metadataJson' in e))
+  } else {
+    check('timeline event has safeMetadata (skip)', true)
+    check('timeline event has summary (skip)',      true)
+    check('timeline event no raw metadataJson (skip)', true)
+  }
+  const p18aTlJson = JSON.stringify(p18aTlBody)
+  check('timeline no metadataJson substring',  !p18aTlJson.includes('"metadataJson"'))
+  check('timeline no passwordHash',            !p18aTlJson.includes('passwordHash'))
+  check('timeline no credentialRef',           !p18aTlJson.includes('credentialRef'))
+  check('timeline no metaAccessTokenRef',      !p18aTlJson.includes('metaAccessTokenRef'))
+  check('timeline no webhookVerifyTokenRef',   !p18aTlJson.includes('webhookVerifyTokenRef'))
+  check('timeline no apiKeyRef',               !p18aTlJson.includes('apiKeyRef'))
+
+  console.log('\n214. Phase 18A: /audit/logs enriched with safeMetadata; legacy metadataJson preserved without secrets')
+  const p18aAuditRes  = await get('/audit/logs?pageSize=20', accessToken)
+  const p18aAuditBody = await p18aAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs → 200',                   p18aAuditRes.status === 200)
+  const p18aAuditLogs = (p18aAuditBody.logs ?? []) as Record<string, unknown>[]
+  if (p18aAuditLogs.length > 0) {
+    const l = p18aAuditLogs[0]
+    check('audit log has safeMetadata',            typeof l.safeMetadata === 'object')
+    check('audit log has summary',                 typeof l.summary === 'string')
+    check('audit log preserves metadataJson key (compat)', 'metadataJson' in l)
+  } else {
+    check('audit log has safeMetadata (skip)',     true)
+    check('audit log has summary (skip)',          true)
+    check('audit log preserves metadataJson (skip)', true)
+  }
+  // Legacy metadataJson must not contain secret substrings (defensive scan)
+  const p18aAuditJson = JSON.stringify(p18aAuditBody)
+  check('audit no passwordHash',          !p18aAuditJson.includes('passwordHash'))
+  check('audit no credentialRef',         !p18aAuditJson.includes('credentialRef'))
+  check('audit no metaAccessTokenRef',    !p18aAuditJson.includes('metaAccessTokenRef'))
+  check('audit no webhookVerifyTokenRef', !p18aAuditJson.includes('webhookVerifyTokenRef'))
+  check('audit no apiKeyRef',             !p18aAuditJson.includes('apiKeyRef'))
+  check('audit no JWT_SECRET',            !p18aAuditJson.includes('JWT_SECRET'))
+  check('audit no DATABASE_URL',          !p18aAuditJson.includes('DATABASE_URL'))
+
+  console.log('\n215. Phase 18A: existing Phase 17D behavior preserved (activity filters still work)')
+  const p18aFiltRes  = await get('/account/activity?actionGroup=team&limit=5', accessToken)
+  const p18aFiltBody = await p18aFiltRes.json() as Record<string, unknown>
+  check('filtered activity (actionGroup=team) → 200',  p18aFiltRes.status === 200)
+  const p18aFiltFilters = (p18aFiltBody.filters ?? {}) as Record<string, unknown>
+  check('filters object still echoed',                 p18aFiltFilters.actionGroup === 'team')
+  check('availableActionGroups still present',         Array.isArray(p18aFiltBody.availableActionGroups))
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)

@@ -263,7 +263,11 @@ export default function ActivationMonitoringPage() {
                       </div>
                       <div style={{ fontSize: '0.75rem', color: NEUTRAL }}>
                         {!!e.actorRole && <span style={{ marginRight: '0.5rem' }}>{String(e.actorRole)}</span>}
-                        {!!e.metadataJson && <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{metaSafePreview(String(e.metadataJson))}</span>}
+                        {/* Phase 18A: server returns sanitized safeMetadata; fall back to legacy metadataJson if present */}
+                        {!!e.safeMetadata && Object.keys(e.safeMetadata as object).length > 0 && (
+                          <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{JSON.stringify(e.safeMetadata)}</span>
+                        )}
+                        {!e.safeMetadata && !!e.metadataJson && <span style={{ fontFamily: 'monospace', color: '#9ca3af' }}>{metaSafePreview(String(e.metadataJson))}</span>}
                       </div>
                     </div>
                   </div>

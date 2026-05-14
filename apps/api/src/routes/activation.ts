@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
 import { createAuditLog }           from '../lib/audit'
+import { sanitizeAuditEvent }       from '../lib/audit-safe'
 
 type ReadinessLevel =
   | 'BLOCKED'
@@ -396,13 +397,16 @@ export async function activationRoutes(app: FastifyInstance) {
       where: { tenantId, action: 'ACTIVATION_DRY_RUN' },
     })
 
+    // Phase 18A: sanitize events through shared utility — no raw metadataJson
+    const safeEvents = events.map(e => sanitizeAuditEvent(e))
+
     return {
       tenantId,
       asOf:               new Date().toISOString(),
       totalActivationDryRuns,
-      recentEventCount:   events.length,
-      events,
-      note: 'Timeline shows recent operator-initiated activation events only. No secrets or raw credentials included.',
+      recentEventCount:   safeEvents.length,
+      events: safeEvents,
+      note: 'Timeline shows recent operator-initiated activation events only. Metadata is sanitized through a shared whitelist — no raw metadataJson, secrets, or credentials are included.',
     }
   })
 

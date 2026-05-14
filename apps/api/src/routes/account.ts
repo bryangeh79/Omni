@@ -15,6 +15,12 @@ import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, requireRole, getAuthUser } from '../auth'
 import { createAuditLog }                         from '../lib/audit'
+import {
+  parseAuditMetadataSafe,
+  summarizeAuditAction,
+  classifySecuritySeverity,
+  sanitizeAuditEvent,
+} from '../lib/audit-safe'
 
 const VALID_LANGUAGES = ['zh', 'en', 'ms'] as const
 
@@ -261,38 +267,10 @@ export async function accountRoutes(app: FastifyInstance) {
     ...ACTION_GROUPS.activation,
   ]))
 
-  // Whitelist of safe metadata keys exposed in responses
-  const SAFE_META_KEYS = new Set([
-    'updatedFields', 'newRole', 'isActive', 'planId', 'priceRm',
-    'channelType', 'intendedMode', 'dryRunStatus', 'blockedCount',
-    'industry', 'goal', 'channelPreference', 'recipientLabel',
-  ])
-
-  function safeMeta(json: string): Record<string, unknown> {
-    try {
-      const parsed = JSON.parse(json) as Record<string, unknown>
-      const out: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(parsed)) {
-        if (SAFE_META_KEYS.has(k)) out[k] = v
-      }
-      return out
-    } catch { return {} }
-  }
-
-  function summarizeAction(action: string): string {
-    switch (action) {
-      case 'ACCOUNT_PROFILE_UPDATE':          return 'Account profile updated'
-      case 'TENANT_SIGNUP':                    return 'Tenant signed up'
-      case 'TEAM_INVITE_DRAFT':                return 'Team invite drafted (no email sent)'
-      case 'TEAM_ROLE_UPDATE':                 return 'Team member role updated'
-      case 'TEAM_STATUS_UPDATE':               return 'Team member status changed'
-      case 'BILLING_PLAN_SELECTED':            return 'Billing plan selected (no charge)'
-      case 'SETTINGS_PROFILE_UPDATE':          return 'Settings profile updated'
-      case 'ACTIVATION_DRY_RUN':               return 'Activation dry-run executed (no real send)'
-      case 'ACTIVATION_TEST_MESSAGE_DRY_RUN':  return 'Test message dry-run (no real send)'
-      default:                                  return action
-    }
-  }
+  // Phase 18A: All sanitization is now centralized in lib/audit-safe.ts.
+  // Local wrappers preserve the previous call-site shape (string|null tolerance).
+  const safeMeta             = (json: string) => parseAuditMetadataSafe(json)
+  const summarizeAction      = (action: string) => summarizeAuditAction(action)
 
   // ── GET /account/activity — Phase 17C + Phase 17D filters ────────────────
   // Returns recent safe audit events for the current tenant. Supports filters.
@@ -431,49 +409,10 @@ export async function accountRoutes(app: FastifyInstance) {
       },
     })
 
-    type Severity = 'info' | 'warning' | 'critical'
-
-    function classify(action: string, meta: Record<string, unknown>): { severity: Severity; reason: string } {
-      // Role changes — warning (could be privilege escalation)
-      if (action === 'TEAM_ROLE_UPDATE') {
-        const newRole = String(meta.newRole ?? '')
-        if (newRole === 'OWNER' || newRole === 'ADMIN') {
-          return { severity: 'warning', reason: 'Member promoted to elevated role' }
-        }
-        return { severity: 'info', reason: 'Member role updated' }
-      }
-      // Status change — info, but flag if deactivating
-      if (action === 'TEAM_STATUS_UPDATE') {
-        if (meta.isActive === false) return { severity: 'warning', reason: 'Member deactivated' }
-        return { severity: 'info', reason: 'Member status changed' }
-      }
-      // Account profile change — info
-      if (action === 'ACCOUNT_PROFILE_UPDATE' || action === 'SETTINGS_PROFILE_UPDATE') {
-        return { severity: 'info', reason: 'Profile updated' }
-      }
-      // Billing plan — info
-      if (action === 'BILLING_PLAN_SELECTED') {
-        return { severity: 'info', reason: 'Billing plan selected (no charge)' }
-      }
-      // Activation dry-run with blockers — warning
-      if (action === 'ACTIVATION_DRY_RUN') {
-        const blockedCount = Number(meta.blockedCount ?? 0)
-        const dryRunStatus = String(meta.dryRunStatus ?? '')
-        if (dryRunStatus === 'BLOCKED' || blockedCount > 0) {
-          return { severity: 'warning', reason: `Activation dry-run blocked (${blockedCount} issue${blockedCount === 1 ? '' : 's'})` }
-        }
-        return { severity: 'info', reason: 'Activation dry-run executed' }
-      }
-      // Test message dry-run — info (never sends)
-      if (action === 'ACTIVATION_TEST_MESSAGE_DRY_RUN') {
-        return { severity: 'info', reason: 'Test message dry-run (no real send)' }
-      }
-      return { severity: 'info', reason: action }
-    }
-
+    // Phase 18A: severity classification is now centralized in lib/audit-safe.ts
     const classified = rawEvents.map(e => {
-      const meta = safeMeta(e.metadataJson)
-      const { severity, reason } = classify(e.action, meta)
+      const meta = parseAuditMetadataSafe(e.metadataJson)
+      const { severity, reason } = classifySecuritySeverity(e.action, meta)
       return {
         id:           e.id,
         action:       e.action,
@@ -482,7 +421,7 @@ export async function accountRoutes(app: FastifyInstance) {
         createdAt:    e.createdAt,
         severity,
         reason,
-        summary:      summarizeAction(e.action),
+        summary:      summarizeAuditAction(e.action),
         safeMetadata: meta,
         within24h:    e.createdAt >= last24h,
       }

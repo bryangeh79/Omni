@@ -12,6 +12,10 @@ import type { FastifyInstance } from 'fastify'
 import { prisma }               from '@omni/db'
 import { requireAuth, getAuthUser } from '../auth'
 import { createAuditLog }           from '../lib/audit'
+import {
+  parseAuditMetadataSafe,
+  summarizeAuditAction,
+} from '../lib/audit-safe'
 
 const MAX_PAGE_SIZE  = 100
 const DEF_PAGE_SIZE  = 50
@@ -60,6 +64,16 @@ export async function auditRoutes(app: FastifyInstance) {
       }),
     ])
 
+    // Phase 18A: enrich each log entry with safeMetadata (whitelisted view) +
+    // summary, while preserving the legacy `metadataJson` field for existing
+    // /audit UI consumers (already filtered at write-time by createAuditLog).
+    // Tests assert that metadataJson contains no secret substrings.
+    const enrichedLogs = logs.map(l => ({
+      ...l,
+      summary:      summarizeAuditAction(l.action),
+      safeMetadata: parseAuditMetadataSafe(l.metadataJson),
+    }))
+
     return {
       tenantId,
       pagination: {
@@ -68,7 +82,7 @@ export async function auditRoutes(app: FastifyInstance) {
         pageSize: take,
         pages:    Math.ceil(total / take),
       },
-      logs,
+      logs: enrichedLogs,
     }
   })
 

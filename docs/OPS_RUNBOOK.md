@@ -115,3 +115,13 @@ Operators should note:
 - Severity classification is local and deterministic — no SIEM integration yet
 - Production SIEM/alerting still relies on external monitoring of `/ops/health` and `/audit/logs`
 - The Security tab supplements (not replaces) the audit log review process
+
+
+## Phase 18A: Centralized Audit Sanitizer
+
+If you add a new audit-log-exposing endpoint, import from `apps/api/src/lib/audit-safe.ts`:
+- `sanitizeAuditEvent` for full safe event objects
+- `parseAuditMetadataSafe` + `summarizeAuditAction` for granular use
+- `classifySecuritySeverity` if you need severity buckets
+
+Never select raw `metadataJson` into a tenant-facing response without first sanitizing it. The shared whitelist is the single source of truth; extend `SAFE_AUDIT_METADATA_KEYS` only after security review.
