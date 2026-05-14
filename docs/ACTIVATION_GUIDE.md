@@ -137,3 +137,15 @@ Regardless of env flags:
 - `/release-checklist` — SaaS v1 release status
 - `/ops/runbook` — backup, monitoring, incident response
 - `/audit` — admin activity timeline
+
+
+## Phase 16B: Activation Monitoring Dashboard + Go-live Readiness Pack
+
+New Phase 16B additions:
+- `GET /activation/timeline` — recent activation-related audit events (local, no secrets)
+- `GET /activation/go-live-checklist` — deterministic checklist (automated + manual confirmation items)
+- `POST /activation/test-message/dry-run` — safe placeholder, never sends, never calls providers
+- `/activation/monitoring` — unified monitoring dashboard page
+- AppNav: Activation Monitor added to Release group
+
+See `docs/ACTIVATION_MONITORING.md` for full documentation.

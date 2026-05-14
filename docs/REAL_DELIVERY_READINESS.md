@@ -183,3 +183,14 @@ New endpoints added for operator-guided activation workflow:
 Web UI at `/activation-guide` with step-by-step guide for WA Web and Meta WhatsApp Business Platform paths.
 
 See `docs/ACTIVATION_GUIDE.md` for full documentation.
+
+
+## Phase 16B: Activation Monitoring
+
+New endpoints added:
+- `GET /activation/timeline` — recent activation-related audit events
+- `GET /activation/go-live-checklist` — automated + manual confirmation checklist
+- `POST /activation/test-message/dry-run` — safe placeholder, dryRun=true, never sends, never calls providers, never echoes phone numbers
+
+New page: `/activation/monitoring` — operator monitoring dashboard.
+See `docs/ACTIVATION_MONITORING.md` for documentation.

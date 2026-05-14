@@ -206,3 +206,13 @@ New API:
 New page: `/activation-guide` — step-by-step guide for WA Web and Meta activation paths, rollback plan, post-activation monitoring.
 
 See `docs/ACTIVATION_GUIDE.md` for full documentation.
+
+## Phase 16B: Activation Monitoring Dashboard
+
+New endpoints:
+- `GET /activation/timeline` — local audit events for activation
+- `GET /activation/go-live-checklist` — automated + manual checklist
+- `POST /activation/test-message/dry-run` — never sends, dryRun=true, realSendAttempted=false
+
+New page: `/activation/monitoring` — unified dashboard.
+See `docs/ACTIVATION_MONITORING.md`.

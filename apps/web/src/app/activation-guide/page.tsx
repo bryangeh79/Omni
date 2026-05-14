@@ -386,7 +386,8 @@ export default function ActivationGuidePage() {
       </Section>
 
       <footer style={{ marginTop: '2rem', color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center' }}>
-        Omni Phase 16A · <a href="/release-checklist" style={{ color: ACCENT }}>Release Checklist</a> ·{' '}
+        <a href="/activation/monitoring" style={{ color: ACCENT }}>Activation Monitor</a> ·{' '}
+        <a href="/release-checklist" style={{ color: ACCENT }}>Release Checklist</a> ·{' '}
         <a href="/ops/runbook" style={{ color: ACCENT }}>Ops Runbook</a> ·{' '}
         <a href="/audit" style={{ color: ACCENT }}>Audit Logs</a>
       </footer>

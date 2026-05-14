@@ -3365,6 +3365,130 @@ async function smoke() {
   check('activation/health realSendCurrentlyOff=true',  ah16aFlags.realSendCurrentlyOff === true)
   check('activation/health no secrets',               !JSON.stringify(ahBody).includes('JWT_SECRET'))
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Phase 16B — Activation Monitoring + Timeline + Go-live Checklist + Test Msg Dry-run
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n170. Phase 16B: /activation/timeline — auth + shape')
+  check('GET /activation/timeline without auth → 401', (await get('/activation/timeline')).status === 401)
+
+  const tlRes  = await get('/activation/timeline', accessToken)
+  const tlBody = await tlRes.json() as Record<string, unknown>
+  check('GET /activation/timeline → 200',              tlRes.status === 200)
+  check('timeline has tenantId',                       typeof tlBody.tenantId === 'string')
+  check('timeline has events array',                   Array.isArray(tlBody.events))
+  check('timeline has totalActivationDryRuns',         typeof tlBody.totalActivationDryRuns === 'number')
+  check('timeline has recentEventCount',               typeof tlBody.recentEventCount === 'number')
+  check('timeline no secrets',                         !JSON.stringify(tlBody).includes('JWT_SECRET'))
+  // Verify events have expected fields (if any exist)
+  const tlEvents = (tlBody.events ?? []) as Record<string, unknown>[]
+  if (tlEvents.length > 0) {
+    check('timeline events have action field',         typeof tlEvents[0].action === 'string')
+    check('timeline events have createdAt field',      typeof tlEvents[0].createdAt === 'string')
+    check('timeline events have actorRole field',      'actorRole' in tlEvents[0])
+    check('timeline events no actorUserId (omitted)',  !('actorUserId' in tlEvents[0]))
+  } else {
+    check('timeline events have action field (skip - empty)',   true)
+    check('timeline events have createdAt field (skip - empty)', true)
+    check('timeline events have actorRole field (skip - empty)', true)
+    check('timeline events no actorUserId (skip - empty)',      true)
+  }
+
+  console.log('\n171. Phase 16B: /activation/go-live-checklist — auth + shape')
+  check('GET /activation/go-live-checklist without auth → 401', (await get('/activation/go-live-checklist')).status === 401)
+
+  const glRes  = await get('/activation/go-live-checklist', accessToken)
+  const glBody = await glRes.json() as Record<string, unknown>
+  check('GET /activation/go-live-checklist → 200',     glRes.status === 200)
+  check('go-live has tenantId',                        typeof glBody.tenantId === 'string')
+  check('go-live has overallStatus',                   typeof glBody.overallStatus === 'string')
+  check('go-live has summary object',                  typeof glBody.summary === 'object')
+  check('go-live has items array',                     Array.isArray(glBody.items))
+  check('go-live no secrets',                          !JSON.stringify(glBody).includes('JWT_SECRET'))
+  // credentialRef must never appear
+  check('go-live no credentialRef exposed',            !JSON.stringify(glBody).includes('credentialRef'))
+  const glSummary = (glBody.summary ?? {}) as Record<string, unknown>
+  check('go-live summary has automatedPassed',         typeof glSummary.automatedPassed === 'number')
+  check('go-live summary has manualRequired',          typeof glSummary.manualRequired  === 'number')
+
+  console.log('\n172. Phase 16B: go-live checklist items structure')
+  const glItems = (glBody.items ?? []) as Record<string, unknown>[]
+  check('go-live has onboarding_complete item',        glItems.some(i => i.key === 'onboarding_complete'))
+  check('go-live has backup_configured manual item',   glItems.some(i => i.key === 'backup_configured'))
+  check('go-live has no_broadcast_acknowledged item',  glItems.some(i => i.key === 'no_broadcast_acknowledged'))
+  const backupItem = glItems.find(i => i.key === 'backup_configured') ?? {}
+  check('backup_configured requiresManualConfirmation=true', backupItem.requiresManualConfirmation === true)
+  check('backup_configured passed=false (always manual)', backupItem.passed === false)
+  const noBroadcastItem = glItems.find(i => i.key === 'no_broadcast_acknowledged') ?? {}
+  check('no_broadcast_acknowledged requiresManualConfirmation=true', noBroadcastItem.requiresManualConfirmation === true)
+  // Automated items must have passed/required fields
+  const autoItem = glItems.find(i => !i.requiresManualConfirmation)
+  if (autoItem) {
+    check('automated item has passed (bool)',         typeof autoItem.passed === 'boolean')
+    check('automated item has key',                  typeof autoItem.key    === 'string')
+  } else {
+    check('automated item has passed (skip)', true)
+    check('automated item has key (skip)',    true)
+  }
+
+  console.log('\n173. Phase 16B: /activation/test-message/dry-run — auth + validation')
+  check('POST /activation/test-message/dry-run without auth → 401',
+    (await post('/activation/test-message/dry-run', { channelType: 'WA_WEB', recipientLabel: 'test-1' })).status === 401)
+  check('POST /activation/test-message/dry-run missing channelType → 400',
+    (await post('/activation/test-message/dry-run', { recipientLabel: 'test-1' }, accessToken)).status === 400)
+  check('POST /activation/test-message/dry-run invalid channelType → 400',
+    (await post('/activation/test-message/dry-run', { channelType: 'INVALID', recipientLabel: 'test-1' }, accessToken)).status === 400)
+  // Phone-number-like recipientLabel must be rejected
+  check('POST /activation/test-message/dry-run raw phone rejected → 400',
+    (await post('/activation/test-message/dry-run', { channelType: 'WA_WEB', recipientLabel: '+60123456789' }, accessToken)).status === 400)
+  check('POST /activation/test-message/dry-run digits-only phone rejected → 400',
+    (await post('/activation/test-message/dry-run', { channelType: 'WA_WEB', recipientLabel: '60123456789' }, accessToken)).status === 400)
+
+  console.log('\n174. Phase 16B: test-message/dry-run WA_WEB — never sends')
+  const actTmRes  = await post('/activation/test-message/dry-run', { channelType: 'WA_WEB', recipientLabel: 'test-contact-alpha' }, accessToken)
+  const actTmBody = await actTmRes.json() as Record<string, unknown>
+  check('POST /activation/test-message/dry-run (WA_WEB) → 200', actTmRes.status === 200)
+  check('test-msg dryRun=true',                        actTmBody.dryRun           === true)
+  check('test-msg realSendAttempted=false',             actTmBody.realSendAttempted === false)
+  check('test-msg providerCalled=false',               actTmBody.providerCalled    === false)
+  check('test-msg rawPhoneIncluded=false',             actTmBody.rawPhoneIncluded  === false)
+  check('test-msg has whatWouldBeRequired array',      Array.isArray(actTmBody.whatWouldBeRequired))
+  check('test-msg has safetyNote',                     typeof actTmBody.safetyNote === 'string')
+  check('test-msg no secrets in response',             !JSON.stringify(actTmBody).includes('JWT_SECRET'))
+  check('test-msg no credentialRef in response',       !JSON.stringify(actTmBody).includes('credentialRef'))
+  // recipientLabel echoed back as-is (label only, not a phone number)
+  check('test-msg recipientLabel echoed (safe label)', actTmBody.recipientLabel === 'test-contact-alpha')
+  check('test-msg channelType=WA_WEB',                 actTmBody.channelType === 'WA_WEB')
+
+  console.log('\n175. Phase 16B: test-message/dry-run META — never sends')
+  const actTmMetaRes  = await post('/activation/test-message/dry-run', { channelType: 'META_WA_BUSINESS' }, accessToken)
+  const actTmMetaBody = await actTmMetaRes.json() as Record<string, unknown>
+  check('POST /activation/test-message/dry-run (META) → 200', actTmMetaRes.status === 200)
+  check('META test-msg dryRun=true',                   actTmMetaBody.dryRun           === true)
+  check('META test-msg realSendAttempted=false',        actTmMetaBody.realSendAttempted === false)
+  check('META test-msg providerCalled=false',          actTmMetaBody.providerCalled    === false)
+  check('META test-msg whatWouldBeRequired is array',  Array.isArray(actTmMetaBody.whatWouldBeRequired))
+  check('META test-msg no raw phone in response',      !JSON.stringify(actTmMetaBody).includes('+601'))
+
+  console.log('\n176. Phase 16B: ACTIVATION_TEST_MESSAGE_DRY_RUN audit event')
+  await new Promise(r => setTimeout(r, 200))
+  const tmAuditRes  = await get('/audit/logs?action=ACTIVATION_TEST_MESSAGE_DRY_RUN', accessToken)
+  const tmAuditBody = await tmAuditRes.json() as Record<string, unknown>
+  check('GET /audit/logs?action=ACTIVATION_TEST_MESSAGE_DRY_RUN → 200', tmAuditRes.status === 200)
+  const tmLogs = (tmAuditBody.logs ?? []) as Record<string, unknown>[]
+  check('ACTIVATION_TEST_MESSAGE_DRY_RUN audit event created', tmLogs.some(l => l.action === 'ACTIVATION_TEST_MESSAGE_DRY_RUN'))
+  // Verify no raw phone number in audit metadata
+  check('audit event metadataJson has no raw phone', !tmLogs.some(l => JSON.stringify(l.metadataJson ?? '').includes('+601')))
+
+  console.log('\n177. Phase 16B: safety invariants — real send still off after all 16B tests')
+  const finalPfRes  = await get('/activation/preflight', accessToken)
+  const finalPfBody = await finalPfRes.json() as Record<string, unknown>
+  check('POST-16B preflight still 200',                finalPfRes.status === 200)
+  const finalFlags = (finalPfBody.currentFlags ?? {}) as Record<string, unknown>
+  check('POST-16B realWaSessionEnabled still false',   finalFlags.realWaSessionEnabled === false)
+  check('POST-16B realMetaSendEnabled still false',    finalFlags.realMetaSendEnabled  === false)
+  check('POST-16B realSendCurrentlyOff still true',   finalFlags.realSendCurrentlyOff === true)
+
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')
   check('POST /auth/logout → 200', (await post('/auth/logout', {}, accessToken)).status === 200)
@@ -3632,7 +3756,7 @@ async function prismaCleanupAuditLogs(): Promise<void> {
     const { PrismaClient } = await import('@omni/db')
     const p = new PrismaClient()
     const deleted = await p.auditLog.deleteMany({
-      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACTIVATION_DRY_RUN'] } },
+      where: { action: { in: ['SMOKE_TEST_EVENT', 'TEAM_INVITE_DRAFT', 'BILLING_PLAN_SELECTED', 'SETTINGS_PROFILE_UPDATE', 'TEAM_ROLE_UPDATE', 'TEAM_STATUS_UPDATE', 'ACTIVATION_DRY_RUN', 'ACTIVATION_TEST_MESSAGE_DRY_RUN'] } },
     })
     await p.$disconnect()
     console.log(`  🗑️  ${deleted.count} audit log records deleted`)

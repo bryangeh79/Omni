@@ -360,4 +360,300 @@ export async function activationRoutes(app: FastifyInstance) {
       note: 'Health data is local/DB-derived only. No external monitoring provider required for this check.',
     }
   })
+
+  // ── GET /activation/timeline ──────────────────────────────────────────────
+  // Returns recent activation-related audit events (local DB only, no secrets).
+  app.get('/timeline', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    const ACTIVATION_ACTIONS = [
+      'ACTIVATION_DRY_RUN',
+      'ACTIVATION_TEST_MESSAGE_DRY_RUN',
+      'TEAM_INVITE_DRAFT',
+      'BILLING_PLAN_SELECTED',
+      'SETTINGS_PROFILE_UPDATE',
+      'TEAM_ROLE_UPDATE',
+      'TEAM_STATUS_UPDATE',
+    ]
+
+    const events = await prisma.auditLog.findMany({
+      where:   { tenantId, action: { in: ACTIVATION_ACTIONS } },
+      orderBy: { createdAt: 'desc' },
+      take:    20,
+      select:  {
+        id:          true,
+        action:      true,
+        entityType:  true,
+        entityId:    true,
+        actorRole:   true,
+        createdAt:   true,
+        metadataJson: true,
+        // actorUserId intentionally omitted — actorRole is sufficient for timeline display
+      },
+    })
+
+    const totalActivationDryRuns = await prisma.auditLog.count({
+      where: { tenantId, action: 'ACTIVATION_DRY_RUN' },
+    })
+
+    return {
+      tenantId,
+      asOf:               new Date().toISOString(),
+      totalActivationDryRuns,
+      recentEventCount:   events.length,
+      events,
+      note: 'Timeline shows recent operator-initiated activation events only. No secrets or raw credentials included.',
+    }
+  })
+
+  // ── GET /activation/go-live-checklist ────────────────────────────────────
+  // Deterministic go-live readiness checklist with manual confirmation items.
+  app.get('/go-live-checklist', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+
+    const [onboarding, kbCount, draft, users, tenant, auditCount] = await Promise.all([
+      prisma.onboardingDraft.findUnique({ where: { tenantId } }),
+      prisma.knowledgeItem.count({ where: { tenantId, isActive: true } }),
+      prisma.channelSetupDraft.findUnique({ where: { tenantId } }),
+      prisma.user.findMany({
+        where:  { tenantId, isActive: true },
+        select: { role: true },
+      }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true } }),
+      prisma.auditLog.count({ where: { tenantId } }),
+    ])
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+    const vaultConfigured  = !!process.env.OMNI_API_KEY_ENCRYPTION_SECRET
+    const adminUsers       = users.filter(u => ['OWNER', 'ADMIN'].includes(u.role))
+    const isMetaChannel    = draft?.channelType === 'META_WA_BUSINESS'
+
+    const items = [
+      // ── Automated checks ─────────────────────────────────────────────
+      {
+        key:    'onboarding_complete',
+        label:  'Onboarding wizard completed',
+        passed: onboarding?.status === 'ENABLED',
+        requiresManualConfirmation: false,
+        detail: onboarding?.status === 'ENABLED' ? 'Onboarding ENABLED' : 'Complete onboarding first',
+        action: '/onboarding',
+      },
+      {
+        key:    'knowledge_base_ready',
+        label:  'Knowledge base has active items',
+        passed: kbCount > 0,
+        requiresManualConfirmation: false,
+        detail: `${kbCount} active KB item(s)`,
+        action: '/knowledge',
+      },
+      {
+        key:    'channel_configured',
+        label:  'Channel type configured',
+        passed: !!draft?.channelType,
+        requiresManualConfirmation: false,
+        detail: draft?.channelType ? `Type: ${draft.channelType}, Status: ${draft.setupStatus}` : 'No channel configured',
+        action: '/channels/setup',
+      },
+      {
+        key:    'credentials_safe_summary',
+        label:  'Channel credentials stored',
+        passed: draft?.credentialStatus !== 'NONE' && draft?.credentialStatus !== undefined,
+        requiresManualConfirmation: false,
+        detail: draft?.credentialStatus === 'ENCRYPTED_STORED'
+          ? 'Credentials encrypted and stored'
+          : draft?.credentialStatus === 'DRAFT'
+          ? 'Credentials in draft (vault encryption recommended)'
+          : 'No credentials stored',
+        // Note: credentialRef (raw blob) is NEVER included in this response
+        action: '/channels/setup',
+      },
+      {
+        key:    'credential_vault_configured',
+        label:  'Credential vault configured (OMNI_API_KEY_ENCRYPTION_SECRET)',
+        passed: vaultConfigured,
+        requiresManualConfirmation: false,
+        detail: vaultConfigured ? 'Vault secret is set' : 'Vault secret not set — required for encrypted credential storage',
+      },
+      {
+        key:    'admin_owner_exists',
+        label:  'Admin or Owner user exists',
+        passed: adminUsers.length > 0,
+        requiresManualConfirmation: false,
+        detail: `${adminUsers.length} admin/owner user(s)`,
+        action: '/team',
+      },
+      {
+        key:    'real_send_flags_reviewed',
+        label:  'Real send flags reviewed',
+        passed: !waSessionAllowed && !metaSendAllowed,
+        requiresManualConfirmation: false,
+        detail: (!waSessionAllowed && !metaSendAllowed)
+          ? 'Both real send flags are OFF — safe default'
+          : 'WARNING: one or more real send flags are ON',
+      },
+      {
+        key:    'audit_log_active',
+        label:  'Audit log active',
+        passed: true,
+        requiresManualConfirmation: false,
+        detail: `${auditCount} audit event(s) recorded`,
+        action: '/audit',
+      },
+      // ── Manual confirmation items ─────────────────────────────────────
+      {
+        key:    'backup_configured',
+        label:  'Database backup configured (pg_dump schedule + off-server storage)',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Operator must verify pg_dump is scheduled and backup copies are stored off-server',
+        action: '/ops/runbook',
+      },
+      {
+        key:    'monitoring_configured',
+        label:  'External monitoring configured (uptime probe on /ops/health)',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Operator must configure UptimeRobot/Grafana/etc. monitoring on /ops/health',
+        action: '/ops/runbook',
+      },
+      {
+        key:    'rollback_plan_reviewed',
+        label:  'Rollback plan reviewed and understood',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Operator must review rollback steps at /activation-guide before going live',
+        action: '/activation-guide',
+      },
+      {
+        key:    'billing_pricing_notes_reviewed',
+        label:  'Billing / pricing notes reviewed',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Operator must confirm plan pricing and no real payment gateway is configured yet',
+        action: '/billing',
+      },
+      ...(isMetaChannel ? [{
+        key:    'meta_api_fee_noted',
+        label:  'Meta API pass-through fee noted (per-conversation, NOT bundled in plan price)',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Meta WhatsApp API per-conversation fees are billed as pass-through credits — not included in Omni plan pricing',
+        action: '/billing',
+      }] : []),
+      {
+        key:    'no_broadcast_acknowledged',
+        label:  'No broadcast/ads/bulk-sending boundary acknowledged',
+        passed: false,
+        requiresManualConfirmation: true,
+        detail: 'Confirm: Omni only supports 1:1 WhatsApp AI customer service. No broadcast, ads, or bulk messaging on any plan.',
+      },
+    ]
+
+    const automated = items.filter(i => !i.requiresManualConfirmation)
+    const manual    = items.filter(i =>  i.requiresManualConfirmation)
+    const autoPassed = automated.filter(i => i.passed).length
+    const autoFailed = automated.filter(i => !i.passed).length
+
+    const overallStatus = autoFailed > 0 ? 'BLOCKED' : 'READY_FOR_MANUAL_REVIEW'
+
+    return {
+      tenantId,
+      asOf:           new Date().toISOString(),
+      overallStatus,
+      summary: {
+        automatedPassed: autoPassed,
+        automatedFailed: autoFailed,
+        manualRequired:  manual.length,
+        total:           items.length,
+      },
+      items,
+      note: 'Manual items require operator confirmation outside this system. No automated verification is possible for backup, monitoring, or intent-based checks.',
+    }
+  })
+
+  // ── POST /activation/test-message/dry-run ────────────────────────────────
+  // Safe placeholder for pre-activation test message validation.
+  // NEVER sends a real message. NEVER calls WhatsApp/Meta. NEVER accepts raw phone numbers.
+  app.post<{
+    Body: {
+      channelType?:    string
+      recipientLabel?: string  // Label only — NOT a raw phone number. e.g. "test-contact-1"
+    }
+  }>('/test-message/dry-run', { preHandler: requireAuth }, async (req, reply) => {
+    const { tenantId, userId, role } = getAuthUser(req)
+    const { channelType, recipientLabel } = req.body ?? {}
+
+    const validChannelTypes = ['WA_WEB', 'META_WA_BUSINESS']
+    if (!channelType || !validChannelTypes.includes(channelType)) {
+      return reply.status(400).send({
+        error: `channelType required. Valid: ${validChannelTypes.join(', ')}`,
+      })
+    }
+
+    // Validate recipientLabel — must NOT be a raw phone number (starts with + or all digits)
+    if (recipientLabel) {
+      const looksLikePhone = /^\+?\d{7,}$/.test(recipientLabel.trim())
+      if (looksLikePhone) {
+        return reply.status(400).send({
+          error: 'recipientLabel must be a safe label (e.g. "test-contact-1"), not a raw phone number. Raw phone numbers are not accepted by this endpoint.',
+        })
+      }
+    }
+
+    const waSessionAllowed = process.env.OMNI_ALLOW_WA_SESSION     === 'true'
+    const metaSendAllowed  = process.env.OMNI_ENABLE_REAL_META_SEND === 'true'
+
+    const draft = await prisma.channelSetupDraft.findUnique({ where: { tenantId } })
+
+    const whatWouldBeRequired: string[] = []
+    if (channelType === 'WA_WEB') {
+      if (!waSessionAllowed) whatWouldBeRequired.push('OMNI_ALLOW_WA_SESSION=true must be set')
+      whatWouldBeRequired.push('Active WA Web session (QR scanned and connected)')
+      whatWouldBeRequired.push('Recipient must be a number with which you have an existing WhatsApp chat')
+    } else {
+      if (!metaSendAllowed) whatWouldBeRequired.push('OMNI_ENABLE_REAL_META_SEND=true must be set')
+      whatWouldBeRequired.push('Valid encrypted Meta access token stored via /channels/setup/credentials-draft')
+      whatWouldBeRequired.push('Webhook subscribed and verified on Meta Business Manager')
+      whatWouldBeRequired.push('Recipient must be a WhatsApp number registered on the same WABA or in sandbox mode')
+    }
+
+    // Fire-and-forget audit log
+    void createAuditLog({
+      tenantId,
+      actorUserId: userId,
+      actorRole:   role,
+      action:      'ACTIVATION_TEST_MESSAGE_DRY_RUN',
+      entityType:  'Tenant',
+      entityId:    tenantId,
+      metadata:    {
+        channelType,
+        recipientLabel: recipientLabel ?? null,
+        // Raw phone numbers are never included in audit metadata
+      },
+    })
+
+    return {
+      tenantId,
+      dryRun:             true,
+      realSendAttempted:  false,
+      providerCalled:     false,
+      channelType,
+      recipientLabel:     recipientLabel ?? null,
+      // Raw phone numbers are NEVER echoed back
+      rawPhoneIncluded:   false,
+      whatWouldBeRequired,
+      currentFlags: {
+        waSessionAllowed,
+        metaSendAllowed,
+        realSendCurrentlyOff: !waSessionAllowed && !metaSendAllowed,
+      },
+      channelStatus: {
+        channelType:       draft?.channelType ?? null,
+        credentialStatus:  draft?.credentialStatus ?? 'NONE',
+        // credentialRef (raw blob) is NEVER included
+      },
+      safetyNote: 'This is a dry-run placeholder. No real WhatsApp/Meta connection was made. No message was sent. No phone number was called or stored.',
+    }
+  })
 }
