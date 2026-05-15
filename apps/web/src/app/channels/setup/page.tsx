@@ -252,8 +252,8 @@ export default function ChannelSetupPage() {
     { label: '草稿已保存到数据库', done: !!(status && status.updatedAt) },
     { label: '已完成安全演练测试', done: setupStatus !== 'DRAFT' },
     { label: '凭据已保存', done: credStat === 'ENCRYPTED_STORED' || credStat === 'DRAFT', applicable: isMetaType },
-    { label: 'OMNI_ALLOW_WA_SESSION=true（WhatsApp Web）', done: false, note: 'WA Web 激活必需 — 由运维设置', applicable: selected === 'WA_WEB' },
-    { label: 'OMNI_ENABLE_REAL_META_SEND=true（Meta API）', done: false, note: 'Meta API 激活必需 — 由运维设置', applicable: isMetaType },
+    { label: 'WhatsApp Web 真实连接（待平台审核开启）', done: false, note: '为保护账号安全，真实连接需由服务商完成平台审核后开启', applicable: selected === 'WA_WEB' },
+    { label: 'Meta 官方 API 启用（待企业认证完成）', done: false, note: 'Meta API 需要完成企业认证和平台配置后才能启用', applicable: isMetaType },
     { label: '已发起激活请求', done: setupStatus === 'ACTIVATION_PENDING' || setupStatus === 'ACTIVE' },
   ]
 
@@ -568,13 +568,13 @@ export default function ChannelSetupPage() {
           </div>
         )}
 
-        {/* Safety reminder */}
+        {/* Safety reminder (tenant-facing, business copy) */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
           <p className="font-semibold text-gray-600">安全默认：</p>
-          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — WhatsApp Web 会话默认不会启动</p>
-          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> — Meta API 默认不会调用</p>
-          <p>• 凭据保存前经 AES-256-GCM 加密，响应中绝不返回原始值</p>
-          <p>• 真实渠道激活必须由运维显式设置 env 标志</p>
+          <p>• 默认<strong>不会</strong>启动真实 WhatsApp 会话或调用真实 Meta API。</p>
+          <p>• 当前页面只能进行<strong>安全演练</strong>（保存凭据 / 模拟测试），不会发送真实消息。</p>
+          <p>• 凭据保存前经强加密处理，响应中绝不返回原始值。</p>
+          <p>• 真实激活需<a href="/activation-guide" className="text-blue-600 hover:text-blue-800 font-medium">联系服务商执行平台激活流程</a>。</p>
           <p>• <a href="/launch-checklist" className="text-emerald-600 hover:text-emerald-800 font-medium">查看完整上线清单 →</a></p>
         </div>
       </main>

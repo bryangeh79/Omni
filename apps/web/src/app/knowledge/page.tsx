@@ -375,9 +375,8 @@ export default function KnowledgePage() {
             </div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
-            <a href="/onboarding" className="text-purple-600 hover:text-purple-800 font-medium">+ 从上线向导导入</a>
-            <span className="text-gray-200">|</span>
-            <a href="/channels/setup" className="text-blue-600 hover:text-blue-700">渠道设置</a>
+            <a href="/onboarding" className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg font-medium" title="从产品资料生成 FAQ — 跳转到「配置 AI 客服」">+ 从产品资料生成 FAQ</a>
+            <a href="/channels/setup" className="text-blue-600 hover:text-blue-700">连接 WhatsApp</a>
             <span className="text-gray-200">|</span>
             <a href="/boss" className="text-gray-500 hover:text-gray-700">工作台</a>
           </nav>
@@ -385,6 +384,13 @@ export default function KnowledgePage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-4">
+        {/* Round-9C: Knowledge purpose copy — separate from 配置 AI 客服 */}
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl px-5 py-4 text-xs text-purple-900 space-y-1">
+          <p><strong>知识库</strong>用于<strong>查看和微调</strong> AI 客服会使用的 FAQ。</p>
+          <p>如果您还没有产品 FAQ，请先到「<a href="/onboarding" className="font-semibold underline">配置 AI 客服</a>」上传产品资料，让 Omni 自动生成。</p>
+          <p className="text-[10px] text-purple-700 opacity-80">配置 AI 客服 = 一键生成 · 知识库 = 管理 / 微调</p>
+        </div>
+
         {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
 
         {/* Toolbar */}

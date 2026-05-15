@@ -261,11 +261,25 @@ export async function billingRoutes(app: FastifyInstance) {
     ])
 
     const summary = await getQuotaSummary(tenantId, planId, usedProductSlots, usedWhatsapp, usedTeamUsers)
+    // Round-9C: inline service-access so the tenant billing page can render
+    // service status + contract dates without a second roundtrip.
+    const { getTenantServiceAccess } = await import('../lib/service-access')
+    const access = await getTenantServiceAccess(tenantId)
     return {
       ...summary,
       addOns: ADD_ONS,
       recommendedAddOnIds: RECOMMENDED_ADD_ONS[planId as keyof typeof RECOMMENDED_ADD_ONS] ?? [],
       metaApiFeeNote: META_API_FEE_NOTE,
+      serviceAccess: {
+        serviceStatus:      access.serviceStatus,
+        contractStartAt:    access.contractStartAt,
+        contractEndAt:      access.contractEndAt,
+        daysRemaining:      access.daysRemaining,
+        isActiveLike:       access.isActiveLike,
+        isBlocked:          access.isBlocked,
+        renewalWarning:     access.renewalWarning,
+        tenantFacingBanner: access.tenantFacingBanner,
+      },
       realAiProviderCalled: false,
       realPaymentGatewayCalled: false,
     }

@@ -12,7 +12,11 @@ function ym(d: Date = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-export interface MonthlyUsage { faqGenerations: number; aiReplies: number }
+// `faqDirectReplies` is a Round-9C foundation counter for "FAQ matched, sent
+// directly (no AI generation, no AI Reply credit deduction)". It is read by
+// the tenant-facing quota counter UI; no endpoint deducts from it yet — the
+// inbox FAQ dispatcher will increment it when wired in a later Round.
+export interface MonthlyUsage { faqGenerations: number; aiReplies: number; faqDirectReplies?: number }
 export interface PurchasedCredits { faq: number; aiReply: number }
 
 export interface ActiveAddOn {
@@ -57,12 +61,18 @@ export interface QuotaSummary {
   faq:         CounterWithCredits
   aiReply:     CounterWithCredits
   teamUsers:   Counter
+  /** Round-9C: FAQ matched-and-sent count (no AI generation, no credit deduction). */
+  faqDirectReplies: number
   warnings:    string[]           // friendly messages when ≥80%, ≥90%, =100%
   cta: {
     productExpansion?: string
     faqCredits?:       string
     aiReplyCredits?:   string
   }
+  /** Round-9C: tenant cannot self-select plan; SaaS Admin provisions plan. */
+  tenantCanChangePlan: false
+  /** Round-9C: tenant uses platform-hosted AI; no tenant API key required. */
+  platformHostedAi:    true
 }
 
 interface PlanDefLaunchOffer { priceRm: number; period: 'monthly'; commitmentMonths: number; upfront: number; originalSixMonth: number; savings: number; note: string }
@@ -193,12 +203,15 @@ export async function getQuotaSummary(tenantId: string, planId: string, usedProd
     faq,
     aiReply,
     teamUsers: team,
+    faqDirectReplies: Math.max(0, Math.floor(usage.faqDirectReplies ?? 0)),
     warnings,
     cta: {
       productExpansion: prod.remaining <= 0 ? '购买产品扩容包' : undefined,
       faqCredits:       faq.totalRemaining <= 0 ? '购买 AI FAQ 生成包' : undefined,
       aiReplyCredits:   aiReply.totalRemaining <= 0 ? '购买 AI 回复包' : undefined,
     },
+    tenantCanChangePlan: false,
+    platformHostedAi:    true,
   }
 }
 

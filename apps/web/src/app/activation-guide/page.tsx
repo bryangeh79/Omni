@@ -239,6 +239,9 @@ export default function ActivationGuidePage() {
             从演示 / 预演环境过渡到受控真实激活的分步指南。
             <strong> 真实发送默认关闭：必须手动修改 env 标志并完成所有检查后才会启用。</strong>
           </p>
+          <p style={{ margin: '0.5rem 0 0', display: 'inline-block', background: '#fef3c7', color: '#92400e', fontSize: '0.6875rem', padding: '0.125rem 0.5rem', borderRadius: 6, fontWeight: 600 }}>
+            SaaS Admin / 平台运维 内部诊断 — 普通租户无需操作
+          </p>
         </div>
         <a href="/release-checklist" style={{ padding: '0.4375rem 0.875rem', background: ACCENT, color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
           发布检查清单 →

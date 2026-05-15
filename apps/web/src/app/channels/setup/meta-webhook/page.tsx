@@ -155,9 +155,9 @@ export default function MetaWebhookPage() {
         {error  && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
         {notice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
 
-        {/* Safety notice */}
+        {/* Safety notice (tenant-facing business copy) */}
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-800">
-          <strong>默认安全：</strong>本向导仅协助配置 Meta 应用 Dashboard，不会发起任何真实 Meta API 调用。真实 Webhook 投递需要 <code>OMNI_ENABLE_REAL_META_SEND=true</code>。
+          <strong>默认安全：</strong>本向导仅协助配置 Meta 应用 Dashboard，不会发起任何真实 Meta API 调用。Meta 官方 API 需要完成企业认证和平台配置后才能启用 — <a href="/activation-guide" className="font-medium underline">联系服务商激活</a>。
         </div>
 
         {/* Webhook callback URL */}
@@ -285,13 +285,13 @@ export default function MetaWebhookPage() {
           )}
         </div>
 
-        {/* Safety footer */}
+        {/* Safety footer (tenant-facing business copy) */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
           <p className="font-semibold text-gray-600">Meta API 安全说明：</p>
-          <p>• 本页不会发起任何 Meta API 调用</p>
-          <p>• <code>OMNI_ENABLE_REAL_META_SEND=false</code> 为默认值</p>
-          <p>• Verify token：仅保存末四位，绝不返回</p>
-          <p>• Access token：经 AES-256-GCM 加密保存，绝不返回</p>
+          <p>• 本页不会发起任何 Meta API 调用。</p>
+          <p>• Meta 官方 API 真实发送默认<strong>不开启</strong>，需完成平台认证与审核后开启。</p>
+          <p>• Verify token：仅保存末四位，绝不返回。</p>
+          <p>• Access token：经强加密保存，绝不返回。</p>
         </div>
       </main>
     </div>

@@ -1,5 +1,37 @@
 # Omni Production Hardening — Phase 10A/10B → 15B → Post-v1 UAT Polish
 
+## Post-v1 Round-9C — Tenant UX Cleanup after SaaS Admin Model
+
+继 Round-9B 之后，Round-9C 把 SaaS Admin 开户制带来的 UX 影响完整收尾：
+
+- **Billing 页面（`/billing`）从"选择套餐"改为「套餐与额度」纯展示**：
+  - 删除 plan-card grid（PlanCard 与 handleSelect 标 `_` 保留可选 admin 复用）
+  - 新增 "当前套餐 + 服务状态 + 合约到期 + 剩余天" 摘要卡，含 `tenantFacingBanner`（试用/逾期/暂停/到期/取消）
+  - 顶部蓝色 banner 改为 "套餐由服务商管理 · Meta API 另计 · 当前页不会真实扣款"
+  - quota counter 重排顺序：FAQ 回复数（emerald-50，foundation 无扣费）→ AI 回复数 → AI FAQ Generator → 产品配置位 → WhatsApp 连接 → 团队用户
+  - Add-on 一键购买 stub 保留，按钮叫"加购包"而不是"选择套餐"
+- **Backend `getQuotaSummary` 新增 4 个字段**：`faqDirectReplies: number`（来自 monthlyUsage JSON，foundation 无扣费写入器；未来 inbox FAQ dispatcher 接入时 increment）、`tenantCanChangePlan: false`、`platformHostedAi: true`、`serviceAccess: {...}`（内联自 Round-9B helper，让 billing 页一次拿全）
+- **Settings 页面 AI 智能回复段**：加 blue 徽章「**当前使用：平台 AI 服务**」+ 5 条扣费规则中文文案（开启时仅 AI 调用扣 / 关闭时直发 FAQ 不扣 / 人工与模板不扣 / Meta API pass-through）。**不显示**也**不接受**任何 OpenAI / Gemini / DeepSeek / provider / model / temperature / maxTokens / API Key 字段
+- **新 SaaS Admin 页 `/admin/ai-settings`**（apps/web/src/app/admin/ai-settings/page.tsx）：foundation only — 展示平台 provider / model / API key 状态（**只读 `hasApiKey` / `apiKeyLast4`，绝不返回明文 key**）+ "允许租户自带 API Key: 否" + 关联工具入口（cost-calculator / audit / 租户管理）。AppNav SaaS Admin 分组加「平台 AI 设置」入口
+- **WhatsApp 渠道页租户可见文案彻底剥离 OMNI_ env var**：
+  - `/channels/setup`：上线清单从 "OMNI_ALLOW_WA_SESSION=true" / "OMNI_ENABLE_REAL_META_SEND=true" 改为 "WhatsApp Web 真实连接（待平台审核开启）" / "Meta 官方 API 启用（待企业认证完成）"。底部 safety reminder 同步业务化
+  - `/channels/setup/wa-web/qr`：blocked 状态文案与 footer 全部业务化（"真实 WhatsApp Web 连接暂未开放 — 为保护账号安全，需平台审核后开启"）
+  - `/channels/setup/meta-webhook`：同样改成"Meta 官方 API 需要完成企业认证和平台配置后才能启用"+ CTA 链接到 /activation-guide
+- **SaaS Admin 内部诊断页保留 env var 但加标识**：`/activation-guide` 与 `/activation/monitoring` 因属 SaaS Admin nav group，保留 OMNI_ env var 文案，但前置 amber 徽章 "SaaS Admin / 平台运维 内部诊断 — 普通租户无需操作"
+- **Knowledge 页面（`/knowledge`）purpose 分离 copy**：顶部紫色 banner "知识库 = 管理 / 微调，配置 AI 客服 = 一键生成"+ 顶部按钮从「+ 从上线向导导入」(灰色 text) 改为「**+ 从产品资料生成 FAQ**」(紫色 primary button)，跳转 /onboarding
+- **AppNav 退出登录从侧栏移到右上角账户菜单**：
+  - 新增 fixed-positioned 浮动 widget（右上 12px / top 10px）含 蓝色"O" 头像 + 我的账户 / 设置 / **退出**（红色文字按钮）
+  - 侧栏底部从含 "退出登录" 按钮简化为单行 "Omni v1 · UAT" 版本号（opacity 0.7）
+  - 移动端 hamburger (top: 12, left: 12) 与右上角 widget (top: 10, right: 12) 不冲突
+- **Smoke 新增 5 block / ~25+ check**（test 237 扩展 + 265-269）：
+  - 237 扩展：quota-summary 含 faqDirectReplies / tenantCanChangePlan=false / platformHostedAi=true / serviceAccess 块
+  - 265：R9C foundation invariants（plan 不可改 + 平台 AI + FAQ direct reply counter）
+  - 266：`/settings/overview` 响应不含 openaiApiKey / geminiApiKey / deepseekApiKey / apiKey / apiKeyVault / apiKeyRef / providerKey
+  - 267：AI smart-reply toggle 响应不含 apiKey / provider / model / temperature / maxTokens / apiKeyRef
+  - 268：5 个 tenant-facing endpoint（quota-summary / plan-definitions / settings/overview / account/service-status / account/overview）响应不含 OMNI_ALLOW_WA_SESSION / OMNI_ENABLE_REAL_META_SEND / OMNI_ENABLE_ONBOARDING_AI
+  - 269：env safety flags 全部 false
+- **未触碰**：API contract、Round-8/9A/9B endpoint shape、smoke 旧用例；真实支付 / 真实 AI / 真实 Meta / 真实 WhatsApp / 真实邮件 / 广播 / 群发均**未启用**
+
 ## Post-v1 Round-9B — SaaS Admin Tenant Provisioning + License/Contract + Service Access
 
 继 Round-9A 之后，Round-9B 确认 Omni 当前商业模式为 **SaaS Admin 开户制** — 普通租户不再做"自助注册"，由 SaaS 公司线下签约 / 收款 / 审核后由 SaaS Admin 创建租户：

@@ -80,6 +80,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/tenants/new',     label: '创建租户' },
       { href: '/admin/tenants?tab=license', label: '套餐 / 授权' },
       { href: '/admin/tenants?filter=expired', label: '到期 / 暂停管理' },
+      { href: '/admin/ai-settings',     label: '平台 AI 设置' },
       { href: '/activation-guide',      label: '上线激活指南' },
       { href: '/activation/monitoring', label: '激活监控' },
       { href: '/audit',                 label: '审计日志' },
@@ -270,25 +271,49 @@ export default function AppNav() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div style={{ padding: '0.75rem 1.125rem', borderTop: `1px solid rgba(99,102,241,0.2)`, fontSize: '0.75rem', color: TEXT_DIM }}>
-        {authed ? (
-          <button
-            onClick={handleSignOut}
-            style={{ background: 'none', border: 'none', color: TEXT_DIM, cursor: 'pointer', fontSize: '0.75rem', padding: 0, width: '100%', textAlign: 'left' }}
-          >
-            退出登录
-          </button>
-        ) : (
-          <a href="/boss" style={{ color: TEXT_DIM, textDecoration: 'none' }}>登录</a>
-        )}
-        <div style={{ marginTop: 4, opacity: 0.6 }}>Omni v1 · UAT</div>
+      {/* Footer — Round-9C: only show version; logout moved to top-right account menu. */}
+      <div style={{ padding: '0.75rem 1.125rem', borderTop: `1px solid rgba(99,102,241,0.2)`, fontSize: '0.6875rem', color: TEXT_DIM, opacity: 0.7 }}>
+        Omni v1 · UAT
       </div>
     </div>
   )
 
+  // Round-9C: top-right account widget (fixed-positioned). Shown only when
+  // signed in. Provides quick links to 我的账户 / 设置 + logout. Sidebar bottom
+  // is now version-only.
+  const accountWidget = authed ? (
+    <div
+      className="omni-account-widget"
+      style={{
+        position: 'fixed', top: 10, right: 12, zIndex: 90,
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(15,23,42,0.08)', borderRadius: 9999,
+        padding: '4px 6px 4px 4px',
+        boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
+        fontSize: 12,
+      }}
+    >
+      <span
+        title="账户"
+        aria-hidden
+        style={{ width: 22, height: 22, borderRadius: '50%', background: ACCENT, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}
+      >O</span>
+      <a href="/account"  title="我的账户" aria-label="我的账户" style={{ color: '#334155', textDecoration: 'none', padding: '2px 8px' }}>我的账户</a>
+      <span style={{ color: '#e2e8f0' }}>|</span>
+      <a href="/settings" title="设置"     aria-label="设置"     style={{ color: '#334155', textDecoration: 'none', padding: '2px 8px' }}>设置</a>
+      <span style={{ color: '#e2e8f0' }}>|</span>
+      <button
+        onClick={handleSignOut}
+        title="退出登录" aria-label="退出登录"
+        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: '2px 8px', fontWeight: 600 }}
+      >退出</button>
+    </div>
+  ) : null
+
   return (
     <>
+      {accountWidget}
       {/* Desktop sidebar */}
       <aside
         style={{

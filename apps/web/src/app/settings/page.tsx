@@ -191,11 +191,13 @@ export default function SettingsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800">
                       当前状态：<span className={`font-semibold ${quota.aiSmartReplyEnabled ? 'text-emerald-700' : 'text-gray-500'}`}>{quota.aiSmartReplyEnabled ? '已开启' : '已关闭'}</span>
+                      <span className="ml-2 text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full">当前使用：平台 AI 服务</span>
                     </p>
                     <ul className="mt-1.5 space-y-0.5 text-[11px] text-gray-600 leading-relaxed">
-                      <li>• <strong>开启时</strong>：仅在 AI 生成被实际调用时扣 1 条 AI 回复配额。</li>
-                      <li>• <strong>关闭时</strong>：匹配到 FAQ 直接发送 — 不调用 AI，不扣配额。</li>
-                      <li>• 人工回复、固定模板、安全回退均不扣 AI 回复配额。</li>
+                      <li>• 您当前使用<strong>平台托管 AI 服务</strong>，不需要自行申请或填写 API Key。</li>
+                      <li>• AI 智能回复 <strong>开启</strong>时，只有实际调用 AI 生成客户回复才会扣 AI 回复额度。</li>
+                      <li>• AI 智能回复 <strong>关闭</strong>时，系统会优先直接发送已匹配的 FAQ，不扣 AI 回复额度。</li>
+                      <li>• 人工回复、固定模板、安全回退均不会扣 AI 回复额度。</li>
                       <li>• Meta 官方 WhatsApp API 费用为 pass-through，不包含在套餐内。</li>
                     </ul>
                   </div>

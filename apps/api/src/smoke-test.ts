@@ -4376,6 +4376,15 @@ async function smoke() {
   for (const key of ['plan', 'aiSmartReplyEnabled', 'whatsapp', 'products', 'faq', 'aiReply', 'teamUsers', 'warnings', 'cta', 'addOns', 'recommendedAddOnIds', 'metaApiFeeNote']) {
     check(`quota-summary has "${key}"`, key in r9Qs)
   }
+  // Round-9C additions
+  check('quota-summary has faqDirectReplies',                typeof r9Qs.faqDirectReplies === 'number')
+  check('quota-summary tenantCanChangePlan = false (R9C)',   r9Qs.tenantCanChangePlan === false)
+  check('quota-summary platformHostedAi = true (R9C)',       r9Qs.platformHostedAi === true)
+  check('quota-summary has serviceAccess block (R9C)',       typeof r9Qs.serviceAccess === 'object' && r9Qs.serviceAccess !== null)
+  const r9QsSvc = r9Qs.serviceAccess as Record<string, unknown>
+  for (const key of ['serviceStatus', 'isActiveLike', 'isBlocked', 'daysRemaining', 'tenantFacingBanner']) {
+    check(`quota-summary.serviceAccess has "${key}"`, r9QsSvc && key in r9QsSvc)
+  }
   check('aiSmartReplyEnabled default true', r9Qs.aiSmartReplyEnabled === true)
   const r9Faq = r9Qs.faq as Record<string, unknown>
   const r9Air = r9Qs.aiReply as Record<string, unknown>
@@ -4710,6 +4719,53 @@ async function smoke() {
 
   // ── Clean up Round-9B created tenant
   await prismaCleanupRound9bTenant(r9bTenantId)
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9C: Tenant UX Cleanup invariants
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n265. Round-9C: tenant cannot self-select plan; SaaS Admin provisions')
+  const r9cQs = await (await get('/billing/quota-summary', accessToken)).json() as Record<string, unknown>
+  check('R9C tenantCanChangePlan = false',            r9cQs.tenantCanChangePlan === false)
+  check('R9C platformHostedAi = true',                r9cQs.platformHostedAi === true)
+  check('R9C faqDirectReplies counter exists',        typeof r9cQs.faqDirectReplies === 'number')
+
+  console.log('\n266. Round-9C: settings overview does NOT expose AI API key fields')
+  const r9cSet = await (await get('/settings/overview', accessToken)).json() as Record<string, unknown>
+  const r9cSetJson = JSON.stringify(r9cSet)
+  // No tenant-facing settings shape should ever leak API keys / vault refs
+  for (const pat of ['openaiApiKey', 'geminiApiKey', 'deepseekApiKey', 'apiKey', 'apiKeyVault', 'apiKeyRef', 'providerKey']) {
+    check(`settings overview no "${pat}"`, !r9cSetJson.includes(pat))
+  }
+
+  console.log('\n267. Round-9C: AI smart-reply toggle response does NOT carry provider/key/model fields')
+  const r9cToggle = await (await post('/billing/ai-smart-reply', { enabled: true }, accessToken)).json() as Record<string, unknown>
+  const r9cToggleJson = JSON.stringify(r9cToggle)
+  for (const pat of ['apiKey', 'provider', 'model', 'temperature', 'maxTokens', 'apiKeyRef']) {
+    check(`smart-reply toggle no "${pat}"`, !r9cToggleJson.includes(pat))
+  }
+  check('smart-reply toggle realAiProviderCalled=false', r9cToggle.realAiProviderCalled === false)
+
+  console.log('\n268. Round-9C: no API endpoint leaks raw env var names back to tenant in JSON')
+  // For tenant-facing endpoints only (admin/operator endpoints may include them legitimately).
+  const r9cTenantEndpoints: Array<[string, () => Promise<Response>]> = [
+    ['quota-summary',          () => get('/billing/quota-summary',          accessToken)],
+    ['plan-definitions',       () => get('/billing/plan-definitions',       accessToken)],
+    ['settings/overview',      () => get('/settings/overview',              accessToken)],
+    ['account/service-status', () => get('/account/service-status',         accessToken)],
+    ['account/overview',       () => get('/account/overview',               accessToken)],
+  ]
+  for (const [label, fn] of r9cTenantEndpoints) {
+    const body = await (await fn()).text()
+    for (const pat of ['OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND', 'OMNI_ENABLE_ONBOARDING_AI']) {
+      check(`tenant endpoint ${label} no env var "${pat}"`, !body.includes(pat))
+    }
+  }
+
+  console.log('\n269. Round-9C: safety flags still off')
+  check('OMNI_ALLOW_WA_SESSION env not enabled',     process.env.OMNI_ALLOW_WA_SESSION     !== 'true' && process.env.OMNI_ALLOW_WA_SESSION     !== '1')
+  check('OMNI_ENABLE_REAL_META_SEND env not enabled',process.env.OMNI_ENABLE_REAL_META_SEND !== 'true' && process.env.OMNI_ENABLE_REAL_META_SEND !== '1')
+  check('OMNI_ENABLE_ONBOARDING_AI env not enabled', process.env.OMNI_ENABLE_ONBOARDING_AI !== 'true' && process.env.OMNI_ENABLE_ONBOARDING_AI !== '1')
 
   // ── 69. Logout ────────────────────────────────────────────────────────
   console.log('\n69. Logout')

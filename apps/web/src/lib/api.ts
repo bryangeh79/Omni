@@ -611,11 +611,28 @@ export interface QuotaSummary {
   faq:         QuotaCounterWithCredits
   aiReply:     QuotaCounterWithCredits
   teamUsers:   QuotaCounter
+  /** Round-9C: matched-FAQ direct reply count (no AI deduction). */
+  faqDirectReplies: number
   warnings:    string[]
   cta:         { productExpansion?: string; faqCredits?: string; aiReplyCredits?: string }
   addOns:      Array<{ id: string; kind: string; tier: string; priceRm: number; recurring: string; slots?: number; credits?: number; label: string; validMonths?: number }>
   recommendedAddOnIds: string[]
   metaApiFeeNote: string
+  /** Round-9C: tenant cannot change plan (SaaS Admin provisioned). */
+  tenantCanChangePlan: false
+  /** Round-9C: tenant uses platform-hosted AI; no tenant API key required. */
+  platformHostedAi:    true
+  /** Round-9C: inline service-access for tenant-facing banner. */
+  serviceAccess?: {
+    serviceStatus:      string
+    contractStartAt:    string | null
+    contractEndAt:      string | null
+    daysRemaining:      number | null
+    isActiveLike:       boolean
+    isBlocked:          boolean
+    renewalWarning:     string | null
+    tenantFacingBanner: string | null
+  }
 }
 
 export async function fetchQuotaSummary(): Promise<QuotaSummary> {

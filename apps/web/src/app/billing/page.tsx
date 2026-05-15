@@ -31,7 +31,9 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   )
 }
 
-function PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; current: string; onSelect: (id: string) => void; selecting: boolean }) {
+// Round-9C: PlanCard kept for potential SaaS Admin internal preview, but no longer
+// rendered on the tenant-facing /billing page. Marking with _ prefix to satisfy lint.
+function _PlanCard({ plan, current, onSelect, selecting }: { plan: BillingPlan; current: string; onSelect: (id: string) => void; selecting: boolean }) {
   const isActive = current === plan.id
   return (
     <div className={`rounded-2xl border-2 p-5 transition-all ${isActive ? 'border-blue-500 bg-blue-50' : plan.recommended ? 'border-blue-200 bg-white' : 'border-gray-200 bg-white'}`}>
@@ -101,7 +103,6 @@ export default function BillingPage() {
   const [plans,    setPlans]    = useState<{ plans: BillingPlan[]; currentPlan: string; boundary: Record<string,string>; paymentGateway: string } | null>(null)
   const [usage,    setUsage]    = useState<UsageSummary | null>(null)
   const [quota,    setQuota]    = useState<QuotaSummary | null>(null)
-  const [selecting, setSelecting] = useState(false)
   const [buying,    setBuying]    = useState(false)
   const [notice,   setNotice]   = useState('')
   const [error,    setError]    = useState('')
@@ -132,8 +133,9 @@ export default function BillingPage() {
     finally { setBuying(false) }
   }
 
-  async function handleSelect(planId: string) {
-    setSelecting(true); setError('')
+  async function _handleSelect(planId: string) {
+    // Round-9C: tenant cannot self-select plan; kept for potential admin reuse.
+    setError('')
     try {
       await selectPlanDraft(planId)
       setNotice(`套餐「${planLabel(planId)}」已保存为草稿，不会触发真实扣费。`)
@@ -153,7 +155,7 @@ export default function BillingPage() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center"><span className="text-white text-xs font-bold">$</span></div>
-            <div><h1 className="text-base font-semibold text-gray-900">套餐与计费</h1><p className="text-xs text-gray-400" title={plans?.currentPlan ?? ''}>当前套餐：{plans ? planLabel(plans.currentPlan) : '…'}</p></div>
+            <div><h1 className="text-base font-semibold text-gray-900">套餐与额度</h1><p className="text-xs text-gray-400" title={plans?.currentPlan ?? ''}>当前套餐：{plans ? planLabel(plans.currentPlan) : '…'}</p></div>
           </div>
           <nav className="flex items-center gap-3 text-xs">
             <a href="/settings" className="text-gray-500 hover:text-gray-700">设置</a>
@@ -171,10 +173,39 @@ export default function BillingPage() {
         {error  && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
         {notice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
 
+        {/* Round-9C: Current plan + service-status summary card (tenant-facing read-only) */}
+        {quota && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">当前套餐</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{planLabel(quota.plan.id)}</p>
+                <p className="text-xs text-gray-500 mt-1">RM {quota.plan.priceRm} / 月（常规月度价 · 不含 Meta API 费用）</p>
+              </div>
+              {quota.serviceAccess && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">服务状态</p>
+                  <p className={`text-base font-semibold mt-0.5 ${quota.serviceAccess.isBlocked ? 'text-red-600' : quota.serviceAccess.serviceStatus === 'PAST_DUE' ? 'text-amber-700' : quota.serviceAccess.serviceStatus === 'TRIAL' ? 'text-blue-700' : 'text-emerald-700'}`}>
+                    {({ TRIAL: '试用中', ACTIVE: '正常服务', PAST_DUE: '已逾期', SUSPENDED: '已暂停', EXPIRED: '已到期', CANCELLED: '已取消' } as Record<string, string>)[quota.serviceAccess.serviceStatus] ?? quota.serviceAccess.serviceStatus}
+                  </p>
+                  {quota.serviceAccess.contractEndAt && (
+                    <p className="text-[11px] text-gray-500 mt-1">合约到期：{new Date(quota.serviceAccess.contractEndAt).toLocaleDateString('zh-CN')}{quota.serviceAccess.daysRemaining !== null && <span> · 剩余 {quota.serviceAccess.daysRemaining} 天</span>}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            {quota.serviceAccess?.tenantFacingBanner && (
+              <p className={`text-xs mt-3 px-3 py-2 rounded-lg ${quota.serviceAccess.isBlocked ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>{quota.serviceAccess.tenantFacingBanner}</p>
+            )}
+            <p className="text-xs text-gray-500 mt-3">您的套餐由服务商开通和管理。如需升级或更改套餐，请联系服务商。</p>
+          </div>
+        )}
+
         {/* No real charge notice */}
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-800 space-y-1">
-          <p><strong>规划模式：</strong>套餐选择仅为草稿偏好。尚未配置真实支付网关，完成支付集成前不会产生任何扣费。</p>
-          <p><strong>权限：</strong>仅 OWNER 或 ADMIN 可选择套餐。MANAGER / AGENT / VIEWER 为只读权限。</p>
+          <p><strong>套餐由服务商管理：</strong>您的套餐由服务商开通和管理。如需升级或更改套餐，请联系服务商。</p>
+          <p><strong>Meta API 费用：</strong>Meta 官方 WhatsApp API 费用不包含在套餐内，将按官方费用另行计算。</p>
+          <p><strong>安全模式：</strong>当前页面不会产生真实扣款；加购包为模拟购买，便于您预览配额变化。</p>
         </div>
 
         {/* Round-9A: Quota counter */}
@@ -193,11 +224,19 @@ export default function BillingPage() {
               </p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Round-9C: FAQ direct reply counter — no AI deduction */}
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-emerald-700 font-medium">FAQ 回复数</span>
+                  <span className="font-mono text-emerald-700">{quota.faqDirectReplies}</span>
+                </div>
+                <p className="text-[10px] text-emerald-700">来自知识库直接回复，不扣 AI 回复额度。</p>
+              </div>
+              <QuotaCreditRow label="AI 回复数（本月）" counter={quota.aiReply} cta={quota.cta.aiReplyCredits} />
+              <QuotaCreditRow label="AI FAQ Generator（本月）" counter={quota.faq} cta={quota.cta.faqCredits} />
+              <QuotaRow label="产品配置位" included={quota.products.included} used={quota.products.used} remaining={quota.products.remaining} overLimit={quota.products.overLimit} cta={quota.cta.productExpansion} />
               <QuotaRow label="WhatsApp 连接" included={quota.whatsapp.included} used={quota.whatsapp.used} remaining={quota.whatsapp.remaining} overLimit={quota.whatsapp.overLimit} />
-              <QuotaRow label="产品 / 服务配置位" included={quota.products.included} used={quota.products.used} remaining={quota.products.remaining} overLimit={quota.products.overLimit} cta={quota.cta.productExpansion} />
               <QuotaRow label="团队用户" included={quota.teamUsers.included} used={quota.teamUsers.used} remaining={quota.teamUsers.remaining} overLimit={quota.teamUsers.overLimit} />
-              <QuotaCreditRow label="AI FAQ 生成（本月）" counter={quota.faq} cta={quota.cta.faqCredits} />
-              <QuotaCreditRow label="AI 客户回复（本月）" counter={quota.aiReply} cta={quota.cta.aiReplyCredits} />
             </div>
             {quota.warnings.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 space-y-0.5">
@@ -241,16 +280,11 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Plan cards */}
-        {plans && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {plans.plans.map(plan => (
-              <PlanCard key={plan.id} plan={plan} current={plans.currentPlan} onSelect={handleSelect} selecting={selecting} />
-            ))}
-          </div>
-        )}
+        {/* Round-9C: plan-card selection grid removed for tenant UI.
+            Plan is provisioned by SaaS Admin; tenants cannot self-select.
+            Plan comparison + selection moved to SaaS Admin operator UI. */}
 
-        {/* Boundaries */}
+        {/* Boundaries (read-only) */}
         {plans && (
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">重要边界</h2>

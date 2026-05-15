@@ -278,8 +278,9 @@ export default function ActivationMonitoringPage() {
         )}
       </Section>
 
-      {/* Safety notice */}
+      {/* Safety notice (SaaS Admin / operator-facing — env var names allowed) */}
       <div style={{ marginTop: '1.25rem', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.75rem 1rem', fontSize: '0.8125rem', color: NEUTRAL, lineHeight: 1.6 }}>
+        <span style={{ display: 'inline-block', background: '#fef3c7', color: '#92400e', fontSize: '0.6875rem', padding: '0.0625rem 0.4375rem', borderRadius: 4, fontWeight: 600, marginRight: 6 }}>SaaS Admin / 平台运维 内部诊断</span>
         <strong>安全说明：</strong>本面板为本地视图，不调用任何外部 WhatsApp / Meta / AI / 邮件 / 支付服务。除非运维显式设置{' '}
         <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ALLOW_WA_SESSION</code> 或{' '}
         <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '0 3px', borderRadius: 3 }}>OMNI_ENABLE_REAL_META_SEND</code>，<strong>真实发送默认关闭</strong>。Omni 是 WhatsApp AI 客服 + CRM 系统，非广播 / 广告 / 群发平台。

@@ -121,10 +121,10 @@ export default function WaWebQrPage() {
               </p>
               <p className={`text-xs mt-0.5 ${isBlocked ? 'text-amber-700' : isConnected ? 'text-emerald-700' : 'text-blue-700'}`}>
                 {isBlocked
-                  ? 'OMNI_ALLOW_WA_SESSION 未启用 — WhatsApp 会话不会启动。这是默认安全状态。'
+                  ? '真实 WhatsApp Web 连接暂未开放 — 为保护账号安全，需平台审核后开启。这是默认安全状态。'
                   : isConnected
                     ? 'WhatsApp Web 会话已就绪。请在「对话收件箱」中监控。'
-                    : 'OMNI_ALLOW_WA_SESSION 已启用。请按下方步骤启动会话。'}
+                    : '真实连接已开放。请按下方步骤启动会话。'}
               </p>
             </div>
           </div>
@@ -229,13 +229,14 @@ export default function WaWebQrPage() {
           )}
         </div>
 
-        {/* Real send disabled badge */}
+        {/* Real send disabled badge (tenant-facing business copy) */}
         <div className="bg-gray-100 rounded-2xl px-5 py-4 text-xs text-gray-500 space-y-1">
           <p className="font-semibold text-gray-600">安全默认</p>
-          <p>• <code>OMNI_ALLOW_WA_SESSION=false</code> — WhatsApp 会话默认不会启动</p>
-          <p>• 本页不会返回原始 QR 数据、会话 token 或会话内容</p>
-          <p>• 本页不会启动 Chromium 或 WhatsApp Web 会话</p>
-          <p>• <strong>不支持广播 / 广告 / 群发</strong> — Omni 仅提供 1:1 AI 客服</p>
+          <p>• WhatsApp Web 真实连接默认<strong>不开启</strong> — 为保护账号安全，需平台审核后开启。</p>
+          <p>• 本页不会返回原始 QR 数据、会话 token 或会话内容。</p>
+          <p>• 本页不会启动 WhatsApp Web 真实会话。</p>
+          <p>• <strong>不支持广播 / 广告 / 群发</strong> — Omni 仅提供 1:1 AI 客服。</p>
+          <p>• 如需启动真实连接，<a href="/activation-guide" className="text-blue-600 hover:text-blue-800 font-medium">联系服务商激活</a>。</p>
         </div>
       </main>
     </div>
