@@ -33,6 +33,17 @@ export const SAFE_AUDIT_METADATA_KEYS: ReadonlySet<string> = new Set([
   'industry', 'goal', 'channelPreference',
   // Test message dry-run
   'recipientLabel',
+  // Round-9E platform AI settings safety flags
+  'provider', 'defaultModel', 'hasApiKey', 'apiKeyLast4', 'enabled',
+  'allowTenantProvidedKeys', 'apiKeyChanged',
+  // Round-9H platform Core AI Prompt
+  'corePromptChanged', 'corePromptLength',
+  // Round-9B tenant lifecycle
+  'oldStatus', 'newStatus', 'suspensionReason', 'licenseCode',
+  'oldContractEndAt', 'newContractEndAt', 'ownerEmail',
+  'generatedTempPassword', 'byAdmin', 'realEmailSent',
+  // Round-9D activation request
+  'requestedAt',
 ])
 
 /**
