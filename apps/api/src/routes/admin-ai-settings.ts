@@ -116,9 +116,11 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
         update: data,
       })
 
-      // Audit — metadata MUST NOT contain raw apiKey.
+      // Audit — metadata MUST NOT contain raw apiKey. The audit row is scoped
+      // to the acting admin's tenantId so it surfaces in their /audit/logs
+      // view (same convention as all other tenant-scoped audits in the system).
       await createAuditLog({
-        tenantId:    '__platform__',                   // sentinel for platform-level events
+        tenantId:    getAuthUser(req).tenantId,
         actorUserId: getAuthUser(req).userId,
         actorRole:   getAuthUser(req).role,
         action:      'PLATFORM_AI_SETTINGS_UPDATED',
