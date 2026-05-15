@@ -50,7 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: '开始使用',
     icon: '🧙',
     items: [
-      { href: '/onboarding',       label: '配置 AI 客服' },
+      { href: '/onboarding',       label: '一键开通' },
       { href: '/channels/setup',   label: '连接 WhatsApp' },
       { href: '/launch-checklist', label: '上线检查' },
     ],

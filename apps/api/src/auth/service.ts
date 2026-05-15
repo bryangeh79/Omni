@@ -81,6 +81,42 @@ export async function findActiveUserByEmail(email: string): Promise<AuthUser | n
   }
 }
 
+/**
+ * Round-9D: email-only login resolver.
+ *
+ * Product decision: one email belongs to one tenant. If the email matches
+ * exactly one active (tenant + user), return it. If it matches multiple
+ * (legacy data), return ambiguous=true and a safe error is shown to the
+ * caller — never leak how many or which tenants.
+ */
+export async function findUniqueActiveUserByEmail(
+  email: string,
+): Promise<{ user: AuthUser | null; ambiguous: boolean }> {
+  const users = await prisma.user.findMany({
+    where: { email, isActive: true },
+    select: { id: true, tenantId: true, email: true, passwordHash: true, role: true, name: true, isActive: true },
+    take: 2,
+  })
+  if (users.length === 0) return { user: null, ambiguous: false }
+  if (users.length > 1)   return { user: null, ambiguous: true }
+  const u = users[0]
+  const tenant = await prisma.tenant.findUnique({ where: { id: u.tenantId } })
+  if (!tenant || !tenant.isActive) return { user: null, ambiguous: false }
+  return {
+    user: {
+      id:           u.id,
+      tenantId:     u.tenantId,
+      tenantSlug:   tenant.slug,
+      email:        u.email,
+      passwordHash: u.passwordHash,
+      role:         u.role,
+      name:         u.name,
+      isActive:     u.isActive,
+    },
+    ambiguous: false,
+  }
+}
+
 export async function isTenantActive(tenantId: string): Promise<boolean> {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } })
   return tenant?.isActive ?? false

@@ -5,8 +5,10 @@ import {
   getToken, login, saveOnboardingDraft, generateOnboardingPreview,
   ingestOnboardingMaterials, enableOnboarding, fetchOnboardingStatus,
   generateProductSalesConfig, saveProductSalesConfig, saveFaqToKnowledge,
+  fetchOnboardingProgress, submitActivationRequest,
   type OnboardingPreview,
   type ProductSalesConfig, type FaqDraft, type ProductSetupRecord, type ProductSetupStatus,
+  type OnboardingProgress,
 } from '@/lib/api'
 
 // ── Round-8 Product Intelligence types (local UI shape) ──────────────────────
@@ -86,7 +88,17 @@ const AI_GOALS = [
   { value: 'transfer-human',   label: '高意向客户转人工' },
 ]
 
+// Round-9D: 6-step activation journey labels (UI hint only — single source of
+// truth for progress evaluation is the backend GET /onboarding/progress).
 const STEPS = ['公司基础', 'AI 目标', '产品资料', '预览', '启用']
+const _JOURNEY_STEPS = [
+  { key: 'company',    title: '公司资料' },
+  { key: 'goals',      title: 'AI 客服目标' },
+  { key: 'products',   title: '产品 / 服务资料' },
+  { key: 'config',     title: '一键生成成交配置' },
+  { key: 'channel',    title: '连接 WhatsApp' },
+  { key: 'activation', title: '安全演练与上线申请' },
+] as const
 
 // ── Generation mode badge ──────────────────────────────────────────────────────
 function ModeBadge({ mode }: { mode: string }) {
@@ -130,7 +142,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <p className="text-sm text-gray-400 mt-1">登录以开始上线向导</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="租户标识（可选 · 高级登录）" value={slug} onChange={e => setSlug(e.target.value)} />
         <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
         <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
         <button type="submit" disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
@@ -167,6 +179,22 @@ export default function OnboardingPage() {
   const [generating,  setGenerating]  = useState(false)
   const [savingFaq,   setSavingFaq]   = useState(false)
   const [productMsg,  setProductMsg]  = useState('')
+  // ── Round-9D: 6-step journey progress ──────────────────────────────────────
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null)
+  const [submittingActivation, setSubmittingActivation] = useState(false)
+  const [activationMsg, setActivationMsg] = useState('')
+  const refreshProgress = async () => {
+    try { setProgress(await fetchOnboardingProgress()) } catch { /* ignore */ }
+  }
+  async function handleSubmitActivation() {
+    setSubmittingActivation(true); setActivationMsg(''); setError('')
+    try {
+      const r = await submitActivationRequest()
+      setActivationMsg(r.note || '已提交上线申请。')
+      void refreshProgress()
+    } catch (e) { setError(e instanceof Error ? e.message : '提交失败') }
+    finally { setSubmittingActivation(false) }
+  }
   const updateActive = (patch: Partial<ProductDraft>) =>
     setProducts(prev => prev.map((p, i) => (i === activeIdx ? { ...p, ...patch, lastUpdatedAt: new Date().toISOString() } : p)))
   const current = products[activeIdx]
@@ -184,6 +212,7 @@ export default function OnboardingPage() {
         else if (s.status) setStep(1)
       }
     }).catch(() => null)
+    void refreshProgress()
   }, [])
 
   const toggleGoal = (g: string) =>
@@ -425,14 +454,59 @@ export default function OnboardingPage() {
             <span className="text-white text-sm font-bold">O</span>
           </div>
           <div>
-            <h1 className="text-base font-bold text-gray-900">配置 AI 客服</h1>
-            <p className="text-xs text-gray-400">上传产品资料，Omni 自动生成 FAQ、销售话术、标签、评分、跟进与转人工规则。完成后再连接 WhatsApp。</p>
+            <h1 className="text-base font-bold text-gray-900">一键开通 Omni AI 客服</h1>
+            <p className="text-xs text-gray-400">按步骤完成设置，Omni 会自动帮您生成 FAQ、销售话术、标签、评分、跟进和转人工规则。</p>
           </div>
         </div>
         <a href="/boss" className="text-xs text-blue-600 hover:text-blue-700">← 返回工作台</a>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-8">
+        {/* Round-9D: 6-step journey header */}
+        {progress && (
+          <div className="bg-white rounded-3xl shadow-sm p-6 mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Omni 开通进度</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{progress.completedCount} / {progress.totalCount} <span className="text-sm font-normal text-gray-400">完成 · {progress.percent}%</span></p>
+              </div>
+              {progress.isComplete ? (
+                <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full">🎉 已就绪，等待服务商上线</span>
+              ) : (
+                <a href={progress.nextActionHref} className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-full">{progress.nextActionLabel} →</a>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
+              <div className={`h-full transition-all ${progress.isComplete ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress.percent}%` }} />
+            </div>
+            {/* 6-step checklist */}
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+              {progress.steps.map((s, i) => (
+                <li key={s.key} className={`flex items-center gap-2 px-2 py-1 rounded ${progress.currentStepKey === s.key && !progress.isComplete ? 'bg-blue-50' : ''}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${s.completed ? 'bg-emerald-500 text-white' : progress.currentStepKey === s.key ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'}`}>{s.completed ? '✓' : i + 1}</span>
+                  <span className={`flex-1 ${s.completed ? 'text-gray-700 line-through opacity-70' : 'text-gray-800'}`}>{s.title}</span>
+                  {!s.completed && <a href={s.href} className="text-blue-600 hover:text-blue-700 text-[10px]">{s.cta} →</a>}
+                </li>
+              ))}
+            </ul>
+            {progress.activationRequestStatus && progress.activationRequestStatus !== 'NOT_STARTED' && (
+              <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                上线申请状态：<strong>{progress.activationRequestStatus}</strong>。{progress.activationRequestStatus === 'REQUESTED' && '服务商正在审核您的申请；当前不会启动真实 WhatsApp 会话。'}
+              </div>
+            )}
+            {activationMsg && (
+              <div className="mt-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{activationMsg}</div>
+            )}
+            {/* Submit activation request button — visible once Steps 1-5 are done. */}
+            {!progress.isComplete && progress.completedCount >= 5 && progress.activationRequestStatus !== 'REQUESTED' && progress.activationRequestStatus !== 'LIVE' && (
+              <button onClick={handleSubmitActivation} disabled={submittingActivation} className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                {submittingActivation ? '提交中…' : '提交上线申请（不会启动真实 WhatsApp 会话）'}
+              </button>
+            )}
+          </div>
+        )}
+
         <StepBar />
 
         {error && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm mb-5">{error}</div>}

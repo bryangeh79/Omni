@@ -71,7 +71,7 @@ function MobileLoginForm({ onLogin }: { onLogin: () => void }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="租户标识"
+            placeholder="租户标识（可选 · 高级登录）"
             value={slug} onChange={(e) => setSlug(e.target.value)} required
           />
           <input

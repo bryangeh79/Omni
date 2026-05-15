@@ -607,6 +607,129 @@ export async function onboardingRoutes(app: FastifyInstance) {
   })
 
   // ════════════════════════════════════════════════════════════════════════
+  // Round-9D: One-click Activation guided journey
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── GET /onboarding/progress ──────────────────────────────────────────
+  // Returns the 6 step computation: company / goals / products / generated /
+  // channel / activation. Tenant-facing; no internalNotes / no secrets.
+  app.get('/progress', { preHandler: requireAuth }, async (req) => {
+    const { tenantId } = getAuthUser(req)
+    const [draft, channelDraft, channelCount] = await Promise.all([
+      prisma.onboardingDraft.findUnique({
+        where:  { tenantId },
+        select: { companyName: true, industry: true, aiGoals: true, generatedPreview: true, status: true },
+      }),
+      prisma.channelSetupDraft.findFirst({
+        where:  { tenantId },
+        select: { id: true, channelType: true, displayName: true, setupStatus: true, activationStatus: true, activationRequestedAt: true },
+        orderBy:{ updatedAt: 'desc' },
+      }),
+      prisma.channel.count({ where: { tenantId, isActive: true } }),
+    ])
+
+    const preview = (draft?.generatedPreview as Record<string, unknown> | null) ?? null
+    const products = (preview?.products as Array<{ productId?: string; productName?: string; salesConfig?: unknown }> | undefined) ?? []
+    const hasGeneratedConfig = products.some(p => !!p.salesConfig)
+
+    const companyComplete  = !!(draft?.companyName && draft.industry)
+    const goalsComplete    = !!(draft?.aiGoals && draft.aiGoals.length > 0)
+    const productsComplete = products.length > 0 && products.some(p => !!p.productName)
+    const configComplete   = hasGeneratedConfig
+    const channelComplete  = !!(channelDraft && channelDraft.displayName)
+    // activationStatus comes off channelDraft; we pretend "not started" if no draft yet.
+    const activationStatus = channelDraft?.activationStatus ?? 'NOT_STARTED'
+    const activationComplete = activationStatus === 'REQUESTED' || activationStatus === 'APPROVED_BY_SAAS_ADMIN' || activationStatus === 'LIVE' || channelCount > 0
+
+    const steps = [
+      { key: 'company',    title: '公司资料',           completed: companyComplete,  cta: companyComplete  ? '更新公司资料'           : '确认公司资料',  href: '/onboarding?step=0' },
+      { key: 'goals',      title: 'AI 客服目标',        completed: goalsComplete,    cta: goalsComplete    ? '调整 AI 目标'           : '选择 AI 目标',  href: '/onboarding?step=1' },
+      { key: 'products',   title: '产品 / 服务资料',    completed: productsComplete, cta: productsComplete ? '编辑产品资料'           : '添加产品资料',  href: '/onboarding?step=2' },
+      { key: 'config',     title: '一键生成成交配置',   completed: configComplete,   cta: configComplete   ? '查看生成的成交配置'     : '一键生成成交配置', href: '/onboarding?step=2' },
+      { key: 'channel',    title: '连接 WhatsApp',      completed: channelComplete,  cta: channelComplete  ? '编辑渠道设置'           : '连接 WhatsApp',  href: '/channels/setup' },
+      { key: 'activation', title: '安全演练与上线申请', completed: activationComplete, cta: activationComplete ? '查看激活状态'      : '提交上线申请',  href: '/channels/setup' },
+    ]
+    const completedCount = steps.filter(s => s.completed).length
+    const totalCount     = steps.length
+    const percent        = Math.round((completedCount / totalCount) * 100)
+    const currentStep    = steps.find(s => !s.completed) ?? steps[steps.length - 1]
+    const isComplete     = completedCount === totalCount
+
+    return {
+      steps,
+      completedCount,
+      totalCount,
+      percent,
+      currentStepKey:        currentStep.key,
+      nextActionLabel:       currentStep.cta,
+      nextActionHref:        currentStep.href,
+      isComplete,
+      activationRequestStatus: activationStatus,
+      // explicit safety flags
+      realWhatsAppStarted:   false,
+      realMetaCalled:        false,
+      realAiProviderCalled:  false,
+    }
+  })
+
+  // ── POST /onboarding/submit-activation-request ────────────────────────
+  // Tenant submits an activation request; SaaS Admin will approve in a later
+  // Round. Tenant CANNOT approve. Does NOT start any real WhatsApp session
+  // or call any real Meta API. Stores REQUESTED status on the ChannelSetupDraft.
+  app.post('/submit-activation-request', { preHandler: requireAuth }, async (req, reply) => {
+    const { tenantId } = getAuthUser(req)
+
+    // Service-access guard: SUSPENDED / EXPIRED / CANCELLED tenants cannot submit.
+    const { getTenantServiceAccess } = await import('../lib/service-access')
+    const access = await getTenantServiceAccess(tenantId)
+    if (access.isBlocked) {
+      return reply.status(403).send({
+        error: 'Service is paused or expired — cannot submit activation request',
+        serviceStatus: access.serviceStatus,
+        serviceBlocked: true,
+        tenantFacingBanner: access.tenantFacingBanner,
+        cta: '请联系服务商续费 / 恢复服务',
+        realWhatsAppStarted:  false,
+        realMetaCalled:       false,
+      })
+    }
+
+    const channelDraft = await prisma.channelSetupDraft.findFirst({
+      where:  { tenantId },
+      orderBy:{ updatedAt: 'desc' },
+    })
+    if (!channelDraft) {
+      return reply.status(400).send({ error: '请先在「连接 WhatsApp」中保存渠道资料后再提交。' })
+    }
+
+    const updated = await prisma.channelSetupDraft.update({
+      where: { id: channelDraft.id },
+      data:  { activationStatus: 'REQUESTED', activationRequestedAt: new Date() },
+      select:{ id: true, activationStatus: true, activationRequestedAt: true, channelType: true, displayName: true },
+    })
+
+    await (await import('../lib/audit')).createAuditLog({
+      tenantId,
+      actorUserId: getAuthUser(req).userId,
+      actorRole:   getAuthUser(req).role,
+      action:      'ACTIVATION_REQUEST_SUBMITTED',
+      entityType:  'ChannelSetupDraft',
+      entityId:    updated.id,
+      metadata:    { channelType: updated.channelType, requestedAt: updated.activationRequestedAt?.toISOString() ?? null },
+    })
+
+    return reply.status(200).send({
+      submitted:           true,
+      activationStatus:    updated.activationStatus,
+      activationRequestedAt: updated.activationRequestedAt?.toISOString() ?? null,
+      tenantCanApprove:    false,
+      note:                '已提交上线申请。服务商会检查安全设置并开启连接权限；当前不会启动真实 WhatsApp 会话。',
+      realWhatsAppStarted: false,
+      realMetaCalled:      false,
+    })
+  })
+
+  // ════════════════════════════════════════════════════════════════════════
   // Round-8: Product Intelligence Setup + Sales Config Generator
   // ════════════════════════════════════════════════════════════════════════
 

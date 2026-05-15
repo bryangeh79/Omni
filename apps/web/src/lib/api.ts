@@ -118,10 +118,17 @@ export interface CustomerDetail {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 /** Bearer mode: tokens returned in body, stored in localStorage. */
-export async function login(tenantSlug: string, email: string, password: string): Promise<LoginResult> {
+// Round-9D: tenantSlug is optional. Pass empty string '' (or omit) for the
+// default email-only path. Backend resolves tenant by unique email.
+export async function login(tenantSlugOrEmpty: string, email: string, password: string): Promise<LoginResult> {
+  const tenantSlug = tenantSlugOrEmpty?.trim() || undefined
+  return _doLogin({ tenantSlug, email, password })
+}
+
+async function _doLogin(args: { tenantSlug?: string; email: string; password: string }): Promise<LoginResult> {
   const result = await apiFetch<LoginResult>('/auth/login', {
     method: 'POST',
-    body:   JSON.stringify({ tenantSlug, email, password }),
+    body:   JSON.stringify(args),
   })
   setToken(result.accessToken)
   return result
@@ -457,6 +464,34 @@ export async function ingestOnboardingMaterials(): Promise<{
 
 export async function enableOnboarding(): Promise<{ enabled: boolean; status: string; note: string }> {
   return apiFetch<{ enabled: boolean; status: string; note: string }>('/onboarding/enable', { method: 'POST' })
+}
+
+// ── Round-9D: One-click activation journey ───────────────────────────────────
+export interface OnboardingStep {
+  key:       'company' | 'goals' | 'products' | 'config' | 'channel' | 'activation'
+  title:     string
+  completed: boolean
+  cta:       string
+  href:      string
+}
+export interface OnboardingProgress {
+  steps:                   OnboardingStep[]
+  completedCount:          number
+  totalCount:              number
+  percent:                 number
+  currentStepKey:          OnboardingStep['key']
+  nextActionLabel:         string
+  nextActionHref:          string
+  isComplete:              boolean
+  activationRequestStatus: string | null
+  realWhatsAppStarted:     false
+  realMetaCalled:          false
+}
+export async function fetchOnboardingProgress(): Promise<OnboardingProgress> {
+  return apiFetch<OnboardingProgress>('/onboarding/progress')
+}
+export async function submitActivationRequest(): Promise<{ submitted: boolean; activationStatus: string; activationRequestedAt: string | null; tenantCanApprove: false; note: string }> {
+  return apiFetch('/onboarding/submit-activation-request', { method: 'POST' })
 }
 
 // ── Round-8: Product Intelligence + Sales Config Generator ───────────────────

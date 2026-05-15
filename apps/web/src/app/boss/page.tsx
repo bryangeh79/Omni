@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   login, clearToken, getToken, fetchBossToday, fetchBossMetrics, fetchBossPipeline,
-  fetchChannelHealth, createRealtimeConnection,
+  fetchChannelHealth, createRealtimeConnection, fetchOnboardingProgress,
   type BossToday, type BossMetrics, type ActionItem, type BossPipeline, type SseTransport,
-  type ChannelHealth,
+  type ChannelHealth, type OnboardingProgress,
 } from '@/lib/api'
 import { stageLabel, channelTypeLabel } from '@/lib/enumLabels'
 
@@ -46,7 +46,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <p className="text-sm text-gray-400 mt-1">登录到您的 Omni 工作空间</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err === 'Failed to fetch' ? '无法连接到服务器，请检查 API 是否在运行' : err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="租户标识 (Tenant Slug)" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="租户标识（可选 · 高级登录）" value={slug} onChange={e => setSlug(e.target.value)} />
         <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
         <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
         <button type="submit" disabled={busy} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
@@ -176,6 +176,8 @@ export default function BossDashboardPage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [sseTransport,   setSseTransport]   = useState<SseTransport>('unknown')
   const [channelHealth,  setChannelHealth]  = useState<ChannelHealth | null>(null)
+  // Round-9D: surface a continue-setup card when activation journey is incomplete.
+  const [progress,       setProgress]        = useState<OnboardingProgress | null>(null)
   const sseRef = useRef<EventSource | null>(null)
 
   useEffect(() => { setAuthed(!!getToken()) }, [])
@@ -189,6 +191,8 @@ export default function BossDashboardPage() {
       setToday(t); setMetrics(m); setPipeline(p); setLastRefresh(new Date())
       // Load channel health in background (non-blocking)
       fetchChannelHealth().then(setChannelHealth).catch(() => null)
+      // Round-9D: load activation progress (non-blocking)
+      fetchOnboardingProgress().then(setProgress).catch(() => null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
   }, [pipeRange])
@@ -261,6 +265,36 @@ export default function BossDashboardPage() {
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-5 py-3 text-sm flex items-center justify-between">
             <span>{error === 'Failed to fetch' ? '无法连接到服务器，请检查 API 是否在运行' : error}</span>
             <button onClick={() => { void load() }} className="font-medium underline">重试</button>
+          </div>
+        )}
+
+        {/* Round-9D: incomplete-setup continue-setup card (only shown when journey is incomplete) */}
+        {progress && !progress.isComplete && (
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-blue-100 uppercase tracking-wide">一键开通进度</p>
+                <h2 className="text-xl font-bold mt-1">您的 Omni AI 客服还差 {progress.totalCount - progress.completedCount} 步即可上线</h2>
+                <p className="text-xs text-blue-100 mt-1.5">完成 6 步后，提交上线申请，服务商审核通过即可正式启动 AI 客服。</p>
+              </div>
+              <a href={progress.nextActionHref} className="bg-white text-blue-700 hover:bg-blue-50 text-xs font-semibold px-4 py-2 rounded-xl whitespace-nowrap">{progress.nextActionLabel} →</a>
+            </div>
+            <div className="w-full h-2 bg-blue-800/40 rounded-full overflow-hidden mt-4">
+              <div className="h-full bg-white transition-all" style={{ width: `${progress.percent}%` }} />
+            </div>
+            <ul className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-xs mt-3">
+              {progress.steps.map(s => (
+                <li key={s.key} className="flex items-center gap-1.5">
+                  <span className={`w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] flex-shrink-0 ${s.completed ? 'bg-emerald-400 text-emerald-900' : 'bg-white/20 text-white/80'}`}>{s.completed ? '✓' : '·'}</span>
+                  <span className={s.completed ? 'opacity-80 line-through' : ''}>{s.title}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <a href="/onboarding" className="bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg font-medium">继续开通</a>
+              <a href="/knowledge" className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg">查看知识库</a>
+              <a href="/channels/setup" className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg">连接 WhatsApp</a>
+            </div>
           </div>
         )}
 

@@ -5,6 +5,7 @@ export {
   verifyPassword,
   findActiveUserByTenantSlugAndEmail,
   findActiveUserByEmail,
+  findUniqueActiveUserByEmail,
   isTenantActive,
   issueAccessToken,
   issueRefreshToken,

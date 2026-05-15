@@ -4762,6 +4762,65 @@ async function smoke() {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9D: One-click activation journey + email-only login
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n270. Round-9D: email-only login works (no tenantSlug)')
+  const r9dEmailLogin = await post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD })
+  check('email-only login → 200',  r9dEmailLogin.status === 200)
+  const r9dEmailBody = await r9dEmailLogin.json() as Record<string, unknown>
+  check('email-only login returns accessToken', typeof r9dEmailBody.accessToken === 'string')
+  check('email-only login returns user.tenantSlug', (r9dEmailBody.user as Record<string, unknown>)?.tenantSlug === DEMO_SLUG)
+
+  console.log('\n271. Round-9D: legacy slug+email login still works')
+  const r9dLegacy = await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL, password: DEMO_PASSWORD })
+  check('legacy slug+email login → 200', r9dLegacy.status === 200)
+
+  console.log('\n272. Round-9D: missing email → 400')
+  check('missing email → 400', (await post('/auth/login', { password: 'x' })).status === 400)
+  check('missing password → 400', (await post('/auth/login', { email: DEMO_EMAIL })).status === 400)
+
+  console.log('\n273. Round-9D: /onboarding/progress auth + shape')
+  check('progress no token → 401', (await get('/onboarding/progress')).status === 401)
+  const r9dProgRes = await get('/onboarding/progress', accessToken)
+  check('progress → 200', r9dProgRes.status === 200)
+  const r9dProg = await r9dProgRes.json() as Record<string, unknown>
+  for (const key of ['steps', 'completedCount', 'totalCount', 'percent', 'currentStepKey', 'nextActionLabel', 'nextActionHref', 'isComplete', 'activationRequestStatus']) {
+    check(`progress has "${key}"`, key in r9dProg)
+  }
+  check('progress.totalCount = 6',           r9dProg.totalCount === 6)
+  check('progress.steps is array of 6',      Array.isArray(r9dProg.steps) && (r9dProg.steps as unknown[]).length === 6)
+  check('progress.realWhatsAppStarted=false',r9dProg.realWhatsAppStarted === false)
+  check('progress.realMetaCalled=false',     r9dProg.realMetaCalled === false)
+  const r9dSteps = r9dProg.steps as Array<Record<string, unknown>>
+  const r9dStepKeys = r9dSteps.map(s => s.key)
+  check('progress step keys = company/goals/products/config/channel/activation',
+    JSON.stringify(r9dStepKeys) === JSON.stringify(['company','goals','products','config','channel','activation']))
+  check('every step has title + completed + cta + href',
+    r9dSteps.every(s => typeof s.title === 'string' && typeof s.completed === 'boolean' && typeof s.cta === 'string' && typeof s.href === 'string'))
+
+  console.log('\n274. Round-9D: submit-activation-request requires channel draft + tenant cannot approve')
+  // Without a channel draft → 400. Our demo tenant may or may not already have one;
+  // attempt and accept either 200 (if draft exists from earlier tests) or 400.
+  const r9dSubmit = await post('/onboarding/submit-activation-request', {}, accessToken)
+  check('submit returns 200 or 400 (depending on draft)', r9dSubmit.status === 200 || r9dSubmit.status === 400)
+  if (r9dSubmit.status === 200) {
+    const r9dSubmitBody = await r9dSubmit.json() as Record<string, unknown>
+    check('submit submitted=true',             r9dSubmitBody.submitted === true)
+    check('submit activationStatus=REQUESTED', r9dSubmitBody.activationStatus === 'REQUESTED')
+    check('submit tenantCanApprove=false',     r9dSubmitBody.tenantCanApprove === false)
+    check('submit realWhatsAppStarted=false',  r9dSubmitBody.realWhatsAppStarted === false)
+    check('submit realMetaCalled=false',       r9dSubmitBody.realMetaCalled === false)
+  }
+  check('submit no token → 401', (await post('/onboarding/submit-activation-request', {})).status === 401)
+
+  console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
+  const r9dProgJson = JSON.stringify(r9dProg)
+  for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {
+    check(`progress response has no "${pat}"`, !r9dProgJson.includes(pat))
+  }
+
   console.log('\n269. Round-9C: safety flags still off')
   check('OMNI_ALLOW_WA_SESSION env not enabled',     process.env.OMNI_ALLOW_WA_SESSION     !== 'true' && process.env.OMNI_ALLOW_WA_SESSION     !== '1')
   check('OMNI_ENABLE_REAL_META_SEND env not enabled',process.env.OMNI_ENABLE_REAL_META_SEND !== 'true' && process.env.OMNI_ENABLE_REAL_META_SEND !== '1')

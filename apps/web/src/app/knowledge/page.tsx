@@ -49,7 +49,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <p className="text-sm text-gray-400 mt-1">登录以管理您的 AI 知识库</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400" placeholder="租户标识（可选 · 高级登录）" value={slug} onChange={e => setSlug(e.target.value)} />
         <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
         <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
         <button type="submit" disabled={busy} className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>
@@ -448,13 +448,14 @@ export default function KnowledgePage() {
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-base font-semibold text-gray-700 mb-2">暂无知识条目</p>
-            <p className="text-sm text-gray-400 max-w-sm mx-auto mb-6">
-              请先完成上线向导并解析您的产品 / 服务资料，或使用上方按钮手动添加。
+            <p className="text-base font-semibold text-gray-700 mb-2">还没有 FAQ</p>
+            <p className="text-sm text-gray-500 max-w-md mx-auto mb-6 leading-relaxed">
+              建议先通过「<strong>配置 AI 客服</strong>」上传产品资料，让 Omni 自动生成 FAQ。<br />
+              知识库主要用于后续微调。
             </p>
-            <div className="flex gap-3 justify-center">
-              <a href="/onboarding" className="bg-purple-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-purple-700">完成上线向导 →</a>
-              <button onClick={() => setShowCreate(true)} className="bg-gray-100 text-gray-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-200">手动添加</button>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <a href="/onboarding" className="bg-purple-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-purple-700">去配置 AI 客服，自动生成 FAQ →</a>
+              <button onClick={() => setShowCreate(true)} className="bg-white text-gray-700 border border-gray-200 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-50">手动添加 FAQ</button>
             </div>
           </div>
         ) : (

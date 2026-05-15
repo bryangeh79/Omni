@@ -36,7 +36,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <p className="text-sm text-gray-400 mt-1">登录以管理团队成员</p>
         </div>
         {err && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-2">{err}</p>}
-        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="租户标识" value={slug} onChange={e => setSlug(e.target.value)} required />
+        <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="租户标识（可选 · 高级登录）" value={slug} onChange={e => setSlug(e.target.value)} />
         <input type="email" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} required />
         <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="密码" value={pass} onChange={e => setPass(e.target.value)} required />
         <button type="submit" disabled={busy} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">{busy ? '登录中…' : '登录'}</button>

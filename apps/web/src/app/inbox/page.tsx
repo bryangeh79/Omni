@@ -48,7 +48,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         {err && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{err}</p>}
         <input
           className="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="租户标识"
+          placeholder="租户标识（可选 · 高级登录）"
           value={slug} onChange={(e) => setSlug(e.target.value)} required
         />
         <input

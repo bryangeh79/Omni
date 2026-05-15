@@ -35,7 +35,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     <form onSubmit={handleLogin} style={{ maxWidth: 360, margin: '4rem auto', padding: '2rem', border: '1px solid #e5e7eb', borderRadius: 12, fontFamily: 'system-ui' }}>
       <h2 style={{ marginTop: 0 }}>Sign in to Omni</h2>
       {error && <p style={{ color: DANGER }}>{error}</p>}
-      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="租户标识" required style={inputCss} />
+      <input value={slug}     onChange={e => setSlug(e.target.value)}     placeholder="租户标识（可选 · 高级登录）" style={inputCss} />
       <input value={email}    onChange={e => setEmail(e.target.value)}    placeholder="邮箱"    type="email"    required style={inputCss} />
       <input value={password} onChange={e => setPassword(e.target.value)} placeholder="密码" type="password" required style={{ ...inputCss, marginBottom: '1rem' }} />
       <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.625rem', background: ACCENT, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>

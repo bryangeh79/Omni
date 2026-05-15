@@ -11,6 +11,7 @@ import type { FastifyInstance } from 'fastify'
 
 import {
   findActiveUserByTenantSlugAndEmail,
+  findUniqueActiveUserByEmail,
   verifyPassword,
   issueAccessToken,
   issueRefreshToken,
@@ -43,11 +44,28 @@ export async function authRoutes(app: FastifyInstance) {
     const { tenantSlug, email, password } = req.body ?? {}
     const cookieMode = req.query.mode === 'cookie'
 
-    if (!tenantSlug || !email || !password) {
-      return reply.status(400).send({ error: 'tenantSlug, email, and password are required' })
+    // Round-9D: tenantSlug is now optional. If omitted, resolve by unique email.
+    // Legacy { tenantSlug, email, password } still works.
+    if (!email || !password) {
+      return reply.status(400).send({ error: 'email and password are required' })
     }
 
-    const user = await findActiveUserByTenantSlugAndEmail(tenantSlug, email)
+    let user
+    if (tenantSlug) {
+      user = await findActiveUserByTenantSlugAndEmail(tenantSlug, email)
+    } else {
+      const resolved = await findUniqueActiveUserByEmail(email)
+      if (resolved.ambiguous) {
+        // Constant delay to avoid leaking timing differences from a regular login miss.
+        await new Promise((r) => setTimeout(r, 300))
+        return reply.status(409).send({
+          error: '此邮箱绑定多个工作空间，请联系服务商。',
+          ambiguousEmail: true,
+          // Never leak tenant ids / slugs / counts in this response.
+        })
+      }
+      user = resolved.user
+    }
     if (!user) {
       await new Promise((r) => setTimeout(r, 300))
       return reply.status(401).send({ error: 'Invalid credentials' })

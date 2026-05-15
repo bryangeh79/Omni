@@ -434,6 +434,10 @@ model ChannelSetupDraft {
   realWaSessionEnabled Boolean         @default(false)  // safety flag snapshot — always false by default
   realMetaSendEnabled  Boolean         @default(false)  // safety flag snapshot — always false by default
   activationNotes  String?
+  // Round-9D: tenant-driven activation request lifecycle.
+  // Values: NOT_STARTED | READY_TO_REQUEST | REQUESTED | APPROVED_BY_SAAS_ADMIN | BLOCKED | LIVE
+  activationStatus      String?
+  activationRequestedAt DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
