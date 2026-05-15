@@ -4197,7 +4197,8 @@ async function smoke() {
   check('every FAQ has id/question/answer/category',   r8Faqs.every(f => typeof f.id === 'string' && typeof f.question === 'string' && typeof f.answer === 'string' && typeof f.category === 'string'))
   check('every FAQ has productName',                   r8Faqs.every(f => f.productName === 'Smoke 阳光课程'))
   check('every FAQ has source=generated_draft',        r8Faqs.every(f => f.source === 'generated_draft'))
-  check('every FAQ isSelected=true by default',        r8Faqs.every(f => f.isSelected === true))
+  // Round-9I: useful FAQ default selected=true; missing-info FAQ start unchecked.
+  check('useful FAQ default isSelected=true',          r8Faqs.filter(f => !f.hasMissingInfo).every(f => f.isSelected === true))
   check('≥ 3 pricing/payment FAQs',                    r8Faqs.filter(f => f.category === '价格 / 套餐' || f.category === '付款').length >= 3)
   check('≥ 3 handoff FAQs',                            r8Faqs.filter(f => f.category === '转人工问题').length >= 3)
   check('≥ 3 objection FAQs',                          r8Faqs.filter(f => f.category === '比较 / 犹豫处理' || f.category === '常见疑虑').length >= 3)
@@ -5014,7 +5015,8 @@ async function smoke() {
   }, accessToken)
   check('generate with minimal input → 200', r9gMinRes.status === 200)
   const r9gMin = (await r9gMinRes.json() as Record<string, unknown>).config as Record<string, unknown>
-  check('faqDrafts ≥ 30 even with minimal input',  Array.isArray(r9gMin.faqDrafts) && (r9gMin.faqDrafts as unknown[]).length >= 30)
+  // Round-9I: count is elastic; minimal input → ~8-14 useful FAQ. Old "≥30 forced" rule retired.
+  check('faqDrafts is non-empty array (elastic count)', Array.isArray(r9gMin.faqDrafts) && (r9gMin.faqDrafts as unknown[]).length > 0)
   check('salesScripts non-empty',                  Array.isArray(r9gMin.salesScripts) && (r9gMin.salesScripts as unknown[]).length > 0)
   check('qualificationQuestions non-empty',        Array.isArray(r9gMin.qualificationQuestions) && (r9gMin.qualificationQuestions as unknown[]).length > 0)
   check('suggestedTags non-empty',                 Array.isArray(r9gMin.suggestedTags) && (r9gMin.suggestedTags as unknown[]).length > 0)
