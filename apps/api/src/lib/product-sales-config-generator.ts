@@ -52,7 +52,35 @@ export interface FaqDraft {
   productName:  string
   isSelected:   boolean
   source:       'generated_draft'
+  /** Round-9I: true if this FAQ answer is the missing-info fallback. */
+  hasMissingInfo?: boolean
 }
+
+/** Round-9I: company-level (non-product) FAQ for general/company questions. */
+export interface CompanyFaqDraft {
+  id:          string
+  question:    string
+  answer:      string
+  category:    string
+  isSelected:  boolean
+  source:      'generated_draft'
+  hasMissingInfo?: boolean
+}
+
+/** Round-9I: tenant-friendly Chinese label mapping for product-input fields. */
+export const PRODUCT_FIELD_LABELS_ZH: Record<string, string> = {
+  productCategory:       '产品分类',
+  suitableCustomers:     '适合客户',
+  sellingPoints:         '核心卖点',
+  pricing:               '价格 / 套餐',
+  purchaseFlow:          '购买流程',
+  requiredCustomerInfo:  '客户需要提供的资料',
+  handoffConditions:     '转人工条件',
+  extraNotes:            '补充说明',
+}
+
+/** Round-9I: completeness tier for elastic FAQ count. */
+export type CompletenessTier = 'minimal' | 'moderate' | 'complete'
 
 export interface SalesScript {
   title:    string
@@ -115,12 +143,35 @@ export interface ProductSalesConfig {
     objectionFaqCount:  number
     processFaqCount:    number
     missingFields:      string[]
+    /** Round-9I: tenant-readable Chinese labels for missingFields. */
+    missingFieldLabels: string[]
+    /** Round-9I: completeness tier driving elastic count. */
+    completenessTier:   CompletenessTier
+    /** Round-9I: number of fields populated out of weighted total. */
+    completenessScore:  number
+    completenessMax:    number
+    /** Round-9I: number of FAQ that fell back to "建议人工确认". */
+    missingInfoFaqCount: number
     hasPricing:         boolean
     hasPurchaseFlow:    boolean
     hasUploadedFile:    boolean
     hasReferenceUrl:    boolean
     materialCharCount:  number
     coverageNote:       string
+  }
+  /** Round-9I: tenant-facing guidance for missing data. Never empty when missingFields > 0. */
+  missingDataGuidance?: {
+    headline:  string  // "以下资料还没填写..."
+    items:     string[] // ["适合客户", "核心卖点", ...]
+    ctaLabel:  string  // "去补充资料"
+  }
+  /** Round-9I: tenant-friendly Chinese rendering of qualification/tags/scoring/follow-up/handoff. */
+  tenantFriendlyRules: {
+    qualification: { headline: string; items: string[] }
+    tags:          { headline: string; items: string[] }
+    scoring:       { headline: string; items: string[] }
+    followUp:      { headline: string; items: string[] }
+    handoff:       { headline: string; items: string[] }
   }
 }
 
@@ -140,7 +191,50 @@ function safeId(productId: string, idx: number): string {
 
 function clampFaqCount(n?: number): number {
   if (typeof n !== 'number' || isNaN(n)) return 40
-  return Math.max(30, Math.min(50, Math.floor(n)))
+  return Math.max(8, Math.min(50, Math.floor(n)))
+}
+
+/**
+ * Round-9I: classify completeness based on populated fields + supplemental
+ * material (uploaded file extracted text + pasted material + reference URL).
+ *
+ * Score range 0..8. Tiers:
+ *   - minimal  (0..2)  → target ~8-12 FAQ
+ *   - moderate (3..5)  → target ~15-25 FAQ
+ *   - complete (6..8)  → target ~30-40 FAQ
+ */
+function computeCompleteness(input: ProductSetupInput): {
+  tier:  CompletenessTier
+  score: number
+  max:   number
+  targetFaqCount: number
+} {
+  let score = 0
+  if (nonEmpty(input.suitableCustomers))    score++
+  if (nonEmpty(input.sellingPoints))        score++
+  if (nonEmpty(input.pricing))              score++
+  if (nonEmpty(input.purchaseFlow))         score++
+  if (nonEmpty(input.requiredCustomerInfo)) score++
+  if (nonEmpty(input.productCategory))      score++
+  if (nonEmpty(input.extraNotes))           score++
+  const materialChars =
+    (input.pastedMaterialText?.length ?? 0) +
+    (input.uploadedFile?.extractedText?.length ?? 0)
+  if (materialChars >= 200 || nonEmpty(input.referenceUrl)) score++
+  const max = 8
+
+  let tier: CompletenessTier
+  let target: number
+  if (score <= 2)      { tier = 'minimal';  target = 10 }   // 8..12 band
+  else if (score <= 5) { tier = 'moderate'; target = 20 }   // 15..25 band
+  else                 { tier = 'complete'; target = 35 }   // 30..40 band
+
+  // Respect caller override but always inside [8, 50]
+  if (typeof input.desiredFaqCount === 'number' && !isNaN(input.desiredFaqCount)) {
+    target = clampFaqCount(input.desiredFaqCount)
+  }
+
+  return { tier, score, max, targetFaqCount: target }
 }
 
 // ── product profile ────────────────────────────────────────────────────────
@@ -257,29 +351,141 @@ function buildFaqSeeds(input: ProductSetupInput): FaqSeed[] {
   return seeds
 }
 
-function buildFaqDrafts(input: ProductSetupInput, productId: string): FaqDraft[] {
-  const desired = clampFaqCount(input.desiredFaqCount)
-  const seeds   = buildFaqSeeds(input)
-  // de-dupe by question text, take up to desired
-  const seen = new Set<string>()
-  const out: FaqDraft[] = []
-  for (let i = 0; i < seeds.length && out.length < desired; i++) {
-    const s = seeds[i]
+/**
+ * Round-9I: a seed answer is "missing-info" if it equals MISSING_ANSWER or
+ * begins with it. We do NOT trip on incidental mentions inside a longer answer.
+ */
+function isMissingInfoAnswer(answer: string): boolean {
+  const t = answer.trim()
+  return t === MISSING_ANSWER || t.startsWith(MISSING_ANSWER)
+}
+
+function buildFaqDrafts(
+  input: ProductSetupInput,
+  productId: string,
+  targetFaqCount: number,
+): FaqDraft[] {
+  const seeds = buildFaqSeeds(input)
+  const seen  = new Set<string>()
+
+  // Round-9I: prefer useful answers first; only top up with missing-info FAQ
+  // when target is large enough AND useful pool exhausted. This stops the
+  // "40 weak FAQ where everything says 资料中未明确说明" UX.
+  const useful:  FaqSeed[] = []
+  const missing: FaqSeed[] = []
+  for (const s of seeds) {
     const key = s.question.trim()
     if (seen.has(key)) continue
     seen.add(key)
+    if (isMissingInfoAnswer(s.answer)) missing.push(s)
+    else                                useful.push(s)
+  }
+
+  const out: FaqDraft[] = []
+  const push = (s: FaqSeed): void => {
     out.push({
-      id:          safeId(productId, out.length + 1),
-      question:    s.question,
-      answer:      s.answer,
-      category:    s.category,
-      productName: input.productName,
-      isSelected:  true,
-      source:      'generated_draft',
+      id:            safeId(productId, out.length + 1),
+      question:      s.question,
+      answer:        s.answer,
+      category:      s.category,
+      productName:   input.productName,
+      isSelected:    !isMissingInfoAnswer(s.answer), // missing-info FAQ start unchecked
+      source:        'generated_draft',
+      hasMissingInfo: isMissingInfoAnswer(s.answer) || undefined,
     })
   }
-  // If we have fewer than 30 seeds (very limited input), still emit what we have
+
+  // 1) Fill with useful FAQ up to target.
+  for (const s of useful) {
+    if (out.length >= targetFaqCount) break
+    push(s)
+  }
+  // 2) Only if there's still headroom AND target is "moderate+" do we backfill
+  //    with up to 25% missing-info FAQ. Minimal-tier never gets backfilled.
+  const allowBackfillCap = Math.max(0, Math.floor(targetFaqCount * 0.25))
+  let backfilled = 0
+  for (const s of missing) {
+    if (out.length >= targetFaqCount)      break
+    if (backfilled >= allowBackfillCap)    break
+    push(s)
+    backfilled++
+  }
   return out
+}
+
+/**
+ * Round-9I: build a fixed catalogue of company-level (general) FAQ that is
+ * shared across all products. Answers reference tenant-supplied company info
+ * where provided; otherwise the FAQ is marked hasMissingInfo and starts
+ * unchecked so the tenant can review.
+ */
+export interface CompanyProfileInput {
+  companyName?:      string
+  industry?:         string
+  businessHours?:    string
+  locationAddress?:  string
+  supportedLanguages?: string[]      // ['zh','en','ms'] etc.
+  humanHandoffNote?: string          // e.g. "营业时间内可转人工"
+}
+
+export function generateCompanyFaqs(profile: CompanyProfileInput = {}): CompanyFaqDraft[] {
+  const name = nonEmpty(profile.companyName)
+  const ind  = nonEmpty(profile.industry)
+  const biz  = nonEmpty(profile.businessHours)
+  const loc  = nonEmpty(profile.locationAddress)
+  const langs = (profile.supportedLanguages ?? []).filter(Boolean)
+  const langZh = langs.length === 0
+    ? undefined
+    : langs.map(l => l === 'zh' ? '中文' : l === 'en' ? 'English' : l === 'ms' ? 'Bahasa Melayu' : l).join(' / ')
+
+  const seeds: { q: string; a: string; cat: string; missing?: boolean }[] = [
+    { q: '你们是什么公司？',
+      a: name ? `我们是 ${name}${ind ? '，所属行业：' + ind : ''}。如需更详细的介绍，可以告诉我您想了解的方面。` : MISSING_ANSWER,
+      cat: '公司介绍',
+      missing: !name },
+    { q: '你们几点营业？',
+      a: biz ?? MISSING_ANSWER,
+      cat: '营业信息',
+      missing: !biz },
+    { q: '你们在哪里？',
+      a: loc ?? MISSING_ANSWER,
+      cat: '营业信息',
+      missing: !loc },
+    { q: '可以找真人吗？',
+      a: nonEmpty(profile.humanHandoffNote)
+        ?? '当然可以。请告诉我您想咨询的方面，我会立即帮您转人工客服。',
+      cat: '转人工 / 真人客服' },
+    { q: '你是机器人吗？',
+      a: '我是 AI 客服助手，可以帮您快速解答常见问题。如果需要更详细或更复杂的处理，我会随时帮您转给真人同事。',
+      cat: '关于 AI 助手' },
+    { q: '你可以帮我什么？',
+      a: '我可以帮您查询产品信息、回答常见问题、安排预约 / Demo、协助下单流程，必要时转给真人客服。请告诉我您主要想了解什么？',
+      cat: '关于 AI 助手' },
+    { q: '支持什么语言？',
+      a: langZh
+        ? `我们目前支持：${langZh}。您可以直接用您熟悉的语言跟我交流。`
+        : '我们支持中文 / English / Bahasa Melayu。您可以直接用您熟悉的语言跟我交流。',
+      cat: '语言支持' },
+    { q: '我要投诉 / 退款 / 售后怎么办？',
+      a: '非常抱歉造成困扰。我现在帮您转人工客服跟进；可以先简单告诉我具体情况，方便同事更快回应吗？',
+      cat: '投诉 / 售后' },
+    { q: '我只是想聊聊 / 看看',
+      a: '没问题 😊 您随时可以问我关于我们的产品 / 服务的问题，或者告诉我您比较感兴趣的方面，我帮您找到合适的信息。',
+      cat: '闲聊 / 离题处理' },
+    { q: '我不知道要问什么',
+      a: '没关系，我帮您 👉 您可以先告诉我您主要想解决什么问题，或者直接选一个产品 / 服务，我帮您介绍。',
+      cat: '客户引导' },
+  ]
+
+  return seeds.map((s, i) => ({
+    id:          `cfaq_${String(i + 1).padStart(3, '0')}`,
+    question:    s.q,
+    answer:      s.a,
+    category:    s.cat,
+    isSelected:  !s.missing,
+    source:      'generated_draft',
+    hasMissingInfo: s.missing || undefined,
+  }))
 }
 
 // ── sales scripts / qualification / tags / scoring / follow-up / handoff ──
@@ -366,14 +572,50 @@ function buildHandoffRules(input: ProductSetupInput): HandoffRule[] {
 
 // ── public entry point ────────────────────────────────────────────────────
 
+/** Round-9I: tenant-friendly rendering of qualification / tags / scoring / follow-up / handoff. */
+function buildTenantFriendlyRules(
+  qualification: QualificationQuestion[],
+  tags: string[],
+  scoring: LeadScoringRule[],
+  followUps: FollowUpRule[],
+  handoffs: HandoffRule[],
+): ProductSalesConfig['tenantFriendlyRules'] {
+  return {
+    qualification: {
+      headline: 'AI 会帮你收集这些客户资料：',
+      items:    qualification.map(q => q.question),
+    },
+    tags: {
+      headline: '系统会自动帮客户打标签：',
+      items:    tags.filter(t => !t.startsWith('产品:')),
+    },
+    scoring: {
+      headline: 'AI 会自动判断客户意向：',
+      items:    scoring
+        .filter(r => r.adjustment > 0 || r.trigger === 'requested_human')
+        .map(r => r.description),
+    },
+    followUp: {
+      headline: '自动跟进草稿，启用前不会真实发送：',
+      items:    followUps.map(f => f.description),
+    },
+    handoff: {
+      headline: '以下情况 AI 会建议转人工：',
+      items:    handoffs.map(h => h.description),
+    },
+  }
+}
+
 export function generateProductSalesConfig(input: ProductSetupInput): ProductSalesConfig {
   if (!input.productName || !input.productName.trim()) {
     throw new Error('productName is required')
   }
   const productId = input.productId?.trim() || `prod_${Date.now().toString(36)}`
 
+  const completeness = computeCompleteness(input)
+
   const productProfile = buildProductProfile(input)
-  const faqDrafts      = buildFaqDrafts(input, productId)
+  const faqDrafts      = buildFaqDrafts(input, productId, completeness.targetFaqCount)
   const salesScripts   = buildSalesScripts(input)
   const qualificationQuestions = buildQualificationQuestions(input)
   const suggestedTags  = buildSuggestedTags(input)
@@ -381,10 +623,11 @@ export function generateProductSalesConfig(input: ProductSetupInput): ProductSal
   const followUpRules  = buildFollowUpRules(input)
   const handoffRules   = buildHandoffRules(input)
 
-  const pricingFaqCount   = faqDrafts.filter(f => f.category === '价格 / 套餐' || f.category === '付款').length
-  const handoffFaqCount   = faqDrafts.filter(f => f.category === '转人工问题').length
-  const objectionFaqCount = faqDrafts.filter(f => f.category === '比较 / 犹豫处理' || f.category === '常见疑虑').length
-  const processFaqCount   = faqDrafts.filter(f => f.category === '购买流程' || f.category === '预约 / Demo').length
+  const pricingFaqCount     = faqDrafts.filter(f => f.category === '价格 / 套餐' || f.category === '付款').length
+  const handoffFaqCount     = faqDrafts.filter(f => f.category === '转人工问题').length
+  const objectionFaqCount   = faqDrafts.filter(f => f.category === '比较 / 犹豫处理' || f.category === '常见疑虑').length
+  const processFaqCount     = faqDrafts.filter(f => f.category === '购买流程' || f.category === '预约 / Demo').length
+  const missingInfoFaqCount = faqDrafts.filter(f => f.hasMissingInfo).length
 
   const missingFields: string[] = []
   if (!nonEmpty(input.suitableCustomers))     missingFields.push('suitableCustomers')
@@ -393,9 +636,30 @@ export function generateProductSalesConfig(input: ProductSetupInput): ProductSal
   if (!nonEmpty(input.purchaseFlow))          missingFields.push('purchaseFlow')
   if (!nonEmpty(input.requiredCustomerInfo))  missingFields.push('requiredCustomerInfo')
 
+  const missingFieldLabels = missingFields.map(f => PRODUCT_FIELD_LABELS_ZH[f] ?? f)
+
   const materialChars =
     (input.pastedMaterialText?.length ?? 0) +
     (input.uploadedFile?.extractedText?.length ?? 0)
+
+  const tenantFriendlyRules = buildTenantFriendlyRules(
+    qualificationQuestions, suggestedTags, leadScoringRules, followUpRules, handoffRules,
+  )
+
+  const missingDataGuidance = missingFields.length === 0
+    ? undefined
+    : {
+        headline: '以下资料还没填写，相关 FAQ 会先标记为"建议人工确认"：',
+        items:    missingFieldLabels,
+        ctaLabel: '去补充资料',
+      }
+
+  const coverageNote =
+    completeness.tier === 'complete'
+      ? `产品资料较完整（${completeness.score}/${completeness.max}）。已生成 ${faqDrafts.length} 条 FAQ。`
+      : completeness.tier === 'moderate'
+      ? `产品资料较充足（${completeness.score}/${completeness.max}）。已生成 ${faqDrafts.length} 条 FAQ；补充更多资料可生成更多 FAQ。`
+      : `产品资料较少（${completeness.score}/${completeness.max}）。先生成 ${faqDrafts.length} 条有把握回答的 FAQ；缺失资料请见"建议补充资料"。`
 
   return {
     productId,
@@ -411,20 +675,92 @@ export function generateProductSalesConfig(input: ProductSetupInput): ProductSal
     followUpRules,
     handoffRules,
     summary: {
-      faqCount:          faqDrafts.length,
+      faqCount:           faqDrafts.length,
       pricingFaqCount,
       handoffFaqCount,
       objectionFaqCount,
       processFaqCount,
       missingFields,
-      hasPricing:        !!nonEmpty(input.pricing),
-      hasPurchaseFlow:   !!nonEmpty(input.purchaseFlow),
-      hasUploadedFile:   !!input.uploadedFile?.filename,
-      hasReferenceUrl:   !!nonEmpty(input.referenceUrl),
-      materialCharCount: materialChars,
-      coverageNote: missingFields.length === 0
-        ? '产品基础字段填写完整，FAQ 覆盖度良好。'
-        : `以下字段尚未填写，相关 FAQ 会标记"建议转人工确认"：${missingFields.join(', ')}`,
+      missingFieldLabels,
+      completenessTier:   completeness.tier,
+      completenessScore:  completeness.score,
+      completenessMax:    completeness.max,
+      missingInfoFaqCount,
+      hasPricing:         !!nonEmpty(input.pricing),
+      hasPurchaseFlow:    !!nonEmpty(input.purchaseFlow),
+      hasUploadedFile:    !!input.uploadedFile?.filename,
+      hasReferenceUrl:    !!nonEmpty(input.referenceUrl),
+      materialCharCount:  materialChars,
+      coverageNote,
     },
+    missingDataGuidance,
+    tenantFriendlyRules,
+  }
+}
+
+// ── Round-9I: Customer Entry Menu (preview only — never sent to WhatsApp) ──
+
+export interface CustomerEntryMenuLanguageOption {
+  code:  'zh' | 'en' | 'ms'
+  label: string
+}
+
+export interface CustomerEntryMenuProductOption {
+  productId:   string
+  productName: string
+}
+
+export interface CustomerEntryMenuConfig {
+  /** Setup version; bump if the shape changes. */
+  version:     'v1'
+  /** Localised welcome line shown before language picker. */
+  welcomeText: string
+  languageStep: {
+    promptText: string
+    options:    CustomerEntryMenuLanguageOption[]
+  }
+  productStep: {
+    promptText:        string
+    options:           CustomerEntryMenuProductOption[]
+    humanHandoffLabel: string
+  }
+  /** Plain-Chinese description of how the menu wires up to the FAQ bank. */
+  behaviorDescription: string
+  /** Hard safety flag — preview only, never sends real WhatsApp messages. */
+  realWhatsAppSent:    false
+  previewOnly:         true
+}
+
+export function buildCustomerEntryMenu(
+  products: { productId: string; productName: string }[],
+  opts: { supportedLanguages?: string[] } = {},
+): CustomerEntryMenuConfig {
+  const langs = (opts.supportedLanguages && opts.supportedLanguages.length > 0)
+    ? opts.supportedLanguages
+    : ['zh', 'en', 'ms']
+  const languageLabels: Record<string, string> = {
+    zh: '中文',
+    en: 'English',
+    ms: 'Bahasa Melayu',
+  }
+  const options = langs
+    .filter(l => l === 'zh' || l === 'en' || l === 'ms')
+    .map(l => ({ code: l as 'zh' | 'en' | 'ms', label: languageLabels[l] }))
+  return {
+    version:     'v1',
+    welcomeText: '欢迎咨询 😊',
+    languageStep: {
+      promptText: '请先选择语言：',
+      options,
+    },
+    productStep: {
+      promptText:        '请问你想了解哪一个产品 / 服务？',
+      options:           products.map(p => ({ productId: p.productId, productName: p.productName })),
+      humanHandoffLabel: '找真人客服',
+    },
+    behaviorDescription:
+      '客户先选语言，再选产品 / 服务；AI 会根据所选的语言与产品回答相应的 FAQ / 知识库内容。若客户选"找真人客服"，AI 会立即转人工。此处仅为预览，未连接真实 WhatsApp 发送。',
+    realWhatsAppSent: false,
+    previewOnly:      true,
   }
 }

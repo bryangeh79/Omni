@@ -846,6 +846,37 @@ export default function OnboardingPage() {
                   <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">模式：{current.salesConfig.mode}</span>
                 </div>
 
+                {/* Round-9I: 资料完整度提醒 + 建议补充资料 */}
+                {(() => {
+                  const sc = current.salesConfig
+                  const tier = sc.summary.completenessTier ?? 'moderate'
+                  const tierLabel =
+                    tier === 'complete' ? '资料完整'
+                    : tier === 'moderate' ? '资料较充足'
+                    : '资料较少'
+                  const tierColor =
+                    tier === 'complete' ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : tier === 'moderate' ? 'bg-blue-50 border-blue-200 text-blue-700'
+                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                  return (
+                    <div className={`rounded-2xl border px-4 py-3 text-xs ${tierColor}`}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span><strong>资料完整度：</strong>{tierLabel}（{sc.summary.completenessScore ?? '-'}/{sc.summary.completenessMax ?? '-'}）· 已生成 {sc.summary.faqCount} 条 FAQ</span>
+                      </div>
+                      <p className="mt-1 text-[11px] opacity-90">{sc.summary.coverageNote}</p>
+                      {sc.missingDataGuidance && sc.missingDataGuidance.items.length > 0 && (
+                        <div className="mt-2 bg-white/60 rounded-xl p-2">
+                          <p className="font-semibold">{sc.missingDataGuidance.headline}</p>
+                          <ul className="mt-1 list-disc list-inside space-y-0.5">
+                            {sc.missingDataGuidance.items.map((it, i) => <li key={i}>{it}</li>)}
+                          </ul>
+                          <p className="mt-1 text-[10px] opacity-75">补充后再点「一键生成产品成交配置」可生成更多 FAQ。</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
                 {/* Product profile */}
                 <details open className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
                   <summary className="text-sm font-semibold text-gray-800 cursor-pointer">产品档案</summary>
@@ -859,12 +890,16 @@ export default function OnboardingPage() {
                   </div>
                 </details>
 
-                {/* FAQ list */}
+                {/* FAQ list — Round-9I: per-product 产品 FAQ; hasMissingInfo items are visually distinct */}
                 <details open className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">FAQ / 常见问题（已生成 {current.salesConfig.faqDrafts.length} 条草稿）</summary>
+                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">
+                    产品 FAQ · {current.salesConfig.productName}（已生成 {current.salesConfig.faqDrafts.length} 条草稿
+                    {(current.salesConfig.summary.missingInfoFaqCount ?? 0) > 0 && <span className="text-amber-600">，其中 {current.salesConfig.summary.missingInfoFaqCount} 条建议人工确认</span>}
+                    ）
+                  </summary>
                   <div className="mt-3 space-y-2 max-h-96 overflow-y-auto pr-1">
                     {current.salesConfig.faqDrafts.map((f, i) => (
-                      <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-3 text-xs">
+                      <div key={f.id} className={`rounded-xl border p-3 text-xs ${f.hasMissingInfo ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
                         <div className="flex items-start gap-2">
                           <input type="checkbox" checked={f.isSelected} onChange={() => toggleFaq(i)} className="mt-0.5" title="勾选以保存到知识库" />
                           <div className="flex-1 space-y-1.5">
@@ -872,7 +907,10 @@ export default function OnboardingPage() {
                             <textarea rows={2} className="w-full text-gray-600 bg-transparent border-b border-gray-100 focus:border-blue-400 outline-none resize-none" value={f.answer} onChange={e => editFaq(i, { answer: e.target.value })} />
                             <div className="flex items-center justify-between text-[10px] text-gray-400">
                               <input className="bg-transparent" value={f.category} onChange={e => editFaq(i, { category: e.target.value })} />
-                              <button onClick={() => deleteFaq(i)} className="text-red-500 hover:text-red-700" title="删除此 FAQ">删除</button>
+                              <div className="flex items-center gap-2">
+                                {f.hasMissingInfo && <span className="text-amber-600">建议补充资料</span>}
+                                <button onClick={() => deleteFaq(i)} className="text-red-500 hover:text-red-700" title="删除此 FAQ">删除</button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -898,64 +936,57 @@ export default function OnboardingPage() {
                   </div>
                 </details>
 
-                {/* Qualification questions */}
-                <details className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">客户资格问题（{current.salesConfig.qualificationQuestions.length} 个）</summary>
-                  <ul className="mt-3 space-y-1 text-xs text-gray-700">
-                    {current.salesConfig.qualificationQuestions.map((q, i) => (
-                      <li key={i}>• <strong>{q.question}</strong> <span className="text-gray-400">— {q.purpose}</span></li>
-                    ))}
-                  </ul>
-                </details>
+                {/* Round-9I: Tenant-friendly rules (Scope D) — show business-language headlines,
+                    nest technical scoring/follow-up internals inside collapsed "查看规则". */}
+                {(() => {
+                  const tfr = current.salesConfig.tenantFriendlyRules
+                  if (!tfr) return null
+                  const Block = ({ title, headline, items }: { title: string; headline: string; items: string[] }) => (
+                    <details open className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
+                      <summary className="text-sm font-semibold text-gray-800 cursor-pointer">{title}</summary>
+                      <p className="mt-2 text-xs text-gray-600">{headline}</p>
+                      <ul className="mt-2 space-y-1 text-xs text-gray-700">
+                        {items.map((it, i) => <li key={i}>• {it}</li>)}
+                      </ul>
+                    </details>
+                  )
+                  return (
+                    <>
+                      <Block title="AI 会帮你收集的客户资料" headline={tfr.qualification.headline} items={tfr.qualification.items} />
+                      <Block title="系统会自动打的客户标签"   headline={tfr.tags.headline}          items={tfr.tags.items} />
+                      <Block title="AI 意向判断"             headline={tfr.scoring.headline}       items={tfr.scoring.items} />
+                      <Block title="自动跟进草稿"             headline={tfr.followUp.headline}      items={tfr.followUp.items} />
+                      <Block title="转人工规则"               headline={tfr.handoff.headline}       items={tfr.handoff.items} />
+                    </>
+                  )
+                })()}
 
-                {/* Tags */}
+                {/* Power-user view: technical rules kept collapsed under "查看规则". */}
                 <details className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">客户标签（{current.salesConfig.suggestedTags.length}）</summary>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {current.salesConfig.suggestedTags.map((t, i) => <span key={i} className="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full">#{t}</span>)}
+                  <summary className="text-sm font-semibold text-gray-500 cursor-pointer">查看详细规则（高级 · 可选）</summary>
+                  <div className="mt-3 space-y-3 text-xs text-gray-600">
+                    <div>
+                      <p className="font-semibold">意向评分规则：</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {current.salesConfig.leadScoringRules.map((r, i) => (
+                          <li key={i}>• {r.description} <span className={`ml-1 font-mono ${r.adjustment >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{r.adjustment > 0 ? '+' : ''}{r.adjustment}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold">自动跟进规则（启用前不会真实发送）：</p>
+                      <ul className="mt-1 space-y-1">
+                        {current.salesConfig.followUpRules.map((r, i) => (
+                          <li key={i} className="bg-white border border-gray-200 rounded-lg p-2">
+                            <p>• <strong>{r.scenario}</strong> · 延迟 {r.delay}</p>
+                            <p className="text-gray-500 mt-0.5">{r.description}</p>
+                            <p className="text-gray-400 mt-0.5 italic">"{r.message}"</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 </details>
-
-                {/* Scoring */}
-                <details className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">意向评分规则（{current.salesConfig.leadScoringRules.length} 条 · 草稿，可稍后在规则中心调整）</summary>
-                  <ul className="mt-3 space-y-1 text-xs text-gray-700">
-                    {current.salesConfig.leadScoringRules.map((r, i) => (
-                      <li key={i}>• {r.description} <span className={`ml-1 font-mono ${r.adjustment >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{r.adjustment > 0 ? '+' : ''}{r.adjustment}</span></li>
-                    ))}
-                  </ul>
-                </details>
-
-                {/* Follow-up */}
-                <details className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">自动跟进规则（{current.salesConfig.followUpRules.length} 条 · 草稿，启用前不会真实发送）</summary>
-                  <ul className="mt-3 space-y-2 text-xs text-gray-700">
-                    {current.salesConfig.followUpRules.map((r, i) => (
-                      <li key={i} className="bg-white border border-gray-200 rounded-lg p-2">
-                        <p><strong>{r.scenario}</strong> · 延迟 {r.delay}</p>
-                        <p className="text-gray-500 mt-0.5">{r.description}</p>
-                        <p className="text-gray-400 mt-0.5 italic">"{r.message}"</p>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-
-                {/* Handoff */}
-                <details className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-                  <summary className="text-sm font-semibold text-gray-800 cursor-pointer">转人工规则（{current.salesConfig.handoffRules.length} 条 · 草稿）</summary>
-                  <ul className="mt-3 space-y-1 text-xs text-gray-700">
-                    {current.salesConfig.handoffRules.map((r, i) => (
-                      <li key={i}>• <strong>{r.trigger}</strong> — {r.description}</li>
-                    ))}
-                  </ul>
-                </details>
-
-                {/* Coverage hints */}
-                {current.salesConfig.summary.missingFields.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">
-                    <strong>覆盖提示：</strong>{current.salesConfig.summary.coverageNote}
-                  </div>
-                )}
 
                 <button onClick={handleSaveProductConfig} disabled={busy} className="w-full bg-gray-800 hover:bg-gray-900 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
                   {busy ? '保存中…' : '保存产品配置（写入草稿，不会真实发送）'}

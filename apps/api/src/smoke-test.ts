@@ -5206,6 +5206,130 @@ async function smoke() {
   // Cleanup R9H3 tenant
   await prismaCleanupRound9bTenant(r9h3TenantId)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9I: FAQ structure + elastic generation + customer entry menu
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n308. Round-9I: minimal product data → elastic small FAQ count, no forced 40')
+  const r9iMinimal = await post('/onboarding/products/generate-sales-config', {
+    productName: 'MinimalProductX',
+    // intentionally no other fields
+  }, accessToken)
+  check('minimal generate → 200', r9iMinimal.status === 200)
+  const r9iMinBody = await r9iMinimal.json() as Record<string, unknown>
+  const r9iMinConfig = r9iMinBody.config as Record<string, unknown>
+  const r9iMinFaqs = r9iMinConfig.faqDrafts as Array<{ answer: string; hasMissingInfo?: boolean }>
+  const r9iMinSummary = r9iMinConfig.summary as Record<string, unknown>
+  check('completenessTier=minimal',        r9iMinSummary.completenessTier === 'minimal')
+  check('faqCount within minimal band 8–14', (r9iMinSummary.faqCount as number) >= 8 && (r9iMinSummary.faqCount as number) <= 14)
+  check('faqCount NOT forced 30+',         (r9iMinSummary.faqCount as number) < 30)
+  const missingRatio = r9iMinFaqs.filter(f => f.hasMissingInfo).length / Math.max(1, r9iMinFaqs.length)
+  check('missing-info FAQ ≤ 30% of list',  missingRatio <= 0.30 + 0.001)
+
+  console.log('\n309. Round-9I: minimal data exposes missingDataGuidance + Chinese labels')
+  const r9iGuide = r9iMinConfig.missingDataGuidance as Record<string, unknown> | undefined
+  check('missingDataGuidance is present',  !!r9iGuide && Array.isArray(r9iGuide.items) && (r9iGuide.items as string[]).length > 0)
+  check('guidance headline mentions 资料',  typeof r9iGuide?.headline === 'string' && (r9iGuide!.headline as string).includes('资料'))
+  check('guidance ctaLabel is human',       r9iGuide?.ctaLabel === '去补充资料')
+  const labels = r9iSummaryLabels(r9iMinSummary)
+  check('labels include 适合客户 (zh)',      labels.includes('适合客户'))
+  check('labels do NOT include suitableCustomers (raw)', !labels.includes('suitableCustomers'))
+
+  console.log('\n310. Round-9I: moderate / complete data → larger elastic FAQ count')
+  const r9iComplete = await post('/onboarding/products/generate-sales-config', {
+    productName:           'TeleHubX',
+    productCategory:       'SaaS',
+    suitableCustomers:     '中小企业 / 销售团队',
+    sellingPoints:         '统一收件箱 · 自动跟进 · 多人协作',
+    pricing:               'Starter RM199/月 · Pro RM399/月',
+    purchaseFlow:          '注册 → 开通 → 连接 WhatsApp → 上线',
+    requiredCustomerInfo:  '公司名 · 团队规模 · 联系邮箱',
+    handoffConditions:     '付款 / 投诉 / 合同条款',
+    extraNotes:            '支持中英马来语；含管理后台与移动端 PWA',
+    pastedMaterialText:    '完整产品资料正文……（≥200 字）'.repeat(20),
+  }, accessToken)
+  check('complete generate → 200', r9iComplete.status === 200)
+  const r9iCompleteBody = await r9iComplete.json() as Record<string, unknown>
+  const r9iCompleteConfig = r9iCompleteBody.config as Record<string, unknown>
+  const r9iCompleteSummary = r9iCompleteConfig.summary as Record<string, unknown>
+  check('completenessTier in {moderate,complete}', ['moderate', 'complete'].includes(r9iCompleteSummary.completenessTier as string))
+  const cnt = r9iCompleteSummary.faqCount as number
+  check('complete data → ≥15 FAQ',  cnt >= 15)
+  check('complete data faqCount > minimal data faqCount', cnt > (r9iMinSummary.faqCount as number))
+
+  console.log('\n311. Round-9I: tenant-friendly rules use Chinese headlines + items')
+  const tfr = r9iCompleteConfig.tenantFriendlyRules as Record<string, { headline: string; items: string[] }> | undefined
+  check('tenantFriendlyRules.qualification present', !!tfr?.qualification && tfr.qualification.items.length > 0)
+  check('qualification headline 中文', tfr?.qualification.headline.includes('客户资料') === true)
+  check('handoff headline 中文',       tfr?.handoff.headline.includes('转人工') === true)
+  check('scoring headline 中文',       tfr?.scoring.headline.includes('意向') === true)
+  check('followUp headline mentions 不会真实发送', tfr?.followUp.headline.includes('不会真实发送') === true)
+  // Friendly view must not expose raw English trigger keys verbatim
+  const tfrJson = JSON.stringify(tfr)
+  for (const raw of ['ai_low_confidence', 'pricing_rule_incomplete', 'complaint_or_refund', 'PRICE_ASKED_NO_REPLY']) {
+    check(`tenantFriendlyRules has no raw key "${raw}"`, !tfrJson.includes(raw))
+  }
+
+  console.log('\n312. Round-9I: company-level / general FAQ endpoint')
+  const r9iCompany = await post('/onboarding/general-faq/generate', {
+    companyName: 'Omni Demo Company',
+    industry:    'SaaS',
+    businessHours: '周一至周五 9:00–18:00',
+    supportedLanguages: ['zh', 'en', 'ms'],
+  }, accessToken)
+  check('company-faq generate → 200', r9iCompany.status === 200)
+  const r9iCompanyBody = await r9iCompany.json() as Record<string, unknown>
+  const r9iCompanyFaqs = r9iCompanyBody.companyFaqs as Array<{ question: string; answer: string; category: string }>
+  check('companyFaqs is non-empty array', Array.isArray(r9iCompanyFaqs) && r9iCompanyFaqs.length >= 8)
+  const cfQs = r9iCompanyFaqs.map(f => f.question).join(' || ')
+  for (const expected of ['你们是什么公司？', '你们几点营业？', '可以找真人吗？', '你是机器人吗？', '支持什么语言？']) {
+    check(`companyFaqs includes "${expected}"`, cfQs.includes(expected))
+  }
+  check('realAiProviderCalled=false', r9iCompanyBody.realAiProviderCalled === false)
+
+  console.log('\n313. Round-9I: customer entry menu preview (NEVER sends WhatsApp)')
+  const r9iMenu = await post('/onboarding/customer-entry-menu/preview', {
+    products: [
+      { productId: 'p1', productName: 'Alpha' },
+      { productId: 'p2', productName: 'Beta'  },
+    ],
+    supportedLanguages: ['zh', 'en', 'ms'],
+  }, accessToken)
+  check('menu preview → 200', r9iMenu.status === 200)
+  const r9iMenuBody = await r9iMenu.json() as Record<string, unknown>
+  check('previewOnly=true',            r9iMenuBody.previewOnly === true)
+  check('realWhatsAppSent=false',      r9iMenuBody.realWhatsAppSent === false)
+  check('realMetaCalled=false',        r9iMenuBody.realMetaCalled === false)
+  const menu = r9iMenuBody.menu as Record<string, unknown>
+  const langStep = menu.languageStep as { promptText: string; options: Array<{ code: string; label: string }> }
+  const prodStep = menu.productStep  as { promptText: string; options: Array<{ productName: string }>; humanHandoffLabel: string }
+  check('languageStep has zh/en/ms', langStep.options.map(o => o.code).join(',') === 'zh,en,ms')
+  check('languageStep label 中文',    langStep.options.find(o => o.code === 'zh')?.label === '中文')
+  check('productStep includes Alpha+Beta', prodStep.options.map(o => o.productName).join(',') === 'Alpha,Beta')
+  check('productStep human handoff = 找真人客服', prodStep.humanHandoffLabel === '找真人客服')
+  check('welcomeText starts with 欢迎', (menu.welcomeText as string).startsWith('欢迎'))
+
+  console.log('\n314. Round-9I: save GENERAL FAQ via faqType=GENERAL (no productName required)')
+  const r9iSaveGeneral = await post('/onboarding/products/save-faq-to-knowledge', {
+    faqType: 'GENERAL',
+    faqs: [
+      { question: `R9I-Smoke-General-${Date.now()} 你们几点营业？`, answer: '周一至周五 9:00–18:00。', category: '营业信息' },
+    ],
+  }, accessToken)
+  check('save GENERAL → 201', r9iSaveGeneral.status === 201)
+  const r9iSaveGeneralBody = await r9iSaveGeneral.json() as Record<string, unknown>
+  check('faqType echoed GENERAL', r9iSaveGeneralBody.faqType === 'GENERAL')
+  check('saved ≥ 1',              (r9iSaveGeneralBody.saved as number) >= 1)
+  // Cleanup: remove the just-inserted general FAQ rows
+  if (Array.isArray(r9iSaveGeneralBody.knowledgeItemIds)) {
+    await prismaDeleteKnowledge(r9iSaveGeneralBody.knowledgeItemIds as string[])
+  }
+
+  console.log('\n315. Round-9I: missing-info FAQ does not flood when answers are useless')
+  // Confirm the minimal-data response has fewer missing-info FAQ than the seed pool would suggest.
+  const minMissing = r9iMinFaqs.filter(f => f.hasMissingInfo).length
+  check('minimal data: missing-info FAQ ≤ 3', minMissing <= 3)
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {
@@ -5257,6 +5381,11 @@ async function prismaCleanupRound9bTenant(tenantId: string): Promise<void> {
   } finally {
     await p.$disconnect()
   }
+}
+
+function r9iSummaryLabels(summary: Record<string, unknown>): string[] {
+  const labels = summary.missingFieldLabels
+  return Array.isArray(labels) ? (labels as string[]) : []
 }
 
 async function prismaSetPlatformAdmin(email: string, value: boolean): Promise<void> {

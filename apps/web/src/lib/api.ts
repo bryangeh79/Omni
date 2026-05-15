@@ -531,6 +531,19 @@ export interface FaqDraft {
   productName:  string
   isSelected:   boolean
   source:       'generated_draft'
+  /** Round-9I: true if the answer is the missing-info fallback. */
+  hasMissingInfo?: boolean
+}
+
+/** Round-9I: company-level (general) FAQ draft. */
+export interface CompanyFaqDraft {
+  id:          string
+  question:    string
+  answer:      string
+  category:    string
+  isSelected:  boolean
+  source:      'generated_draft'
+  hasMissingInfo?: boolean
 }
 
 export interface SalesScript           { title: string; scenario: string; script: string; tone: 'friendly' | 'professional' | 'concise' }
@@ -570,6 +583,12 @@ export interface ProductSalesConfig {
     objectionFaqCount:  number
     processFaqCount:    number
     missingFields:      string[]
+    /** Round-9I: tenant-readable Chinese labels. */
+    missingFieldLabels?: string[]
+    completenessTier?:   'minimal' | 'moderate' | 'complete'
+    completenessScore?:  number
+    completenessMax?:    number
+    missingInfoFaqCount?: number
     hasPricing:         boolean
     hasPurchaseFlow:    boolean
     hasUploadedFile:    boolean
@@ -577,6 +596,65 @@ export interface ProductSalesConfig {
     materialCharCount:  number
     coverageNote:       string
   }
+  /** Round-9I */
+  missingDataGuidance?: {
+    headline:  string
+    items:     string[]
+    ctaLabel:  string
+  }
+  /** Round-9I */
+  tenantFriendlyRules?: {
+    qualification: { headline: string; items: string[] }
+    tags:          { headline: string; items: string[] }
+    scoring:       { headline: string; items: string[] }
+    followUp:      { headline: string; items: string[] }
+    handoff:       { headline: string; items: string[] }
+  }
+}
+
+/** Round-9I: customer entry menu preview (no real WhatsApp send). */
+export interface CustomerEntryMenuConfig {
+  version:     'v1'
+  welcomeText: string
+  languageStep: {
+    promptText: string
+    options:    Array<{ code: 'zh' | 'en' | 'ms'; label: string }>
+  }
+  productStep: {
+    promptText:        string
+    options:           Array<{ productId: string; productName: string }>
+    humanHandoffLabel: string
+  }
+  behaviorDescription: string
+  realWhatsAppSent:    false
+  previewOnly:         true
+}
+
+export async function fetchCustomerEntryMenuPreview(
+  body: { products?: Array<{ productId: string; productName: string }>; supportedLanguages?: string[] } = {},
+): Promise<{ menu: CustomerEntryMenuConfig; tenantId: string; previewOnly: true; realWhatsAppSent: false }> {
+  return apiFetch('/onboarding/customer-entry-menu/preview', {
+    method: 'POST',
+    body:   JSON.stringify(body),
+  })
+}
+
+export async function generateCompanyFaqs(
+  body: { companyName?: string; industry?: string; businessHours?: string; locationAddress?: string; supportedLanguages?: string[] } = {},
+): Promise<{ companyFaqs: CompanyFaqDraft[]; tenantId: string; mode: string; realAiProviderCalled: false }> {
+  return apiFetch('/onboarding/general-faq/generate', {
+    method: 'POST',
+    body:   JSON.stringify(body),
+  })
+}
+
+export async function saveCompanyFaqsToKnowledge(
+  faqs: Array<{ question: string; answer: string; category?: string; language?: string }>,
+): Promise<{ saved: number; skippedDuplicates: number; knowledgeItemIds: string[]; faqType: 'GENERAL' }> {
+  return apiFetch('/onboarding/products/save-faq-to-knowledge', {
+    method: 'POST',
+    body:   JSON.stringify({ faqType: 'GENERAL', faqs }),
+  })
 }
 
 export type ProductSetupStatus =

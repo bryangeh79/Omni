@@ -25,7 +25,15 @@ import type { FastifyInstance } from 'fastify'
 import { prisma, OnboardingStatus, KnowledgeItemType } from '@omni/db'
 import type { AiProvider, AiAgentInput } from '@omni/shared'
 import { requireAuth, getAuthUser } from '../auth'
-import { generateProductSalesConfig, type ProductSetupInput, type ProductSalesConfig } from '../lib/product-sales-config-generator'
+import {
+  generateProductSalesConfig,
+  generateCompanyFaqs,
+  buildCustomerEntryMenu,
+  type ProductSetupInput,
+  type ProductSalesConfig,
+  type CustomerEntryMenuConfig,
+  type CompanyFaqDraft,
+} from '../lib/product-sales-config-generator'
 import { tryDeductFaqGeneration } from '../lib/quota'
 import { getTenantServiceAccess } from '../lib/service-access'
 import { composePlatformPrompt } from '../lib/platform-prompt'
@@ -1007,12 +1015,14 @@ export async function onboardingRoutes(app: FastifyInstance) {
   )
 
   // ── POST /onboarding/products/save-faq-to-knowledge ────────────────────
-  // Bulk-save selected FAQ drafts as PRODUCT_FAQ KnowledgeItem rows.
+  // Bulk-save selected FAQ drafts as KnowledgeItem rows.
+  // Round-9I: `faqType` selects PRODUCT (per-product, prefixed) vs GENERAL
+  //           (company-level, stored as GLOBAL_FAQ, no product prefix).
   // Duplicate detection: (tenantId + normalised question text + active).
-  // Returns counts: saved, skippedDuplicates, knowledgeItemIds.
   app.post<{
     Body: {
-      productName: string
+      productName?: string
+      faqType?:     'PRODUCT' | 'GENERAL'
       faqs: Array<{ question: string; answer: string; category?: string; language?: string }>
     }
   }>(
@@ -1020,13 +1030,16 @@ export async function onboardingRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (req, reply) => {
       const { tenantId } = getAuthUser(req)
-      const { productName, faqs } = req.body ?? ({} as Record<string, unknown>) as {
+      const body = req.body ?? ({} as Record<string, unknown>) as {
         productName?: string
+        faqType?:     'PRODUCT' | 'GENERAL'
         faqs?: Array<{ question?: string; answer?: string; category?: string; language?: string }>
       }
+      const faqType = body.faqType === 'GENERAL' ? 'GENERAL' : 'PRODUCT'
+      const { productName, faqs } = body
 
-      if (!productName || !productName.trim()) {
-        return reply.status(400).send({ error: 'productName is required' })
+      if (faqType === 'PRODUCT' && (!productName || !productName.trim())) {
+        return reply.status(400).send({ error: 'productName is required when faqType=PRODUCT' })
       }
       if (!Array.isArray(faqs) || faqs.length === 0) {
         return reply.status(400).send({ error: 'faqs[] must be a non-empty array' })
@@ -1039,15 +1052,12 @@ export async function onboardingRoutes(app: FastifyInstance) {
         if (!f.answer   || !f.answer.trim())   return reply.status(400).send({ error: 'every FAQ needs an answer' })
       }
 
-      const trimmedProduct = productName.trim()
-      // Stored questions are prefixed `[ProductName] ` for tenant-visible context (no schema migration).
-      // For dedupe we compare the FULL stored form so the same incoming question can be saved
-      // separately under a different product (correct per-product scoping).
-      const productPrefix = `[${trimmedProduct}] `
+      const trimmedProduct = (productName ?? '').trim()
+      const productPrefix  = faqType === 'PRODUCT' ? `[${trimmedProduct}] ` : ''
+      const kbType         = faqType === 'PRODUCT' ? KnowledgeItemType.PRODUCT_FAQ : KnowledgeItemType.GLOBAL_FAQ
 
-      // Fetch existing active PRODUCT_FAQ questions for duplicate detection
       const existing = await prisma.knowledgeItem.findMany({
-        where:  { tenantId, type: KnowledgeItemType.PRODUCT_FAQ, isActive: true, question: { not: null } },
+        where:  { tenantId, type: kbType, isActive: true, question: { not: null } },
         select: { id: true, question: true },
       })
       const existingQs = new Set(existing.map(e => (e.question ?? '').trim().toLowerCase()))
@@ -1067,7 +1077,7 @@ export async function onboardingRoutes(app: FastifyInstance) {
         seenInBatch.add(norm)
         toCreate.push({
           tenantId,
-          type:     KnowledgeItemType.PRODUCT_FAQ,
+          type:     kbType,
           question: fullQ,
           answer:   f.answer!.trim(),
           language: f.language?.trim() || 'zh',
@@ -1080,20 +1090,19 @@ export async function onboardingRoutes(app: FastifyInstance) {
           saved:               0,
           skippedDuplicates,
           knowledgeItemIds:    [],
-          productName:         trimmedProduct,
+          productName:         trimmedProduct || undefined,
+          faqType,
           realAiProviderCalled: false,
           note: '所有 FAQ 已经存在或重复，未新增。',
         })
       }
 
-      // Bulk insert
       await prisma.knowledgeItem.createMany({ data: toCreate })
 
-      // Fetch the inserted rows (Prisma createMany doesn't return ids on PG with @id default cuid)
       const inserted = await prisma.knowledgeItem.findMany({
         where: {
           tenantId,
-          type:     KnowledgeItemType.PRODUCT_FAQ,
+          type:     kbType,
           question: { in: toCreate.map(t => t.question) },
         },
         select: { id: true, question: true, createdAt: true },
@@ -1105,9 +1114,125 @@ export async function onboardingRoutes(app: FastifyInstance) {
         saved:               inserted.length,
         skippedDuplicates,
         knowledgeItemIds:    inserted.map(i => i.id),
-        productName:         trimmedProduct,
+        productName:         trimmedProduct || undefined,
+        faqType,
         realAiProviderCalled: false,
-        note: '已保存到知识库（type=PRODUCT_FAQ）。可在知识库页面查看 / 编辑 / 停用。',
+        note: faqType === 'PRODUCT'
+          ? '已保存到知识库（产品 FAQ）。可在知识库页面查看 / 编辑 / 停用。'
+          : '已保存到知识库（通用 / 公司 FAQ）。可在知识库页面查看 / 编辑 / 停用。',
+      })
+    },
+  )
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9I: Company-level (general) FAQ + Customer Entry Menu preview
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── POST /onboarding/general-faq/generate ──────────────────────────────
+  // Deterministic stub. Builds 通用 FAQ / 公司 FAQ drafts shared across all
+  // products. Reads basic company profile from OnboardingDraft if present
+  // (caller can also pass overrides). Never calls real AI provider.
+  app.post<{
+    Body: {
+      companyName?:        string
+      industry?:           string
+      businessHours?:      string
+      locationAddress?:    string
+      supportedLanguages?: string[]
+      humanHandoffNote?:   string
+    }
+  }>(
+    '/general-faq/generate',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const body = req.body ?? {}
+
+      // Round-9B service-access guard
+      const access = await getTenantServiceAccess(tenantId)
+      if (access.isBlocked) {
+        return reply.status(403).send({
+          error: 'Service is paused or expired',
+          serviceStatus:       access.serviceStatus,
+          serviceBlocked:      true,
+          tenantFacingBanner:  access.tenantFacingBanner,
+          realAiProviderCalled: false,
+        })
+      }
+
+      // Pull defaults from tenant + draft if not provided
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true, defaultLanguage: true } })
+      const draft  = await prisma.onboardingDraft.findUnique({
+        where: { tenantId },
+        select: { companyName: true, industry: true, businessHours: true, serviceArea: true },
+      })
+
+      const companyFaqs: CompanyFaqDraft[] = generateCompanyFaqs({
+        companyName:        body.companyName        ?? draft?.companyName    ?? tenant?.name,
+        industry:           body.industry           ?? draft?.industry       ?? undefined,
+        businessHours:      body.businessHours      ?? draft?.businessHours  ?? undefined,
+        locationAddress:    body.locationAddress    ?? draft?.serviceArea    ?? undefined,
+        supportedLanguages: body.supportedLanguages ?? ['zh', 'en', 'ms'],
+        humanHandoffNote:   body.humanHandoffNote,
+      })
+
+      return reply.status(200).send({
+        companyFaqs,
+        tenantId,
+        mode:                  'deterministic_stub',
+        realAiProviderCalled:  false,
+        realWhatsAppSent:      false,
+        realMetaCalled:        false,
+        note: '本结果为通用 / 公司 FAQ 草稿；不会自动保存到知识库。请检查后再保存。',
+      })
+    },
+  )
+
+  // ── POST /onboarding/customer-entry-menu/preview ───────────────────────
+  // PREVIEW ONLY. Returns a structured customer-entry-menu config showing
+  // language picker → product picker. This is configuration + visualisation
+  // only — it does NOT send any real WhatsApp message and is not wired to
+  // the Meta API. Used by the onboarding UI to show tenants what their
+  // customers will see at the start of a chat.
+  app.post<{
+    Body: {
+      products?:           Array<{ productId: string; productName: string }>
+      supportedLanguages?: string[]
+    }
+  }>(
+    '/customer-entry-menu/preview',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { tenantId } = getAuthUser(req)
+      const body = req.body ?? {}
+
+      // Fall back to products persisted on the onboarding draft if none provided.
+      let products = Array.isArray(body.products) ? body.products : undefined
+      if (!products || products.length === 0) {
+        const draft = await prisma.onboardingDraft.findUnique({ where: { tenantId }, select: { generatedPreview: true } })
+        const stored = ((draft?.generatedPreview as Record<string, unknown> | null)?.products as Array<{ productId?: string; productName?: string }> | undefined) ?? []
+        products = stored
+          .filter(p => p.productId && p.productName)
+          .map(p => ({ productId: p.productId as string, productName: p.productName as string }))
+      }
+      // Validate
+      if (!Array.isArray(products)) products = []
+      if (products.length > 20) {
+        return reply.status(400).send({ error: 'At most 20 products in customer entry menu' })
+      }
+
+      const menu: CustomerEntryMenuConfig = buildCustomerEntryMenu(products, {
+        supportedLanguages: body.supportedLanguages,
+      })
+
+      return reply.status(200).send({
+        menu,
+        tenantId,
+        // Hard safety flags — preview only, never wires to WhatsApp / Meta.
+        realWhatsAppSent: false,
+        realMetaCalled:   false,
+        previewOnly:      true,
+        note: '此为客户入口菜单预览，仅供配置展示；不会向 WhatsApp 发送任何消息。',
       })
     },
   )
