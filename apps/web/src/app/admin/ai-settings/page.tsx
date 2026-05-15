@@ -22,9 +22,20 @@ interface AiSettingsView {
   apiKeyLast4:             string | null
   enabled:                 boolean
   allowTenantProvidedKeys: boolean
+  // Round-9H-2 fields
+  corePromptOverride:       string | null
+  hasCorePromptOverride:    boolean
+  corePromptOverrideLength: number
   updatedAt:               string | null
   updatedByUserId:         string | null
 }
+
+// Round-9H-2: an internal label so SaaS Admin operators can correlate prompt
+// behavior with deployment history. The platform default prompt itself is
+// fetched live from GET /admin/ai-settings (response.platformCorePromptDefault).
+const PLATFORM_CORE_PROMPT_VERSION = 'platform-core-v1'
+// Backend treats overrides <32 chars as "clear / revert to default".
+const CORE_PROMPT_MIN_LENGTH = 32
 
 // Round-9F: mirror of backend PROVIDER_MODELS so the UI can render
 // cost-effective defaults + a friendly label per model. Fallback table —
@@ -109,6 +120,13 @@ export default function AdminAiSettingsPage() {
   const [testOk,       setTestOk]       = useState<boolean | null>(null)
   // Live catalogue from GET response; falls back to the local mirror.
   const [models,       setModels]       = useState<Record<string, { default: string; supported: string[] }>>(PROVIDER_MODELS_FALLBACK)
+  // Round-9H-2: platform core AI prompt state.
+  const [platformCorePromptDefault, setPlatformCorePromptDefault] = useState<string>('')
+  const [overrideDraft,             setOverrideDraft]             = useState<string>('')
+  const [savingPrompt,              setSavingPrompt]              = useState(false)
+  const [clearingPrompt,            setClearingPrompt]            = useState(false)
+  const [promptNotice,              setPromptNotice]              = useState<string>('')
+  const [promptError,               setPromptError]               = useState<string>('')
 
   // Round-9F: when provider changes, snap model to that provider's default if
   // the current selection is not in the new provider's supported list.
@@ -130,17 +148,55 @@ export default function AdminAiSettingsPage() {
       const body = await adminFetch('/admin/ai-settings') as {
         settings: AiSettingsView
         models?: Record<string, { default: string; supported: string[] }>
+        platformCorePromptDefault?: string
       }
       setView(body.settings)
       if (body.models) setModels(body.models)
+      if (body.platformCorePromptDefault) setPlatformCorePromptDefault(body.platformCorePromptDefault)
       const p = body.settings.provider ?? 'deepseek'
       setProvider(p)
       const m = body.settings.defaultModel ?? (body.models?.[p]?.default ?? PROVIDER_MODELS_FALLBACK[p]?.default ?? '')
       setDefaultModel(m)
       if (p === 'other' && body.settings.defaultModel) setCustomModel(body.settings.defaultModel)
       setEnabled(body.settings.enabled)
+      // Round-9H-2: prefill override editor from server.
+      setOverrideDraft(body.settings.corePromptOverride ?? '')
     } catch (e) { setError(e instanceof Error ? e.message : '加载失败') }
     finally { setLoading(false) }
+  }
+
+  // Round-9H-2: save / clear platform Core AI Prompt override.
+  async function handleSaveOverride() {
+    setSavingPrompt(true); setPromptError(''); setPromptNotice('')
+    try {
+      const override = overrideDraft.trim()
+      if (override.length === 0) {
+        setPromptError(`请填写自定义 Prompt 内容（至少 ${CORE_PROMPT_MIN_LENGTH} 字符），或点击「恢复平台默认」清除 override。`)
+        return
+      }
+      if (override.length < CORE_PROMPT_MIN_LENGTH) {
+        setPromptError(`自定义 Prompt 内容过短（少于 ${CORE_PROMPT_MIN_LENGTH} 字符），保存后会被视为清除并回退到平台默认。请补充内容或直接「恢复平台默认」。`)
+        return
+      }
+      await adminFetch('/admin/ai-settings', { method: 'POST', body: JSON.stringify({ corePromptOverride: override }) })
+      setPromptNotice('自定义 Core Prompt 已保存。普通租户不会看到，也不会编辑此内容。')
+      setTimeout(() => setPromptNotice(''), 4000)
+      await load()
+    } catch (e) { setPromptError(e instanceof Error ? e.message : '保存失败') }
+    finally { setSavingPrompt(false) }
+  }
+  async function handleClearOverride() {
+    if (!confirm('清除自定义 Core Prompt 并恢复平台默认 Prompt？此操作只影响平台统一 AI 客服规则；普通租户不可见。')) return
+    setClearingPrompt(true); setPromptError(''); setPromptNotice('')
+    try {
+      // Sending an empty string is treated as "clear" by backend (< 32 chars).
+      await adminFetch('/admin/ai-settings', { method: 'POST', body: JSON.stringify({ corePromptOverride: '' }) })
+      setOverrideDraft('')
+      setPromptNotice('已恢复平台默认 Core Prompt。')
+      setTimeout(() => setPromptNotice(''), 4000)
+      await load()
+    } catch (e) { setPromptError(e instanceof Error ? e.message : '清除失败') }
+    finally { setClearingPrompt(false) }
   }
   useEffect(() => {
     const ok = !!getToken()
@@ -269,6 +325,72 @@ export default function AdminAiSettingsPage() {
               {testOk ? '✅ ' : '⚠ '}{testResult}
             </p>
           )}
+        </section>
+
+        {/* Round-9H-2: 平台核心 AI Prompt management — SaaS Admin only */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">平台核心 AI Prompt</h2>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  状态：平台托管
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                  Starter / Pro 租户不能编辑完整 Prompt
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                  当前模式：{view?.hasCorePromptOverride ? '使用平台自定义 Prompt' : '使用平台默认 Prompt'}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                  版本：{PLATFORM_CORE_PROMPT_VERSION}
+                </span>
+                {view?.hasCorePromptOverride && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                    自定义 Prompt 长度：{view.corePromptOverrideLength}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {promptError  && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-2 text-xs">{promptError}</div>}
+          {promptNotice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2 text-xs">{promptNotice}</div>}
+
+          {/* Default prompt preview (collapsible) */}
+          {platformCorePromptDefault && (
+            <details className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+              <summary className="text-xs font-semibold text-gray-700 cursor-pointer">查看平台默认 Core Prompt（仅 SaaS Admin 可见）</summary>
+              <pre className="mt-2 whitespace-pre-wrap leading-relaxed text-[11px] text-gray-700 max-h-72 overflow-auto font-mono">{platformCorePromptDefault}</pre>
+              <p className="text-[10px] text-gray-400 mt-1.5">↑ 普通租户不可见。请勿截图分享给租户。</p>
+            </details>
+          )}
+
+          {/* Override editor */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">自定义 Core Prompt（留空 / &lt;{CORE_PROMPT_MIN_LENGTH} 字符 = 使用平台默认）</label>
+            <textarea
+              rows={10}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-400 resize-y leading-relaxed"
+              placeholder={`输入完整的 Core Prompt 覆盖平台默认；建议参考默认 Prompt 的结构（目标 / 回复规则 / 优先使用 / 不能 / 安全提醒）。\n至少 ${CORE_PROMPT_MIN_LENGTH} 字符。\n留空或过短将自动回退到平台默认。`}
+              value={overrideDraft}
+              onChange={e => setOverrideDraft(e.target.value)}
+            />
+            <p className="text-[10px] text-gray-400 mt-1">长度：{overrideDraft.length} 字符 · 最低 {CORE_PROMPT_MIN_LENGTH}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleSaveOverride} disabled={savingPrompt} title="保存自定义 Core Prompt" aria-label="保存自定义 Core Prompt" className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-50">{savingPrompt ? '保存中…' : '保存自定义 Prompt'}</button>
+            <button onClick={handleClearOverride} disabled={clearingPrompt || !view?.hasCorePromptOverride} title="清除自定义 Prompt，恢复平台默认" aria-label="恢复平台默认 Prompt" className="bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 text-sm px-4 py-2 rounded-xl disabled:opacity-50">{clearingPrompt ? '清除中…' : '恢复平台默认'}</button>
+            <button onClick={() => { void load() }} title="刷新当前 Prompt 状态" aria-label="刷新" className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-xl">刷新</button>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-[11px] text-amber-800 space-y-0.5">
+            <p>⚠ 此设置只影响平台统一 AI 客服规则。<strong>普通租户不会看到，也不能编辑完整 Prompt。</strong></p>
+            <p>⚠ 请不要在 Prompt 内填写 API Key、密码、Token 或任何敏感资料 — 即使后端会自动 scrub，也建议在源头避免。</p>
+            <p>⚠ 此 Prompt 当前**不会**被发送到任何真实 AI provider（foundation 阶段）。仅作为 `globalSystemPrompt` 在 onboarding 预览中本地拼接。</p>
+          </div>
         </section>
 
         {/* Round-9F Section 3: collapsible safety + advanced notes */}
