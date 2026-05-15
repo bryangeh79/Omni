@@ -5125,6 +5125,87 @@ async function smoke() {
   // Clean up: drop the override so subsequent runs start fresh.
   await post('/admin/ai-settings', { corePromptOverride: '' }, accessToken)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9H-3: Platform-admin RBAC — distinct from tenant OWNER/ADMIN
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n302. Round-9H-3: demo seed user (admin@omni-demo.test) is platform admin')
+  // Demo OWNER must already have isPlatformAdmin=true after migration's
+  // backfill UPDATE; this is the baseline that lets the smoke run admin tests.
+  const r9h3DemoAi = await get('/admin/ai-settings', accessToken)
+  check('demo OWNER GET /admin/ai-settings → 200', r9h3DemoAi.status === 200)
+  const r9h3DemoTenants = await get('/admin/tenants', accessToken)
+  check('demo OWNER GET /admin/tenants → 200',     r9h3DemoTenants.status === 200)
+
+  console.log('\n303. Round-9H-3: provision a NEW tenant whose OWNER is NOT platform admin')
+  const r9h3Slug = `r9h3-tnt-${Date.now().toString(36).slice(-6)}`
+  const r9h3CreateRes = await post('/admin/tenants', {
+    name:        'R9H3 Smoke Co',
+    slug:        r9h3Slug,
+    ownerName:   'R9H3 Owner',
+    ownerEmail:  `owner-${r9h3Slug}@omni-smoke.test`,
+    plan:        'starter',
+    serviceStatus:'ACTIVE',
+    generateTemporaryPassword: true,
+  }, accessToken)
+  check('provision new tenant → 201', r9h3CreateRes.status === 201)
+  const r9h3Created = await r9h3CreateRes.json() as Record<string, unknown>
+  const r9h3TenantId   = r9h3Created.tenantId as string
+  const r9h3OwnerEmail = r9h3Created.loginEmail as string
+  const r9h3TempPwd    = r9h3Created.temporaryPassword as string
+
+  console.log('\n304. Round-9H-3: new tenant OWNER (Starter) login + try platform endpoints — must 403')
+  const r9h3OwnerLogin = await post('/auth/login', { tenantSlug: r9h3Slug, email: r9h3OwnerEmail, password: r9h3TempPwd })
+  check('new tenant OWNER login → 200', r9h3OwnerLogin.status === 200)
+  const r9h3OwnerTok = (await r9h3OwnerLogin.json() as Record<string, unknown>).accessToken as string
+  // GET /admin/ai-settings → 403 with platformAdminRequired=true + friendly Chinese
+  const r9h3AiResp = await get('/admin/ai-settings', r9h3OwnerTok)
+  check('new tenant OWNER GET /admin/ai-settings → 403', r9h3AiResp.status === 403)
+  const r9h3AiBody = await r9h3AiResp.json() as Record<string, unknown>
+  check('403 has platformAdminRequired=true',                r9h3AiBody.platformAdminRequired === true)
+  check('403 message is the friendly Chinese',               r9h3AiBody.error === '你没有权限访问平台运维设置。')
+  // GET /admin/tenants → 403 too
+  check('new tenant OWNER GET /admin/tenants → 403',
+    (await get('/admin/tenants', r9h3OwnerTok)).status === 403)
+  // POST /admin/ai-settings (try to save override) → 403
+  check('new tenant OWNER POST /admin/ai-settings → 403',
+    (await post('/admin/ai-settings', { corePromptOverride: 'malicious-override-attempt-must-be-blocked' }, r9h3OwnerTok)).status === 403)
+  // POST /admin/ai-settings/test-connection-stub → 403
+  check('new tenant OWNER POST test-connection-stub → 403',
+    (await post('/admin/ai-settings/test-connection-stub', {}, r9h3OwnerTok)).status === 403)
+  // POST /admin/tenants (provisioning) → 403
+  check('new tenant OWNER POST /admin/tenants (try to provision) → 403',
+    (await post('/admin/tenants', { name: 'evil', slug: 'evil-evil', ownerName: 'x', ownerEmail: 'x@x.test', generateTemporaryPassword: true }, r9h3OwnerTok)).status === 403)
+
+  console.log('\n305. Round-9H-3: 403 response does NOT leak Core Prompt or platform settings')
+  const r9h3AiJson = JSON.stringify(r9h3AiBody)
+  for (const pat of ['你是一位专业、亲切、高转化率', 'corePromptOverride', 'platformCorePromptDefault', 'apiKey', 'apiKeyEncrypted', 'provider', 'defaultModel', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {
+    check(`403 body has no "${pat}"`, !r9h3AiJson.includes(pat))
+  }
+
+  console.log('\n306. Round-9H-3: promote the new tenant OWNER to platform admin → can access')
+  await prismaSetPlatformAdmin(r9h3OwnerEmail, true)
+  // Re-login to get a fresh token (no change strictly needed since middleware
+  // does a DB lookup per request, but mirrors a realistic flow).
+  const r9h3OwnerTok2 = ((await (await post('/auth/login', { tenantSlug: r9h3Slug, email: r9h3OwnerEmail, password: r9h3TempPwd })).json()) as Record<string, unknown>).accessToken as string
+  check('after promotion: GET /admin/ai-settings → 200',
+    (await get('/admin/ai-settings', r9h3OwnerTok2)).status === 200)
+  // Demote back so subsequent assertions on tenant boundary remain meaningful.
+  await prismaSetPlatformAdmin(r9h3OwnerEmail, false)
+  check('after demotion: GET /admin/ai-settings → 403',
+    (await get('/admin/ai-settings', r9h3OwnerTok2)).status === 403)
+
+  console.log('\n307. Round-9H-3: tenant-facing endpoints still do NOT expose Core Prompt for non-admin')
+  for (const path of ['/billing/quota-summary', '/settings/overview', '/onboarding/progress', '/account/service-status']) {
+    const body = await (await get(path, r9h3OwnerTok2)).text()
+    for (const pat of ['PLATFORM_CORE_PROMPT', 'platformCorePromptDefault', 'corePromptOverride', '你是一位专业、亲切、高转化率']) {
+      check(`tenant endpoint ${path} no "${pat}"`, !body.includes(pat))
+    }
+  }
+
+  // Cleanup R9H3 tenant
+  await prismaCleanupRound9bTenant(r9h3TenantId)
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {
@@ -5173,6 +5254,16 @@ async function prismaCleanupRound9bTenant(tenantId: string): Promise<void> {
     console.log(`  🗑️  Round-9B tenant ${tenantId} cleaned`)
   } catch (e) {
     console.warn(`  ⚠ Round-9B tenant cleanup warning: ${(e as Error).message}`)
+  } finally {
+    await p.$disconnect()
+  }
+}
+
+async function prismaSetPlatformAdmin(email: string, value: boolean): Promise<void> {
+  const { PrismaClient } = await import('@omni/db')
+  const p = new PrismaClient()
+  try {
+    await p.user.updateMany({ where: { email }, data: { isPlatformAdmin: value } })
   } finally {
     await p.$disconnect()
   }

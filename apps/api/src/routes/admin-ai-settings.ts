@@ -17,7 +17,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@omni/db'
-import { requireAuth, requireRole, getAuthUser } from '../auth'
+import { requireAuth, requirePlatformAdmin, getAuthUser } from '../auth'
 import { createAuditLog } from '../lib/audit'
 
 const SINGLETON_ID = 'singleton'
@@ -82,7 +82,7 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
 
   // ── GET /admin/ai-settings ────────────────────────────────────────────
   // TODO(platform-rbac): replace requireRole with a true platform-admin role.
-  app.get('/', { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] }, async () => {
+  app.get('/', { preHandler: [requireAuth, requirePlatformAdmin()] }, async () => {
     const row = await prisma.platformAiSettings.findUnique({ where: { id: SINGLETON_ID } })
     const view = row ? safeView(row) : {
       provider:                null,
@@ -128,7 +128,7 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
     corePromptOverride?:      string | null
   } }>(
     '/',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const b = req.body ?? {}
       const requestedProvider = b.provider?.trim() as Provider | undefined
@@ -226,7 +226,7 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
   app.post(
     '/test-connection-stub',
     {
-      preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')],
+      preHandler: [requireAuth, requirePlatformAdmin()],
       // Make body optional so an empty POST works without 400.
       schema: { body: { type: 'object', additionalProperties: true, nullable: true } },
     },

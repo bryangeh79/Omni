@@ -87,3 +87,36 @@ export function requireRole(...roles: string[]) {
 export function getAuthUser(req: FastifyRequest): JwtTokenPayload {
   return req.user as JwtTokenPayload
 }
+
+/**
+ * Round-9H-3: SaaS Platform Admin guard.
+ *
+ * Distinct from tenant OWNER/ADMIN — those manage only their own workspace.
+ * `isPlatformAdmin` is a User-table flag set out-of-band (seed / direct DB
+ * write / future /admin/users/:id/promote). Reads from DB on every request
+ * so a freshly-revoked operator loses access immediately (no stale JWT).
+ *
+ * Errors are tenant-friendly: 401 if no token, 403 if logged in but not a
+ * platform operator. The 403 body never reveals tenant ids or other operator
+ * identifiers.
+ */
+export function requirePlatformAdmin() {
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    await requireAuth(req, reply)
+    if (reply.sent) return
+    const tok = req.user as JwtTokenPayload
+    // Dynamic import keeps this middleware file framework-only; prisma is a
+    // heavier dep that we lazy-load to avoid import cycles in tests.
+    const { prisma } = await import('@omni/db')
+    const u = await prisma.user.findUnique({
+      where:  { id: tok.userId },
+      select: { isPlatformAdmin: true, isActive: true },
+    })
+    if (!u || !u.isActive || !u.isPlatformAdmin) {
+      return reply.status(403).send({
+        error: '你没有权限访问平台运维设置。',
+        platformAdminRequired: true,
+      })
+    }
+  }
+}

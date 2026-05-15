@@ -44,14 +44,19 @@ async function seed() {
       name:         'Demo Admin',
       role:         UserRole.OWNER,
       isActive:     true,
+      // Round-9H-3: bootstrap demo seed as a SaaS Platform Admin so dev / smoke
+      // can exercise /admin/ai-settings + /admin/tenants. Production rollouts
+      // must elevate operators manually — see migration 20260520000000.
+      isPlatformAdmin: true,
     },
     update: {
       name:         'Demo Admin',
       role:         UserRole.OWNER,
       passwordHash: '$2a$10$tkwcfiNpwlb2sK9EqalFeOcR/gzTh./0o6bMDgo2J9Kj3qtiMtB.y',
+      isPlatformAdmin: true,
     },
   })
-  console.log(`[seed] User: ${user.email} (${user.role})`)
+  console.log(`[seed] User: ${user.email} (${user.role}${user.isPlatformAdmin ? ' · platform admin' : ''})`)
 
   // ── 3. Knowledge Base — zh / en / ms samples ────────────────────────────────
   const kbItems = [

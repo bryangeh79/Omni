@@ -110,6 +110,10 @@ model User {
   name         String
   role         UserRole @default(AGENT)
   isActive     Boolean  @default(true)
+  // Round-9H-3: distinct flag for SaaS platform operators. Tenant OWNER/ADMIN
+  // manage only their own workspace; only users with isPlatformAdmin=true can
+  // access /admin/ai-settings and /admin/tenants. Defaults false.
+  isPlatformAdmin Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

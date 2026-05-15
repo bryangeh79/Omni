@@ -13,7 +13,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '@omni/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
-import { requireAuth, requireRole, getAuthUser } from '../auth'
+import { requireAuth, requirePlatformAdmin, getAuthUser } from '../auth'
 import { createAuditLog } from '../lib/audit'
 import { isValidServiceStatus, suggestLicenseCode, SERVICE_STATUS_LABEL, SERVICE_STATUSES, type ServiceStatus } from '../lib/service-access'
 
@@ -55,7 +55,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
 
   // ── GET /admin/tenants ────────────────────────────────────────────────
   // TODO(platform-rbac): swap requireRole to a true platform-admin role guard.
-  app.get('/', { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] }, async (req, reply) => {
+  app.get('/', { preHandler: [requireAuth, requirePlatformAdmin()] }, async (req, reply) => {
     void reply
     const url = new URL(req.url, 'http://x')
     const status = url.searchParams.get('serviceStatus')
@@ -92,7 +92,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
   // ── GET /admin/tenants/:id ────────────────────────────────────────────
   app.get<{ Params: { id: string } }>(
     '/:id',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const t = await prisma.tenant.findUnique({
         where: { id: req.params.id },
@@ -125,7 +125,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
     internalNotes?: string
   } }>(
     '/',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const b = req.body ?? {}
       if (!b.name?.trim())                 return reply.status(400).send({ error: 'name is required' })
@@ -219,7 +219,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
   // ── PATCH /admin/tenants/:id/service-status ───────────────────────────
   app.patch<{ Params: { id: string }, Body: { serviceStatus?: string; suspensionReason?: string } }>(
     '/:id/service-status',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const { id } = req.params
       const status = req.body?.serviceStatus
@@ -252,7 +252,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
   // ── PATCH /admin/tenants/:id/contract ─────────────────────────────────
   app.patch<{ Params: { id: string }, Body: { contractStartAt?: string; contractEndAt?: string; licenseCode?: string } }>(
     '/:id/contract',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const { id } = req.params
       const prev = await prisma.tenant.findUnique({ where: { id }, select: { contractEndAt: true } })
@@ -288,7 +288,7 @@ export async function adminTenantsRoutes(app: FastifyInstance) {
   // to the customer manually. Does NOT send real email.
   app.post<{ Params: { id: string } }>(
     '/:id/reset-password-stub',
-    { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
+    { preHandler: [requireAuth, requirePlatformAdmin()] },
     async (req, reply) => {
       const { id } = req.params
       const owner = await prisma.user.findFirst({

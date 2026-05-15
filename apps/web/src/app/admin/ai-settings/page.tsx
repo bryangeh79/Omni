@@ -84,6 +84,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   )
 }
 
+// Round-9H-3: typed error so the page can distinguish platform-admin denial.
+class ForbiddenError extends Error {
+  readonly platformAdminRequired: boolean
+  constructor(message: string, platformAdminRequired: boolean) {
+    super(message); this.platformAdminRequired = platformAdminRequired
+  }
+}
+
 async function adminFetch(path: string, init: RequestInit = {}): Promise<unknown> {
   const tok = getToken()
   const res = await fetch(`${API_BASE}${path}`, {
@@ -95,7 +103,10 @@ async function adminFetch(path: string, init: RequestInit = {}): Promise<unknown
     },
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; platformAdminRequired?: boolean }
+    if (res.status === 403) {
+      throw new ForbiddenError(err.error ?? '没有权限', !!err.platformAdminRequired)
+    }
     throw new Error(err.error ?? `HTTP ${res.status}`)
   }
   return res.json()
@@ -107,6 +118,10 @@ export default function AdminAiSettingsPage() {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [notice,  setNotice]  = useState('')
+  // Round-9H-3: forbidden state — tenant OWNER/ADMIN hits 403 with
+  // platformAdminRequired=true. Renders a full-page "no access" screen
+  // instead of the editor.
+  const [forbidden, setForbidden] = useState<string | null>(null)
   // Form state — apiKey is a write-only field; never populated from the server.
   // Round-9F: default to deepseek (cost-effective tier) on a fresh form.
   const [provider,     setProvider]     = useState<string>('deepseek')
@@ -161,7 +176,14 @@ export default function AdminAiSettingsPage() {
       setEnabled(body.settings.enabled)
       // Round-9H-2: prefill override editor from server.
       setOverrideDraft(body.settings.corePromptOverride ?? '')
-    } catch (e) { setError(e instanceof Error ? e.message : '加载失败') }
+      setForbidden(null)
+    } catch (e) {
+      if (e instanceof ForbiddenError && e.platformAdminRequired) {
+        setForbidden(e.message || '你没有权限访问平台运维设置。')
+      } else {
+        setError(e instanceof Error ? e.message : '加载失败')
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -239,6 +261,32 @@ export default function AdminAiSettingsPage() {
 
   if (authed === null) return null
   if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
+  // Round-9H-3: full-page gated view for non-platform-admin users.
+  if (forbidden) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-md text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-100 mb-1">
+            <span className="text-amber-700 text-2xl">🔒</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">平台运维设置受限</h1>
+          <p className="text-sm text-gray-600 leading-relaxed">{forbidden}</p>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            平台 AI Provider / 模型 / API Key / 核心 Prompt / 租户开户 / 套餐授权
+            只有 <strong>SaaS 平台运维人员</strong>可以访问。
+            <br />
+            您的租户内 OWNER / ADMIN 权限管理您自己工作空间的客户、知识库、团队，但不影响平台级别设置。
+            <br />
+            如需调整，请联系服务商。
+          </p>
+          <div className="flex gap-2 justify-center pt-2">
+            <a href="/boss" className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-xl">返回工作台</a>
+            <button onClick={() => { setForbidden(null); void load() }} className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-xl">重试</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
