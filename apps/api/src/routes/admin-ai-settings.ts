@@ -44,9 +44,14 @@ function resolveModel(provider: Provider, requested: string | undefined): string
 function safeView(row: {
   id: string; provider: string | null; defaultModel: string | null;
   hasApiKey: boolean; apiKeyLast4: string | null; enabled: boolean;
-  allowTenantProvidedKeys: boolean; updatedAt: Date; updatedByUserId: string | null;
+  allowTenantProvidedKeys: boolean; corePromptOverride: string | null;
+  updatedAt: Date; updatedByUserId: string | null;
 }) {
   // NOTE: apiKeyEncrypted intentionally NOT included.
+  // Round-9H: corePromptOverride is admin-only. Expose the actual override
+  // text so the SaaS Admin operator can review / edit it, but it is gated by
+  // the requireRole(OWNER, ADMIN) preHandler. Tenants never reach these
+  // endpoints. `corePromptOverrideLength` is included for at-a-glance UI.
   return {
     provider:                row.provider,
     defaultModel:            row.defaultModel,
@@ -54,6 +59,9 @@ function safeView(row: {
     apiKeyLast4:             row.apiKeyLast4,
     enabled:                 row.enabled,
     allowTenantProvidedKeys: row.allowTenantProvidedKeys,
+    corePromptOverride:      row.corePromptOverride,
+    hasCorePromptOverride:   !!(row.corePromptOverride && row.corePromptOverride.trim().length > 32),
+    corePromptOverrideLength: row.corePromptOverride?.length ?? 0,
     updatedAt:               row.updatedAt.toISOString(),
     updatedByUserId:         row.updatedByUserId,
   }
@@ -83,11 +91,18 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
       apiKeyLast4:             null,
       enabled:                 false,
       allowTenantProvidedKeys: false,
+      corePromptOverride:      null,
+      hasCorePromptOverride:   false,
+      corePromptOverrideLength:0,
       updatedAt:               null as string | null,
       updatedByUserId:         null,
     }
+    // Round-9H: include the platform Core AI Prompt default so the SaaS Admin
+    // operator UI can preview what's actually used at runtime (override > default).
+    const { PLATFORM_CORE_PROMPT } = await import('../lib/platform-prompt')
     return {
-      settings: view,
+      settings:           view,
+      platformCorePromptDefault: PLATFORM_CORE_PROMPT,
       // Round-9F: expose the supported provider/model catalogue so the UI can
       // render a provider-aware dropdown without a second endpoint.
       providers: SUPPORTED_PROVIDERS,
@@ -110,6 +125,7 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
     apiKey?:                  string
     enabled?:                 boolean
     allowTenantProvidedKeys?: boolean
+    corePromptOverride?:      string | null
   } }>(
     '/',
     { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] },
@@ -153,6 +169,13 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
         data.apiKeyLast4     = apiKeyLast4
         data.hasApiKey       = true
       }
+      // Round-9H: optional override of the platform Core AI Prompt. Null/empty
+      // clears it (falls back to PLATFORM_CORE_PROMPT). Min-length is 32 chars
+      // — anything shorter is treated as "clear" to avoid trivially weak prompts.
+      if (b.corePromptOverride !== undefined) {
+        const override = (b.corePromptOverride ?? '').toString().trim()
+        data.corePromptOverride = override.length >= 32 ? override : null
+      }
 
       const row = await prisma.platformAiSettings.upsert({
         where:  { id: SINGLETON_ID },
@@ -179,6 +202,8 @@ export async function adminAiSettingsRoutes(app: FastifyInstance) {
           allowTenantProvidedKeys: row.allowTenantProvidedKeys,
           // explicit safety markers
           apiKeyChanged: hasNewKey,
+          corePromptChanged: b.corePromptOverride !== undefined,
+          corePromptLength:  row.corePromptOverride?.length ?? 0,
         },
       })
 

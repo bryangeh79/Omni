@@ -71,6 +71,10 @@ model PlatformAiSettings {
   hasApiKey                Boolean  @default(false)
   enabled                  Boolean  @default(false)
   allowTenantProvidedKeys  Boolean  @default(false)
+  // Round-9H: optional SaaS Admin override of the platform Core AI Prompt.
+  // When null/empty/<=32 chars, lib/platform-prompt PLATFORM_CORE_PROMPT is used.
+  // Tenants NEVER read this column directly; only SaaS Admin reads it.
+  corePromptOverride       String?
   updatedAt                DateTime @updatedAt
   updatedByUserId          String?
 }

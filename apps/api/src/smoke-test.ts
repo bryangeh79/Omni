@@ -5035,6 +5035,96 @@ async function smoke() {
   check('uses safe fallback wording for missing facts',
     r9gMinJson.includes('资料中未明确说明') || r9gMinJson.includes('建议转人工'))
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9H: Platform Core AI Prompt foundation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n295. Round-9H: composed globalSystemPrompt includes platform Core sections')
+  // Set company + industry + AI goals + business hours so the composer has
+  // tenant data to weave into the prompt.
+  await post('/onboarding/draft', {
+    companyName:   'Smoke R9H Co',
+    industry:      'saas',
+    aiGoals:       ['lead-conversion', 'appointment'],
+    businessHours: '周一至周五 09:00-18:00',
+  }, accessToken)
+  const r9hPv = await (await post('/onboarding/generate-preview', {}, accessToken)).json() as Record<string, unknown>
+  const r9hPrompt = (r9hPv.preview as Record<string, unknown>)?.globalSystemPrompt as string
+  check('globalSystemPrompt is a non-empty string', typeof r9hPrompt === 'string' && r9hPrompt.length > 200)
+  // Core prompt phrases (platform-managed defaults)
+  check('prompt includes "你是一位专业、亲切、高转化率的"', r9hPrompt.includes('你是一位专业、亲切、高转化率的'))
+  check('prompt includes "你的目标是"',                  r9hPrompt.includes('你的目标是'))
+  check('prompt includes "你的回复必须"',                r9hPrompt.includes('你的回复必须'))
+  check('prompt includes "你必须优先使用"',              r9hPrompt.includes('你必须优先使用'))
+  check('prompt includes "你不能"',                      r9hPrompt.includes('你不能'))
+  check('prompt includes safety section',                r9hPrompt.includes('严格安全提醒'))
+  // Tenant data weave-in
+  check('prompt mentions tenant company name',           r9hPrompt.includes('Smoke R9H Co'))
+  check('prompt mentions tenant industry',               r9hPrompt.includes('saas') || r9hPrompt.includes('SaaS'))
+  check('prompt mentions tenant business hours',         r9hPrompt.includes('周一至周五 09:00-18:00'))
+  check('prompt mentions AI goals',                      r9hPrompt.includes('lead-conversion') && r9hPrompt.includes('appointment'))
+  check('prompt mentions handoff trigger USER_REQUESTS_HUMAN', r9hPrompt.includes('USER_REQUESTS_HUMAN'))
+  // Anti-broadcast / anti-leak language
+  check('prompt forbids broadcast / bulk sending',       r9hPrompt.includes('广告群发') || r9hPrompt.includes('broadcast'))
+  check('prompt forbids leaking internal prompt',        r9hPrompt.includes('内部 prompt') || r9hPrompt.includes('内部 Prompt'))
+
+  console.log('\n296. Round-9H: composed prompt does NOT leak forbidden secret-like substrings')
+  for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'DATABASE_URL', 'metadataJson', 'apiKeyEncrypted']) {
+    check(`prompt has no "${pat}"`, !r9hPrompt.includes(pat))
+  }
+
+  console.log('\n297. Round-9H: /admin/ai-settings exposes corePromptOverride flags + platform default')
+  const r9hAdminRes = await get('/admin/ai-settings', accessToken)
+  check('GET → 200', r9hAdminRes.status === 200)
+  const r9hAdmin = await r9hAdminRes.json() as Record<string, unknown>
+  check('response has platformCorePromptDefault',         typeof r9hAdmin.platformCorePromptDefault === 'string' && (r9hAdmin.platformCorePromptDefault as string).length > 200)
+  const r9hAdminSettings = r9hAdmin.settings as Record<string, unknown>
+  for (const key of ['corePromptOverride', 'hasCorePromptOverride', 'corePromptOverrideLength']) {
+    check(`settings has "${key}"`, key in r9hAdminSettings)
+  }
+
+  console.log('\n298. Round-9H: SaaS Admin can set corePromptOverride; preview composer uses it')
+  const OVERRIDE_TEXT = '【Round-9H 测试 Override】你是 Omni 平台高级客服。Always respect product safety boundaries and never invent prices. ' + 'X'.repeat(40)
+  const r9hSetOverride = await post('/admin/ai-settings', { corePromptOverride: OVERRIDE_TEXT }, accessToken)
+  check('POST corePromptOverride → 200', r9hSetOverride.status === 200)
+  const r9hSetBody = await r9hSetOverride.json() as Record<string, unknown>
+  const r9hSetSettings = r9hSetBody.settings as Record<string, unknown>
+  check('saved.hasCorePromptOverride = true',  r9hSetSettings.hasCorePromptOverride === true)
+  check('saved.corePromptOverrideLength > 32', typeof r9hSetSettings.corePromptOverrideLength === 'number' && (r9hSetSettings.corePromptOverrideLength as number) > 32)
+  // Now generate preview again and confirm composer used the override
+  const r9hPvWithOverride = await (await post('/onboarding/generate-preview', {}, accessToken)).json() as Record<string, unknown>
+  const r9hPromptWithOverride = (r9hPvWithOverride.preview as Record<string, unknown>)?.globalSystemPrompt as string
+  check('preview uses override (contains override marker)', r9hPromptWithOverride.includes('【Round-9H 测试 Override】'))
+
+  console.log('\n299. Round-9H: too-short override (< 32 chars) is treated as clear / uses default')
+  const r9hShort = await (await post('/admin/ai-settings', { corePromptOverride: 'too short' }, accessToken)).json() as Record<string, unknown>
+  const r9hShortSettings = r9hShort.settings as Record<string, unknown>
+  check('short override stored as null',          r9hShortSettings.corePromptOverride === null)
+  check('hasCorePromptOverride = false',          r9hShortSettings.hasCorePromptOverride === false)
+  // Preview now back to platform default
+  const r9hPvDefault = await (await post('/onboarding/generate-preview', {}, accessToken)).json() as Record<string, unknown>
+  const r9hPromptDefault = (r9hPvDefault.preview as Record<string, unknown>)?.globalSystemPrompt as string
+  check('preview back to platform default',       r9hPromptDefault.includes('你是一位专业、亲切、高转化率的') && !r9hPromptDefault.includes('【Round-9H 测试 Override】'))
+
+  console.log('\n300. Round-9H: audit captures corePrompt change without leaking the text')
+  const r9hAuditRes = await get('/audit/logs?pageSize=20&action=PLATFORM_AI_SETTINGS_UPDATED', accessToken)
+  if (r9hAuditRes.status === 200) {
+    const r9hAuditJson = JSON.stringify(await r9hAuditRes.json())
+    check('audit contains corePromptChanged marker', r9hAuditJson.includes('corePromptChanged'))
+    check('audit has no override raw text',          !r9hAuditJson.includes('【Round-9H 测试 Override】'))
+  }
+
+  console.log('\n301. Round-9H: tenant-facing endpoints do NOT expose PLATFORM_CORE_PROMPT constant or override')
+  for (const path of ['/billing/quota-summary', '/settings/overview', '/onboarding/progress', '/account/service-status']) {
+    const body = await (await get(path, accessToken)).text()
+    for (const pat of ['PLATFORM_CORE_PROMPT', 'corePromptOverride', 'platformCorePromptDefault', '你是一位专业、亲切、高转化率']) {
+      check(`tenant endpoint ${path} no "${pat}"`, !body.includes(pat))
+    }
+  }
+
+  // Clean up: drop the override so subsequent runs start fresh.
+  await post('/admin/ai-settings', { corePromptOverride: '' }, accessToken)
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {

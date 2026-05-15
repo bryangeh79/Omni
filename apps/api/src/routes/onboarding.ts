@@ -28,6 +28,7 @@ import { requireAuth, getAuthUser } from '../auth'
 import { generateProductSalesConfig, type ProductSetupInput, type ProductSalesConfig } from '../lib/product-sales-config-generator'
 import { tryDeductFaqGeneration } from '../lib/quota'
 import { getTenantServiceAccess } from '../lib/service-access'
+import { composePlatformPrompt } from '../lib/platform-prompt'
 
 // ── Type: enriched preview shape ────────────────────────────────────────────
 interface FaqSample { question: string; answer: string }
@@ -217,14 +218,10 @@ function buildWarnings(draft: { companyName?: string | null; industry?: string |
   return w
 }
 
-// ── Build global system prompt ────────────────────────────────────────────────
-function buildSystemPrompt(params: { company: string; personaName: string; tone: string; focus: string; goals: string[]; businessHours?: string | null }): string {
-  const hours = params.businessHours ? `Business hours: ${params.businessHours}.` : ''
-  const goalText = params.goals.length
-    ? `Key objectives: ${params.goals.map(g => g.replace(/-/g, ' ')).join(', ')}.`
-    : ''
-  return `You are ${params.personaName}, an AI customer service assistant for ${params.company}. Your tone is ${params.tone}. You specialise in ${params.focus}. ${goalText} ${hours} Always be helpful, accurate, and escalate to a human agent when the customer requests it or when the issue is complex. Never fabricate information. If you don't know the answer, admit it and offer to connect the customer with a team member.`.trim()
-}
+// Round-9H: legacy `buildSystemPrompt` removed. The platform-managed Core AI
+// Prompt now lives in lib/platform-prompt.ts and is composed via
+// composePlatformPrompt(). Kept the comment block here as an anchor for
+// `git log` archaeology — see commit message of Round-9H.
 
 // ── Deterministic preview generator ──────────────────────────────────────────
 function generateDeterministicPreview(
@@ -236,7 +233,7 @@ function generateDeterministicPreview(
     businessHours?: string | null
     website?:       string | null
   },
-  extras?: { ingestedAt?: string; ingestedKbCount?: number },
+  extras?: { ingestedAt?: string; ingestedKbCount?: number; corePromptOverride?: string | null },
 ): EnrichedPreview {
   const industry = draft.industry?.toLowerCase() ?? 'default'
   const persona  = INDUSTRY_PERSONAS[industry] ?? INDUSTRY_PERSONAS['default']!
@@ -277,17 +274,30 @@ function generateDeterministicPreview(
     ...(keywords.slice(0, 3).map((k) => k.toLowerCase())),
   ]
 
-  const globalSystemPrompt = buildSystemPrompt({
-    company, personaName: persona.name, tone: persona.tone, focus: persona.focus,
-    goals, businessHours: draft.businessHours,
-  })
-
   const handoffTriggers = [
     'USER_REQUESTS_HUMAN',
     'SCORE_GTE_80',
     'QUOTE_PAYMENT_COMPLAINT',
     ...(goals.includes('transfer-human') ? ['HIGH_INTENT_NO_REPLY_30MIN'] : []),
   ]
+
+  // Round-9H: globalSystemPrompt is now composed from the platform-managed
+  // Core AI Prompt + tenant business data + persona + AI goals + FAQ samples
+  // + handoff triggers. Single source of truth lives in lib/platform-prompt.ts;
+  // tenants never see this output (Round-9G removed UI display).
+  // The SaaS Admin's corePromptOverride is threaded in by the route handler
+  // (extras.corePromptOverride) so this pure function stays DB-agnostic.
+  const globalSystemPrompt = composePlatformPrompt({
+    companyName:         draft.companyName,
+    industry:            draft.industry,
+    businessHours:       draft.businessHours,
+    persona:             { name: persona.name, tone: persona.tone, focus: persona.focus },
+    aiGoals:             goals,
+    replyLanguagePolicy: 'auto (zh / en / ms)',
+    faqSamples,
+    handoffTriggers,
+    corePromptOverride:  extras?.corePromptOverride,
+  })
 
   return {
     aiPersona:           { name: persona.name, tone: persona.tone, focus: persona.focus, company },
@@ -637,6 +647,14 @@ export async function onboardingRoutes(app: FastifyInstance) {
 
       let preview: EnrichedPreview
 
+      // Round-9H: read SaaS Admin's optional corePromptOverride so the
+      // composed system prompt uses it instead of PLATFORM_CORE_PROMPT.
+      const platformAi = await prisma.platformAiSettings.findUnique({
+        where:  { id: 'singleton' },
+        select: { corePromptOverride: true },
+      }).catch(() => null)
+      const corePromptOverride = platformAi?.corePromptOverride ?? null
+
       if (mode === 'ai') {
         // Try AI generation (gated: requires OMNI_ENABLE_ONBOARDING_AI=true + configured key)
         const aiPreview = await tryAiPreviewGeneration(tenantId, draft)
@@ -644,11 +662,11 @@ export async function onboardingRoutes(app: FastifyInstance) {
           preview = aiPreview
         } else {
           // Fallback to deterministic
-          preview = generateDeterministicPreview(draft)
+          preview = generateDeterministicPreview(draft, { corePromptOverride })
           preview = { ...preview, generationMode: 'AI_FALLBACK', note: 'AI generation unavailable (provider not configured, env flag not set, or generation failed). Showing deterministic template as fallback.' }
         }
       } else {
-        preview = generateDeterministicPreview(draft)
+        preview = generateDeterministicPreview(draft, { corePromptOverride })
       }
 
       // Preserve any existing ingestion metadata
