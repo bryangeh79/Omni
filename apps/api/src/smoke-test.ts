@@ -80,7 +80,11 @@ async function smoke() {
 
   // ── 2. Login validation ────────────────────────────────────────────────
   console.log('\n2. Login validation')
-  check('missing tenantSlug → 400', (await post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD })).status === 400)
+  // Round-9D: tenantSlug is now optional — email-only login is supported when
+  // email belongs to exactly one tenant. The /auth/login endpoint resolves the
+  // tenant by unique email; this call should succeed with 200.
+  check('omitted tenantSlug + valid email → 200 (Round-9D email-only login)',
+    (await post('/auth/login', { email: DEMO_EMAIL, password: DEMO_PASSWORD })).status === 200)
   check('missing email → 400',      (await post('/auth/login', { tenantSlug: DEMO_SLUG, password: DEMO_PASSWORD })).status === 400)
   check('missing password → 400',   (await post('/auth/login', { tenantSlug: DEMO_SLUG, email: DEMO_EMAIL })).status === 400)
   check('empty body → 400',         (await post('/auth/login', {})).status === 400)
