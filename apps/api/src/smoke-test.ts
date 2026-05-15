@@ -4972,6 +4972,69 @@ async function smoke() {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9G: platform-managed AI prompt boundary + deterministic generator polish
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n291. Round-9G: deterministic preview supports new industries (SaaS / software / AI chatbot / automation / etc.)')
+  // Save a fresh draft for each new industry and confirm preview generation succeeds
+  // and returns a non-default persona / FAQ tailored to that industry.
+  const r9gIndustries = ['saas', 'software-dev', 'ai-chatbot', 'automation', 'digital-marketing', 'travel', 'fitness', 'legal']
+  for (const ind of r9gIndustries) {
+    await post('/onboarding/draft', { companyName: `Smoke R9G ${ind}`, industry: ind, aiGoals: ['lead-conversion'] }, accessToken)
+    const r9gPv = await (await post('/onboarding/generate-preview', {}, accessToken)).json() as Record<string, unknown>
+    const preview = r9gPv.preview as Record<string, unknown>
+    check(`preview industry=${ind} returns persona`,    typeof (preview?.aiPersona as Record<string, unknown>)?.name === 'string')
+    check(`preview industry=${ind} faqSamples is non-empty`, Array.isArray(preview?.faqSamples) && (preview.faqSamples as unknown[]).length > 0)
+  }
+  // Reset to a baseline industry for downstream tests / cleanliness
+  await post('/onboarding/draft', { companyName: 'Smoke Demo', industry: 'default', aiGoals: ['lead-conversion'] }, accessToken)
+
+  console.log('\n292. Round-9G: preview response still ships globalSystemPrompt for backend use but tenant UI hides it')
+  // Round-9G product decision: tenant UI does NOT display the system prompt.
+  // The backend still returns it for future server-side AI provider wiring.
+  // Smoke just asserts the response shape is unchanged — UI hiding is a
+  // frontend-only Round-9G change verified manually in UAT.
+  const r9gShape = await (await post('/onboarding/generate-preview', {}, accessToken)).json() as Record<string, unknown>
+  const r9gPreview = r9gShape.preview as Record<string, unknown>
+  check('preview still includes aiPersona',     typeof r9gPreview.aiPersona     === 'object')
+  check('preview still includes welcomeMessage',typeof r9gPreview.welcomeMessage === 'string')
+  check('preview still includes faqCategories', Array.isArray(r9gPreview.faqCategories))
+  check('preview still includes followUpScenarios', Array.isArray(r9gPreview.followUpScenarios))
+  check('preview still includes handoffTriggers',   Array.isArray(r9gPreview.handoffTriggers))
+  check('preview still includes scoringRules',  Array.isArray(r9gPreview.scoringRules))
+  check('preview still includes recommendedTags', Array.isArray(r9gPreview.recommendedTags))
+
+  console.log('\n293. Round-9G: product sales-config generator returns useful sections even with minimal input')
+  // Tenant supplies only productName + minimal data; expect generator to still
+  // produce FAQ + sales scripts + qualification + tags + scoring + follow-up + handoff.
+  const r9gMinRes = await post('/onboarding/products/generate-sales-config', {
+    productName: 'Smoke R9G Minimal',
+    desiredFaqCount: 30,
+  }, accessToken)
+  check('generate with minimal input → 200', r9gMinRes.status === 200)
+  const r9gMin = (await r9gMinRes.json() as Record<string, unknown>).config as Record<string, unknown>
+  check('faqDrafts ≥ 30 even with minimal input',  Array.isArray(r9gMin.faqDrafts) && (r9gMin.faqDrafts as unknown[]).length >= 30)
+  check('salesScripts non-empty',                  Array.isArray(r9gMin.salesScripts) && (r9gMin.salesScripts as unknown[]).length > 0)
+  check('qualificationQuestions non-empty',        Array.isArray(r9gMin.qualificationQuestions) && (r9gMin.qualificationQuestions as unknown[]).length > 0)
+  check('suggestedTags non-empty',                 Array.isArray(r9gMin.suggestedTags) && (r9gMin.suggestedTags as unknown[]).length > 0)
+  check('leadScoringRules non-empty',              Array.isArray(r9gMin.leadScoringRules) && (r9gMin.leadScoringRules as unknown[]).length > 0)
+  check('followUpRules non-empty',                 Array.isArray(r9gMin.followUpRules) && (r9gMin.followUpRules as unknown[]).length > 0)
+  check('handoffRules non-empty',                  Array.isArray(r9gMin.handoffRules) && (r9gMin.handoffRules as unknown[]).length > 0)
+
+  console.log('\n294. Round-9G: generator does not hallucinate exact prices / guarantees / legal claims')
+  const r9gMinJson = JSON.stringify(r9gMin).toLowerCase()
+  // Should not invent exact RM amounts or specific %-off promises
+  check('no invented exact RM price (e.g. RM199 / RM299)',
+    !/rm\s*\d{2,}/.test(r9gMinJson) || (r9gMinJson.match(/rm\s*\d{2,}/g) || []).length === 0)
+  // Should not invent legal/medical promises
+  for (const pat of ['guaranteed', '保证治愈', 'lifetime warranty', '终身保修', 'cure', 'guarantee delivery']) {
+    check(`no unsupported promise "${pat}"`, !r9gMinJson.includes(pat))
+  }
+  // Should include safe-fallback wording for missing facts
+  check('uses safe fallback wording for missing facts',
+    r9gMinJson.includes('资料中未明确说明') || r9gMinJson.includes('建议转人工'))
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {

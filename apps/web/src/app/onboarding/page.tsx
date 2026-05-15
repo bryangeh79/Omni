@@ -253,9 +253,21 @@ export default function OnboardingPage() {
   const [progress, setProgress] = useState<OnboardingProgress | null>(null)
   const [submittingActivation, setSubmittingActivation] = useState(false)
   const [activationMsg, setActivationMsg] = useState('')
+  // ── Round-9G: stale-config tracking ──────────────────────────────────────
+  // When upstream inputs change after the preview/product-sales-config has
+  // already been generated, mark the generation stale so the tenant must
+  // re-generate before enabling. Prevents silently shipping outdated AI config.
+  const [configStale, setConfigStale] = useState(false)
   const refreshProgress = async () => {
     try { setProgress(await fetchOnboardingProgress()) } catch { /* ignore */ }
   }
+  // Round-9G: invalidate the generated preview / per-product salesConfig when
+  // upstream company / goals / product inputs change after generation.
+  useEffect(() => {
+    const hasGenerated = !!preview || products.some(p => !!p.salesConfig)
+    if (!hasGenerated) return
+    setConfigStale(true)
+  }, [companyName, industry, aiGoals, products, preview])
   async function handleSubmitActivation() {
     setSubmittingActivation(true); setActivationMsg(''); setError('')
     try {
@@ -338,6 +350,7 @@ export default function OnboardingPage() {
       await saveDraft(3)
       const result = await generateOnboardingPreview()
       setPreview(result.preview)
+      setConfigStale(false)
       setStep(3)
     } catch (e) {
       // Map raw API errors to Chinese tenant-friendly messages.
@@ -428,6 +441,7 @@ export default function OnboardingPage() {
       })
       updateActive({ salesConfig: res.config, status: 'GENERATED' })
       setProductMsg(`已生成 ${res.config.faqDrafts.length} 条 FAQ 草稿，请检查后再保存。`)
+      setConfigStale(false)
       // Persist updated products array
       void persistProducts()
     } catch (e) { setError(toChineseError(e, '生成失败')) }
@@ -821,6 +835,12 @@ export default function OnboardingPage() {
             {/* Review of generated config */}
             {current.salesConfig && (
               <div className="bg-white rounded-3xl shadow-sm p-8 space-y-6">
+                {/* Round-9G: stale banner if upstream inputs changed after generation */}
+                {configStale && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700">
+                    ⚠ 资料已更新，请重新生成成交配置，以确保 AI 客服内容使用最新资料。
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-gray-900">已生成的产品成交配置（草稿）</h3>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">模式：{current.salesConfig.mode}</span>
@@ -1044,13 +1064,15 @@ export default function OnboardingPage() {
                     </div>
                   </div>
 
-                  {/* System Prompt Preview */}
-                  {preview.globalSystemPrompt && (
-                    <details className="bg-gray-50 rounded-2xl border border-gray-200">
-                      <summary className="px-4 py-3 text-xs font-semibold text-gray-600 cursor-pointer">系统提示词预览</summary>
-                      <pre className="px-4 pb-4 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed overflow-auto max-h-40">{preview.globalSystemPrompt}</pre>
-                    </details>
-                  )}
+                  {/* Round-9G: platform-managed AI prompt — tenants don't see raw system prompt. */}
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs text-emerald-800 space-y-1">
+                    <p><strong>由 Omni 平台统一管理 AI 客服规则：</strong></p>
+                    <ul className="space-y-0.5 pl-4 list-disc">
+                      <li>Omni 会根据您的公司资料、产品资料和 AI 目标，自动生成 AI 客服设定。</li>
+                      <li>您不需要写 Prompt，也不需要懂 AI。</li>
+                      <li>平台使用安全的默认 AI 客服规则，避免乱答、乱承诺，必要时自动转人工。</li>
+                    </ul>
+                  </div>
 
                   {/* Ingestion status */}
                   {preview.ingestedKbCount !== undefined && preview.ingestedKbCount > 0 && (
@@ -1072,15 +1094,64 @@ export default function OnboardingPage() {
               )}
             </div>
 
+            {/* Round-9G: stale-config banner when upstream inputs changed after generation. */}
+            {configStale && preview && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 text-sm text-amber-700">
+                ⚠ 资料已更新，请重新生成成交配置，以确保 AI 客服内容使用最新资料。
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button onClick={() => setStep(2)} className="flex-1 bg-gray-100 text-gray-600 rounded-xl py-3 text-sm font-medium hover:bg-gray-200">← 编辑资料</button>
-              <button onClick={handleEnable} disabled={busy || !preview} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
-                {busy ? '启用中…' : '启用配置 →'}
+              <button onClick={handleEnable} disabled={busy || !preview || configStale} title={configStale ? '请先重新生成成交配置' : '启用 AI 配置'} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+                {busy ? '启用中…' : configStale ? '请先重新生成' : '启用配置 →'}
               </button>
             </div>
           </div>
         )}
+
+        {/* Round-9G: tail spacer so the sticky action bar never covers content. */}
+        <div className="h-24" aria-hidden />
       </main>
+
+      {/* Round-9G: sticky bottom action bar — main step actions always visible without scrolling. */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+        <div className="max-w-2xl mx-auto px-6 py-3 flex items-center gap-3 flex-wrap">
+          {/* Left: 返回上一步 */}
+          {step > 0 && step < 4 ? (
+            <button onClick={() => setStep(s => Math.max(0, s - 1))} disabled={busy} title="返回上一步" aria-label="返回上一步" className="bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-xl px-4 py-2.5 disabled:opacity-50">← 返回上一步</button>
+          ) : <span />}
+          {/* Center: 保存草稿 (only on input steps 0-2) */}
+          {step <= 2 && (
+            <button onClick={() => { void saveDraft() }} disabled={busy} title="保存草稿" aria-label="保存草稿" className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2.5">{busy ? '保存中…' : '保存草稿'}</button>
+          )}
+          {/* Right: primary action per step */}
+          <div className="ml-auto">
+            {step === 0 && (
+              <button onClick={handleNext} disabled={busy} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-5 py-2.5 disabled:opacity-50">继续下一步 →</button>
+            )}
+            {step === 1 && (
+              <button onClick={handleNext} disabled={busy || aiGoals.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-5 py-2.5 disabled:opacity-50">继续下一步 →</button>
+            )}
+            {step === 2 && (
+              <div className="flex items-center gap-2">
+                {current?.salesConfig && !configStale ? (
+                  <button onClick={handleGeneratePreview} disabled={busy} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-5 py-2.5 disabled:opacity-50">继续下一步：预览 AI 配置 →</button>
+                ) : (
+                  <button onClick={handleGenerateProductConfig} disabled={generating || !current?.productName.trim()} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl px-5 py-2.5 disabled:opacity-50">{generating ? '生成中…' : '一键生成产品成交配置 →'}</button>
+                )}
+              </div>
+            )}
+            {step === 3 && (
+              <div className="flex items-center gap-2">
+                {configStale && <span className="text-xs text-amber-700 hidden sm:inline">⚠ 资料已更新，请重新生成</span>}
+                <button onClick={() => setStep(2)} disabled={busy} className="bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 text-sm font-medium rounded-xl px-4 py-2.5 disabled:opacity-50">← 编辑资料</button>
+                <button onClick={handleEnable} disabled={busy || !preview || configStale} title={configStale ? '请先重新生成成交配置' : '启用 AI 配置'} className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl px-5 py-2.5 disabled:opacity-50">{busy ? '启用中…' : '启用配置 →'}</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

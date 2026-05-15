@@ -54,16 +54,34 @@ interface EnrichedPreview {
 }
 
 // ── Industry → persona templates ─────────────────────────────────────────────
+// Round-9G: expanded to cover the Round-9E industry list. Persona text is a
+// platform-managed default; tenants never edit it directly.
 const INDUSTRY_PERSONAS: Record<string, { name: string; tone: string; focus: string }> = {
-  'real-estate':    { name: 'Alex',     tone: 'professional and warm',   focus: 'property inquiries, viewing appointments, pricing questions' },
-  'education':      { name: 'Aisha',    tone: 'helpful and encouraging', focus: 'course inquiries, enrollment, schedules, pricing' },
-  'retail':         { name: 'Mei',      tone: 'friendly and efficient',  focus: 'product questions, orders, availability, promotions' },
-  'food-beverage':  { name: 'Jamie',    tone: 'friendly and appetizing', focus: 'menu questions, reservations, delivery, opening hours' },
-  'beauty-wellness':{ name: 'Sophie',   tone: 'warm and reassuring',     focus: 'services, bookings, pricing, products' },
-  'automotive':     { name: 'Daniel',   tone: 'knowledgeable and clear', focus: 'vehicle inquiries, test drives, service bookings, pricing' },
-  'healthcare':     { name: 'Dr. Kim',  tone: 'professional and caring', focus: 'appointments, services, clinic hours, referrals' },
-  'finance':        { name: 'Raj',      tone: 'precise and trustworthy', focus: 'product inquiries, eligibility, documentation, appointments' },
-  'default':        { name: 'Sam',      tone: 'professional and helpful', focus: 'product inquiries, pricing, appointments, support' },
+  'real-estate':         { name: 'Alex',    tone: 'professional and warm',     focus: 'property inquiries, viewing appointments, pricing questions' },
+  'education':           { name: 'Aisha',   tone: 'helpful and encouraging',   focus: 'course inquiries, enrollment, schedules, pricing' },
+  'retail':              { name: 'Mei',     tone: 'friendly and efficient',    focus: 'product questions, orders, availability, promotions' },
+  'food-beverage':       { name: 'Jamie',   tone: 'friendly and appetizing',   focus: 'menu questions, reservations, delivery, opening hours' },
+  'beauty-wellness':     { name: 'Sophie',  tone: 'warm and reassuring',       focus: 'services, bookings, pricing, products' },
+  'automotive':          { name: 'Daniel',  tone: 'knowledgeable and clear',   focus: 'vehicle inquiries, test drives, service bookings, pricing' },
+  'healthcare':          { name: 'Dr. Kim', tone: 'professional and caring',   focus: 'appointments, services, clinic hours, referrals' },
+  'finance':             { name: 'Raj',     tone: 'precise and trustworthy',   focus: 'product inquiries, eligibility, documentation, appointments' },
+  // Round-9G: new tech / digital industries
+  'saas':                { name: 'Casey',   tone: 'professional and concise',  focus: 'SaaS feature questions, pricing tiers, trial activation, onboarding' },
+  'software-dev':        { name: 'Ravi',    tone: 'professional and technical', focus: 'software project scope, timeline, pricing, follow-up handoff to engineer' },
+  'ai-chatbot':          { name: 'Nova',    tone: 'friendly and confident',    focus: 'AI chatbot use cases, pricing, integration, demo booking' },
+  'automation':          { name: 'Quinn',   tone: 'efficient and reassuring',  focus: 'workflow automation use cases, ROI, integration scope, demo booking' },
+  'digital-marketing':   { name: 'Luna',    tone: 'energetic and consultative', focus: 'campaign goals, channel mix, pricing, sample case studies' },
+  // Round-9G: new service industries
+  'travel':              { name: 'Maya',    tone: 'warm and enthusiastic',     focus: 'destinations, package pricing, dates, group sizes, booking' },
+  'insurance':           { name: 'Liam',    tone: 'trustworthy and clear',     focus: 'coverage questions, eligibility, premium estimates, advisor handoff' },
+  'legal':               { name: 'Aaron',   tone: 'precise and respectful',    focus: 'matter intake, consultation booking, fee estimates, advisor handoff' },
+  'repair':              { name: 'Sam',     tone: 'practical and helpful',     focus: 'fault description, service area, pricing, appointment booking' },
+  'home-services':       { name: 'Riley',   tone: 'friendly and reliable',     focus: 'service scope, on-site availability, pricing, appointment booking' },
+  'wholesale':           { name: 'Yara',    tone: 'concise and trade-friendly', focus: 'wholesale pricing, MOQ, stock availability, delivery, B2B onboarding' },
+  'logistics':           { name: 'Theo',    tone: 'efficient and dependable',  focus: 'pickup/delivery scope, lead time, pricing, tracking' },
+  'fitness':             { name: 'Kai',     tone: 'energetic and supportive',  focus: 'class types, membership pricing, trial booking, schedule' },
+  'events':              { name: 'Iris',    tone: 'creative and organised',    focus: 'event type, date, budget range, vendor scope, planner handoff' },
+  'default':             { name: 'Omni',    tone: 'professional and helpful',  focus: 'product inquiries, pricing, appointments, support' },
 }
 
 // ── Industry → FAQ templates ──────────────────────────────────────────────────
@@ -88,10 +106,82 @@ const INDUSTRY_FAQS: Record<string, FaqSample[]> = {
     { question: 'Can I make a reservation?',                    answer: 'Of course! Please let me know your preferred date, time, and number of guests for your reservation.' },
     { question: 'Do you cater for dietary restrictions?',       answer: 'Yes, we accommodate various dietary requirements including vegetarian, vegan, halal, and allergen-free options. Please inform us of your needs.' },
   ],
+  // Round-9G: tech / digital industries
+  'saas': [
+    { question: '你们的 SaaS 有哪些功能？',     answer: '我们的 SaaS 提供完整的功能套件。可以告诉我您的具体使用场景，我帮您匹配最合适的方案。' },
+    { question: '价格 / 套餐怎么算？',         answer: '我们有多个套餐供选择。请告诉我您的团队规模和使用情景，我帮您推荐合适的套餐。' },
+    { question: '有免费试用吗？',             answer: '可以的。请告诉我您方便的时间，我帮您开通试用或安排 Demo。' },
+  ],
+  'software-dev': [
+    { question: '你们能做什么样的项目？',       answer: '我们承接各种软件项目。请告诉我您要开发的产品类型和大致需求，我帮您评估或转人工。' },
+    { question: '一个项目大概多少钱？',         answer: '项目费用因范围而异。可以告诉我功能清单 / 预算 / 时间，我转人工为您准确报价。' },
+    { question: '多久可以交付？',             answer: '交付时间取决于项目复杂度。请简单描述需求，我转人工为您评估时间表。' },
+  ],
+  'ai-chatbot': [
+    { question: 'AI Chatbot 能做什么？',      answer: '我们的 AI Chatbot 可处理客户咨询 / 销售引导 / FAQ 回答 / 自动跟进 / 转人工。具体场景需要哪些功能？' },
+    { question: '需要懂技术吗？',             answer: '不需要。您只需提供产品资料，我们会自动建好整套 AI 客服系统。' },
+    { question: '价格 / 套餐怎么算？',         answer: '我们有 Starter / Pro 套餐。请告诉我您预计每月对话量，我帮您匹配合适方案。' },
+  ],
+  'automation': [
+    { question: '自动化系统能解决什么问题？',   answer: '我们帮您把重复性工作（客户分配 / 跟进 / 报表 / 数据流转）自动化。请告诉我目前哪些环节最耗时？' },
+    { question: '能跟我现有系统整合吗？',       answer: '可以。请告诉我您正在用什么系统（CRM / WhatsApp / 电商 / 财务等），我帮您评估或转人工。' },
+    { question: '多久可以上线？',             answer: '简单场景几天即可。请告诉我您的需求，我帮您评估或转人工详谈。' },
+  ],
+  'digital-marketing': [
+    { question: '你们提供哪些营销服务？',       answer: '我们提供广告投放 / SEO / 内容 / 社交媒体 / 自动化漏斗等。您主要想加强哪一块？' },
+    { question: '一个 campaign 大概多少钱？',  answer: '费用取决于渠道、预算、目标。请告诉我您的目标客户和预算范围，我转人工为您准确报价。' },
+    { question: '多久能看到效果？',           answer: '不同渠道周期不同。请告诉我您的行业和目标，我帮您评估或转人工详谈。' },
+  ],
+  // Round-9G: service industries
+  'travel': [
+    { question: '你们有哪些行程 / 套餐？',     answer: '我们有多个行程和定制方案。请告诉我您计划的目的地、出发日期和人数，我帮您推荐。' },
+    { question: '价格大概多少？',             answer: '价格因季节、人数、酒店等级而异。请告诉我您的预算和偏好，我转人工为您准确报价。' },
+    { question: '如何预订？',                 answer: '请告诉我您选定的行程和出发日期，我帮您安排预订或转人工确认。' },
+  ],
+  'insurance': [
+    { question: '你们有哪些保险产品？',       answer: '我们提供多种保险方案。可以告诉我您的需求（个人 / 家庭 / 商业），我帮您匹配最合适的方案。' },
+    { question: '保费大概多少？',             answer: '保费因年龄、保额、保障范围而异。请提供基本资料，我转人工为您准确报价。' },
+    { question: '理赔流程是什么？',           answer: '理赔涉及多步流程，建议转人工详细说明。请告诉我您具体的情况。' },
+  ],
+  'legal': [
+    { question: '你们处理什么类型的案件？',     answer: '我们处理多种法律事务。请简单描述您的情况，我转人工安排律师为您评估。' },
+    { question: '律师费怎么收？',             answer: '律师费因案件复杂度而异。请告诉我事项类型，我转人工为您准确报价。' },
+    { question: '可以预约咨询吗？',           answer: '可以。请告诉我您方便的时间，我帮您预约或转人工对接。' },
+  ],
+  'repair': [
+    { question: '你们修什么？',               answer: '我们提供多种维修服务。请告诉我故障类型和品牌型号，我帮您评估或转人工。' },
+    { question: '修一次多少钱？',             answer: '维修费因故障类型而异。请描述问题或上传图片，我转人工为您估价。' },
+    { question: '上门吗？',                   answer: '可以上门服务。请告诉我您所在区域和方便的时间，我帮您安排。' },
+  ],
+  'home-services': [
+    { question: '你们提供哪些家政服务？',     answer: '我们提供清洁、家电、维修、搬家等多项服务。请告诉我您需要哪一项。' },
+    { question: '价格怎么算？',               answer: '价格按服务类型和面积 / 时长而异。请告诉我您的需求，我帮您评估或转人工。' },
+    { question: '可以预约吗？',               answer: '可以。请告诉我您方便的时间和地址，我帮您安排或转人工确认。' },
+  ],
+  'wholesale': [
+    { question: '最少起订量（MOQ）是多少？',  answer: '不同产品 MOQ 不同。请告诉我您感兴趣的产品和预计数量，我转人工为您准确报价。' },
+    { question: '批发价格怎么算？',           answer: '批发价按数量阶梯计算。请告诉我您的预计量和地区，我转人工准确报价。' },
+    { question: '可以发货到 [地区] 吗？',     answer: '我们支持多地区发货。请告诉我目的地和数量，我帮您评估物流和成本。' },
+  ],
+  'logistics': [
+    { question: '你们提供什么样的运输服务？',   answer: '我们提供多种运输方案（陆运 / 空运 / 海运 / 快递）。请告诉我货物类型、起点、目的地。' },
+    { question: '运费大概多少？',             answer: '运费因路线、货物大小、紧急程度而异。请提供基本资料，我转人工为您准确报价。' },
+    { question: '可以追踪订单吗？',           answer: '可以。请提供运单号，我帮您查询或转人工跟进。' },
+  ],
+  'fitness': [
+    { question: '你们有哪些课程 / 会员？',     answer: '我们提供多种课程和会员方案。请告诉我您的健身目标，我帮您推荐合适的方案。' },
+    { question: '会员费多少？',               answer: '会员费按时长和会员等级而异。请告诉我您感兴趣的方案，我转人工详细说明。' },
+    { question: '可以先试一节课吗？',         answer: '可以。请告诉我您方便的时间，我帮您安排试课或转人工预约。' },
+  ],
+  'events': [
+    { question: '你们能办什么样的活动？',     answer: '我们承接各种活动（婚礼 / 企业 / 庆典）。请告诉我活动类型、日期、人数。' },
+    { question: '一场活动大概多少钱？',       answer: '费用因规模、场地、服务范围而异。请告诉我活动详情和预算，我转人工为您准确报价。' },
+    { question: '需要提前多久预订？',         answer: '建议提前 1-3 个月。具体看活动规模，我转人工为您评估。' },
+  ],
   'default': [
-    { question: 'What services/products do you offer?',         answer: 'We offer a comprehensive range of products and services tailored to your needs. Could you tell me more about what you are looking for?' },
-    { question: 'What are your pricing options?',               answer: 'Our pricing depends on your specific requirements. Please share more details and I will provide a tailored quote.' },
-    { question: 'How can I get started?',                       answer: 'Getting started is easy! I can guide you through the process. What aspect would you like to begin with?' },
+    { question: '你们提供什么服务 / 产品？',   answer: '我们提供多种产品和服务。可以告诉我您主要想了解什么吗？我帮您快速找到答案。' },
+    { question: '价格怎么算？',               answer: '价格因方案而异。请告诉我您的需求 / 预算 / 使用场景，我帮您匹配合适方案。' },
+    { question: '怎么开始 / 购买？',           answer: '请告诉我您准备好开始时，我帮您引导下一步或转人工对接。' },
   ],
 }
 
