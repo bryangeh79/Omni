@@ -32,6 +32,7 @@ import { releaseChecklistRoutes }   from './release-checklist'
 import { activationRoutes }         from './activation'
 import { accountRoutes }            from './account'
 import { adminTenantsRoutes }       from './admin-tenants'
+import { adminAiSettingsRoutes }    from './admin-ai-settings'
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes,         { prefix: '/auth' })
@@ -82,4 +83,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(accountRoutes,          { prefix: '/account' })
   // Round-9B: SaaS Admin tenant provisioning + license/contract management
   await app.register(adminTenantsRoutes,     { prefix: '/admin/tenants' })
+  // Round-9E: SaaS Admin platform AI settings (provider/model/key metadata)
+  await app.register(adminAiSettingsRoutes,  { prefix: '/admin/ai-settings' })
 }

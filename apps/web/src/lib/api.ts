@@ -32,8 +32,19 @@ async function apiFetch<T>(
     },
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
-    throw new Error(err.error ?? `HTTP ${res.status}`)
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; messageZh?: string }
+    // Round-9E: on 401 clear the stale token AND throw a tenant-friendly Chinese
+    // message so pages that render raw `e.message` no longer surface
+    // "Unauthorized — invalid Bearer token". Pages that already route through
+    // `toChineseError` keep working unchanged.
+    if (res.status === 401) {
+      clearToken()
+      throw new Error('登录已失效，请重新登录')
+    }
+    // Backend may attach a friendly `messageZh` (Round-9E new convention) —
+    // prefer it when present.
+    const msg = err.messageZh ?? err.error ?? `HTTP ${res.status}`
+    throw new Error(msg)
   }
   return res.json() as Promise<T>
 }

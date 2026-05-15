@@ -4819,6 +4819,87 @@ async function smoke() {
   }
   check('submit no token → 401', (await post('/onboarding/submit-activation-request', {})).status === 401)
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9E: Platform AI settings + product-config friendly validation
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n276. Round-9E: platform AI settings requires auth')
+  check('GET /admin/ai-settings no token → 401',          (await get('/admin/ai-settings')).status === 401)
+  check('POST /admin/ai-settings no token → 401',         (await post('/admin/ai-settings', {})).status === 401)
+  check('POST /admin/ai-settings/test-connection-stub no token → 401',
+    (await post('/admin/ai-settings/test-connection-stub', {})).status === 401)
+
+  console.log('\n277. Round-9E: GET /admin/ai-settings returns safe shape (no raw key)')
+  const r9eGet = await (await get('/admin/ai-settings', accessToken)).json() as Record<string, unknown>
+  check('GET → settings object',             typeof r9eGet.settings === 'object' && r9eGet.settings !== null)
+  const r9eSettings = r9eGet.settings as Record<string, unknown>
+  for (const key of ['provider', 'defaultModel', 'hasApiKey', 'apiKeyLast4', 'enabled', 'allowTenantProvidedKeys']) {
+    check(`settings has "${key}"`, key in r9eSettings)
+  }
+  check('settings does NOT have apiKey',          !('apiKey' in r9eSettings))
+  check('settings does NOT have apiKeyEncrypted', !('apiKeyEncrypted' in r9eSettings))
+  check('realAiProviderCalled = false',           r9eGet.realAiProviderCalled === false)
+  check('tenantsCanSeeThis = false',              r9eGet.tenantsCanSeeThis    === false)
+
+  console.log('\n278. Round-9E: POST /admin/ai-settings saves provider/model/key without echoing raw key')
+  const r9eSaveRes = await post('/admin/ai-settings', {
+    provider:    'openai',
+    defaultModel:'gpt-4o-mini',
+    apiKey:      'sk-test-FAKE-1234567890ABCD',
+    enabled:     true,
+  }, accessToken)
+  check('POST → 200',                         r9eSaveRes.status === 200)
+  const r9eSave = await r9eSaveRes.json() as Record<string, unknown>
+  const r9eSaveJson = JSON.stringify(r9eSave)
+  check('save response has no "sk-test-FAKE"',     !r9eSaveJson.includes('sk-test-FAKE'))
+  check('save response has no "ABCD" 中段',        !r9eSaveJson.includes('1234567890ABCD'))
+  check('save response has no "apiKeyEncrypted"',  !r9eSaveJson.includes('apiKeyEncrypted'))
+  const r9eSaveSettings = r9eSave.settings as Record<string, unknown>
+  check('saved.hasApiKey = true',                  r9eSaveSettings.hasApiKey === true)
+  check('saved.apiKeyLast4 = "ABCD"',              r9eSaveSettings.apiKeyLast4 === 'ABCD')
+  check('saved.provider = openai',                 r9eSaveSettings.provider === 'openai')
+  check('saved.allowTenantProvidedKeys = false',   r9eSaveSettings.allowTenantProvidedKeys === false)
+  check('save realAiProviderCalled = false',       r9eSave.realAiProviderCalled === false)
+
+  console.log('\n279. Round-9E: validation — allowTenantProvidedKeys=true is rejected')
+  const r9eRej = await post('/admin/ai-settings', { allowTenantProvidedKeys: true }, accessToken)
+  check('allowTenantProvidedKeys=true → 400',      r9eRej.status === 400)
+  // invalid provider
+  check('invalid provider → 400',
+    (await post('/admin/ai-settings', { provider: 'bogusprov' }, accessToken)).status === 400)
+
+  console.log('\n280. Round-9E: test-connection-stub is local-only (no real provider call)')
+  const r9eTest = await (await post('/admin/ai-settings/test-connection-stub', {}, accessToken)).json() as Record<string, unknown>
+  check('test stub returns ok=true (key saved above)', r9eTest.ok === true)
+  check('test stub realAiProviderCalled=false',        r9eTest.realAiProviderCalled === false)
+  check('test stub has apiKeyLast4 (not raw)',         r9eTest.apiKeyLast4 === 'ABCD')
+  check('test stub response has no "sk-test-FAKE"',    !JSON.stringify(r9eTest).includes('sk-test-FAKE'))
+
+  console.log('\n281. Round-9E: audit log does NOT carry raw apiKey')
+  const r9eAuditRes = await get('/audit/logs?pageSize=50', accessToken)
+  if (r9eAuditRes.status === 200) {
+    const r9eAuditJson = JSON.stringify(await r9eAuditRes.json())
+    check('audit has PLATFORM_AI_SETTINGS_UPDATED', r9eAuditJson.includes('PLATFORM_AI_SETTINGS_UPDATED'))
+    check('audit has no "sk-test-FAKE" (raw key)',  !r9eAuditJson.includes('sk-test-FAKE'))
+    check('audit has no "1234567890ABCD"',          !r9eAuditJson.includes('1234567890ABCD'))
+    check('audit has no "apiKeyEncrypted" key',     !r9eAuditJson.includes('apiKeyEncrypted'))
+  }
+
+  console.log('\n282. Round-9E: tenant-facing endpoints still hide AI key fields')
+  // Tenant pages should never see provider/apiKey* fields. Reuse Round-9C
+  // forbidden-pattern approach.
+  const r9eTenantEndpoints: Array<[string, () => Promise<Response>]> = [
+    ['quota-summary',          () => get('/billing/quota-summary',          accessToken)],
+    ['settings/overview',      () => get('/settings/overview',              accessToken)],
+    ['onboarding/progress',    () => get('/onboarding/progress',            accessToken)],
+  ]
+  for (const [label, fn] of r9eTenantEndpoints) {
+    const body = await (await fn()).text()
+    for (const pat of ['apiKey', 'apiKeyEncrypted', 'sk-test-FAKE', '1234567890ABCD']) {
+      check(`tenant endpoint ${label} no "${pat}"`, !body.includes(pat))
+    }
+  }
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {

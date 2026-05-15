@@ -13,16 +13,31 @@ const SUCCESS    = '#15803d'
 const DANGER     = '#b91c1c'
 const NEUTRAL    = '#6b7280'
 
+// Round-9E: aligned with /onboarding broader industry list (UAT feedback).
 const INDUSTRIES = [
-  { value: 'real-estate',     label: '房地产 / 物业' },
-  { value: 'education',       label: '教育与培训' },
-  { value: 'retail',          label: '零售 / 电商' },
-  { value: 'food-beverage',   label: '餐饮' },
-  { value: 'beauty-wellness', label: '美容与养生' },
-  { value: 'automotive',      label: '汽车' },
-  { value: 'healthcare',      label: '医疗 / 诊所' },
-  { value: 'finance',         label: '金融与保险' },
-  { value: 'other',           label: '其他 / 通用业务' },
+  { value: 'saas',             label: 'SaaS / 软件服务' },
+  { value: 'software-dev',     label: '软件开发' },
+  { value: 'ai-chatbot',       label: 'AI Chatbot' },
+  { value: 'automation',       label: '自动化系统' },
+  { value: 'digital-marketing',label: '数码营销' },
+  { value: 'retail',           label: '零售 / 电商' },
+  { value: 'education',        label: '教育培训' },
+  { value: 'real-estate',      label: '房地产 / 物业' },
+  { value: 'automotive',       label: '汽车销售' },
+  { value: 'beauty-wellness',  label: '美容 / 医美' },
+  { value: 'food-beverage',    label: '餐饮' },
+  { value: 'travel',           label: '旅游' },
+  { value: 'insurance',        label: '保险' },
+  { value: 'finance',          label: '金融服务' },
+  { value: 'legal',            label: '法律服务' },
+  { value: 'repair',           label: '维修服务' },
+  { value: 'home-services',    label: '家政服务' },
+  { value: 'wholesale',        label: '批发 / 零售' },
+  { value: 'logistics',        label: '物流 / 运输' },
+  { value: 'healthcare',       label: '医疗 / 健康' },
+  { value: 'fitness',          label: '健身 / 运动' },
+  { value: 'events',           label: '活动策划' },
+  { value: 'other',            label: '其他 / 通用业务' },
 ]
 
 const GOALS = [

@@ -52,6 +52,29 @@ model Tenant {
 // toggle, and a stub purchase ledger. No real payment gateway. Auditable.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Round-9E: PlatformAiSettings — SaaS Admin-only platform AI provider/key
+// metadata. Singleton row (id='singleton') holds platform AI config.
+// Tenants NEVER see this row. Raw apiKey is NEVER returned in any response;
+// only apiKeyLast4 + hasApiKey flags are exposed. apiKeyEncrypted is stored
+// as-is in this foundation stage; future Round will move to vault encryption.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PlatformAiSettings {
+  id                       String   @id @default("singleton")
+  provider                 String?                                // openai | gemini | deepseek | other
+  defaultModel             String?
+  // Raw key never exposed; stored opaque (treat as secret — only platform ops
+  // should read this column out-of-band). Foundation stage: not Vault-encrypted.
+  apiKeyEncrypted          String?
+  apiKeyLast4              String?
+  hasApiKey                Boolean  @default(false)
+  enabled                  Boolean  @default(false)
+  allowTenantProvidedKeys  Boolean  @default(false)
+  updatedAt                DateTime @updatedAt
+  updatedByUserId          String?
+}
+
 model TenantBillingState {
   id                    String   @id @default(cuid())
   tenantId              String   @unique

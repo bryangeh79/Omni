@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toChineseError } from '@/lib/errorText'
 import {
   getToken, login, saveOnboardingDraft, generateOnboardingPreview,
   ingestOnboardingMaterials, enableOnboarding, fetchOnboardingStatus,
@@ -46,6 +47,20 @@ const PRODUCT_STATUS_STYLE: Record<ProductSetupStatus, string> = {
   ENABLED:            'bg-emerald-600 text-white',
 }
 
+// Round-9E: chips helpers. The underlying field is a single comma-separated
+// string (back-compat with existing API shape); chips toggle membership.
+function toggleChip(current: string, chip: string): string {
+  const items = current.split(/[，,、；;]/).map(s => s.trim()).filter(Boolean)
+  const idx = items.indexOf(chip)
+  if (idx >= 0) items.splice(idx, 1)
+  else items.push(chip)
+  return items.join('、')
+}
+function hasChip(current: string, chip: string): boolean {
+  const items = current.split(/[，,、；;]/).map(s => s.trim())
+  return items.includes(chip)
+}
+
 function newEmptyProduct(idx: number): ProductDraft {
   return {
     productId:           `prod_${Date.now().toString(36)}_${idx}`,
@@ -64,16 +79,71 @@ function newEmptyProduct(idx: number): ProductDraft {
   }
 }
 
+// Round-9E: broader industry list per UAT feedback. Existing stored values
+// (`real-estate`, `education`, ...) remain valid; new keys are additive.
 const INDUSTRIES = [
-  { value: 'real-estate',    label: '房地产' },
-  { value: 'education',      label: '教育与培训' },
-  { value: 'retail',         label: '零售 / 电商' },
-  { value: 'food-beverage',  label: '餐饮' },
-  { value: 'beauty-wellness',label: '美容与养生' },
-  { value: 'automotive',     label: '汽车' },
-  { value: 'healthcare',     label: '医疗 / 诊所' },
-  { value: 'finance',        label: '金融与保险' },
-  { value: 'default',        label: '其他 / 通用' },
+  { value: 'saas',             label: 'SaaS / 软件服务' },
+  { value: 'software-dev',     label: '软件开发' },
+  { value: 'ai-chatbot',       label: 'AI Chatbot' },
+  { value: 'automation',       label: '自动化系统' },
+  { value: 'digital-marketing',label: '数码营销' },
+  { value: 'retail',           label: '零售 / 电商' },
+  { value: 'education',        label: '教育培训' },
+  { value: 'real-estate',      label: '房地产' },
+  { value: 'automotive',       label: '汽车销售' },
+  { value: 'beauty-wellness',  label: '美容 / 医美' },
+  { value: 'food-beverage',    label: '餐饮' },
+  { value: 'travel',           label: '旅游' },
+  { value: 'insurance',        label: '保险' },
+  { value: 'finance',          label: '金融服务' },
+  { value: 'legal',            label: '法律服务' },
+  { value: 'repair',           label: '维修服务' },
+  { value: 'home-services',    label: '家政服务' },
+  { value: 'wholesale',        label: '批发 / 零售' },
+  { value: 'logistics',        label: '物流 / 运输' },
+  { value: 'healthcare',       label: '医疗 / 健康' },
+  { value: 'fitness',          label: '健身 / 运动' },
+  { value: 'events',           label: '活动策划' },
+  { value: 'default',          label: '其他 / 通用业务' },
+]
+
+// Round-9E: product setup selection-first option lists. Tenant can still type
+// custom values via the optional extra-notes textarea, but the default UX is
+// dropdown / chips so tenants don't need to know domain terminology.
+const PRODUCT_CATEGORY_OPTIONS = [
+  '软件 / SaaS', 'AI Chatbot', '自动化系统', '课程 / 培训', '咨询服务',
+  '房地产项目', '汽车 / 交通', '美容 / 医美', '餐饮套餐', '电商产品',
+  '实体商品', '服务配套', '会员 / 订阅', '其他',
+]
+const SUITABLE_CUSTOMER_CHIPS = [
+  '小型商家', '中小企业', '企业客户', '新创业者', '销售团队', '客服团队',
+  '想自动回复客户的商家', '需要预约管理的商家', '需要提高成交率的商家',
+  '价格敏感客户', '高端客户',
+]
+const SELLING_POINT_CHIPS = [
+  '省时间', '降低客服成本', '提高成交率', '快速启动',
+  '专业服务', '价格透明', '售后支持', '定制方案',
+]
+const PRICING_MODE_OPTIONS = [
+  '固定价格', '月费套餐', '一次性收费', '按项目报价',
+  '免费试用', '需要人工报价', '暂时不公开价格',
+]
+const PURCHASE_FLOW_OPTIONS = [
+  'WhatsApp 咨询 → 报价 → 付款 → 开通',
+  '填表 → 沟通 → 预约 → 服务',
+  '咨询 → 看方案 → 签约',
+  '选择套餐 → 下单 → 开始使用',
+  '预约 Demo → 确认需求 → 开通',
+  '其他流程',
+]
+const REQUIRED_INFO_CHIPS = [
+  '姓名', '电话', 'WhatsApp 号码', '预算', '使用目的', '所在地区',
+  '预约时间', '公司名称', '产品需求', '图片 / 文件',
+]
+const HANDOFF_CHIPS = [
+  '客户要求真人', '要看合同', '要谈优惠', '要付款 / 下单',
+  '投诉 / 退款', '技术问题', 'AI 不确定答案', '价格规则不完整',
+  '高意向客户',
 ]
 
 const AI_GOALS = [
@@ -192,7 +262,7 @@ export default function OnboardingPage() {
       const r = await submitActivationRequest()
       setActivationMsg(r.note || '已提交上线申请。')
       void refreshProgress()
-    } catch (e) { setError(e instanceof Error ? e.message : '提交失败') }
+    } catch (e) { setError(toChineseError(e, '提交失败')) }
     finally { setSubmittingActivation(false) }
   }
   const updateActive = (patch: Partial<ProductDraft>) =>
@@ -226,7 +296,7 @@ export default function OnboardingPage() {
         aiGoals, materialsText, materialsUrl,
         completedSteps: stepNum ?? step,
       })
-    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed') }
+    } catch (e) { setError(toChineseError(e, '保存失败')) }
     finally { setBusy(false) }
   }
 
@@ -255,18 +325,25 @@ export default function OnboardingPage() {
       } else {
         setIngestMsg('No materials text to ingest — add content above first')
       }
-    } catch (e) { setError(e instanceof Error ? e.message : 'Ingest failed') }
+    } catch (e) { setError(toChineseError(e, '解析失败')) }
     finally { setBusy(false) }
   }
 
   async function handleGeneratePreview() {
+    // Round-9E: pre-validate so tenants don't see raw "Bad Request" from the API.
+    if (!companyName.trim()) { setError('请先在「公司资料」步骤填写公司名称。'); setStep(0); return }
+    if (!industry)            { setError('请先在「公司资料」步骤选择行业。'); setStep(0); return }
     setBusy(true); setError('')
     try {
       await saveDraft(3)
       const result = await generateOnboardingPreview()
       setPreview(result.preview)
       setStep(3)
-    } catch (e) { setError(e instanceof Error ? e.message : '预览生成失败') }
+    } catch (e) {
+      // Map raw API errors to Chinese tenant-friendly messages.
+      const { toChineseError } = await import('@/lib/errorText')
+      setError(toChineseError(e, '预览生成失败，请确认公司资料已填写完整。'))
+    }
     finally { setBusy(false) }
   }
 
@@ -276,7 +353,7 @@ export default function OnboardingPage() {
       await enableOnboarding()
       setEnabled(true)
       setStep(4)
-    } catch (e) { setError(e instanceof Error ? e.message : '启用失败') }
+    } catch (e) { setError(toChineseError(e, '启用失败')) }
     finally { setBusy(false) }
   }
 
@@ -297,12 +374,10 @@ export default function OnboardingPage() {
     setActiveIdx(0)
     setProductMsg('')
   }
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    if (!f) return
+  function handleFile(f: File) {
     if (f.size > 10 * 1024 * 1024) { setError('文件超过 10 MB 限制'); return }
-    const allowed = /\.(pdf|docx?|txt|md|png|jpe?g)$/i
-    if (!allowed.test(f.name)) { setError('支持的文件类型：PDF / DOC / DOCX / TXT / MD / PNG / JPG'); return }
+    const allowed = /\.(pdf|docx?|txt|md|png|jpe?g|webp)$/i
+    if (!allowed.test(f.name)) { setError('支持的文件类型：PDF / DOC / DOCX / TXT / MD / PNG / JPG / JPEG / WEBP'); return }
     setError('')
     updateActive({ uploadedFile: { filename: f.name, sizeBytes: f.size, mimeType: f.type || 'application/octet-stream' } })
     // For .txt/.md only, surface text content into pasted area as a hint
@@ -311,11 +386,28 @@ export default function OnboardingPage() {
         updateActive({ pastedMaterialText: (current.pastedMaterialText ? current.pastedMaterialText + '\n\n' : '') + text })
       }).catch(() => null)
     } else {
-      setProductMsg('当前版本会先记录文件，建议同时粘贴关键文字内容以生成 FAQ。')
+      setProductMsg('已记录文件信息；若需要更准确生成，请同时粘贴关键文字内容。')
     }
   }
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (f) handleFile(f)
+  }
   async function handleGenerateProductConfig() {
-    if (!current.productName.trim()) { setError('请填写产品名称'); return }
+    // Round-9E: friendly Chinese validation before hitting backend (no raw 400).
+    if (!current.productName.trim()) { setError('请先填写产品名称。'); return }
+    const hasMaterial = !!(
+      current.pastedMaterialText?.trim() ||
+      current.referenceUrl?.trim() ||
+      current.uploadedFile?.filename ||
+      current.productCategory?.trim() ||
+      current.sellingPoints?.trim() ||
+      current.pricing?.trim()
+    )
+    if (!hasMaterial) {
+      setError('请先上传产品资料、粘贴产品介绍或输入产品链接，或在"补充结构化资料"中填写至少一项。')
+      return
+    }
     setGenerating(true); setError(''); setProductMsg('')
     try {
       const res = await generateProductSalesConfig({
@@ -338,7 +430,7 @@ export default function OnboardingPage() {
       setProductMsg(`已生成 ${res.config.faqDrafts.length} 条 FAQ 草稿，请检查后再保存。`)
       // Persist updated products array
       void persistProducts()
-    } catch (e) { setError(e instanceof Error ? e.message : '生成失败') }
+    } catch (e) { setError(toChineseError(e, '生成失败')) }
     finally { setGenerating(false) }
   }
   async function persistProducts() {
@@ -392,13 +484,13 @@ export default function OnboardingPage() {
       updateActive({ status: 'FAQ_SAVED' })
       setProductMsg(`已保存 ${res.saved} 条 FAQ 到知识库${res.skippedDuplicates > 0 ? `，跳过 ${res.skippedDuplicates} 条重复` : ''}。`)
       void persistProducts()
-    } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
+    } catch (e) { setError(toChineseError(e, '保存失败')) }
     finally { setSavingFaq(false) }
   }
   async function handleSaveProductConfig() {
     setBusy(true); setError(''); setProductMsg('')
     try { await persistProducts(); setProductMsg('产品配置已保存到草稿。') }
-    catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
+    catch (e) { setError(toChineseError(e, '保存失败')) }
     finally { setBusy(false) }
   }
 
@@ -610,78 +702,45 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            {/* Product basic fields */}
+            {/* Round-9E: product name + material input + primary generate moved to TOP */}
             <div className="bg-white rounded-3xl shadow-sm p-8 space-y-4">
-              <h3 className="text-base font-semibold text-gray-900">当前产品基础资料</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">产品名称 *</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：阳光地产高级套餐" value={current.productName} onChange={e => updateActive({ productName: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">产品分类 / 类型</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：住宅 / 课程 / SaaS" value={current.productCategory} onChange={e => updateActive({ productCategory: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">适合客户</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：首次置业的年轻家庭，预算 30-80 万" value={current.suitableCustomers} onChange={e => updateActive({ suitableCustomers: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">主要卖点</label>
-                  <textarea rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="一两句话概括核心卖点" value={current.sellingPoints} onChange={e => updateActive({ sellingPoints: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">价格 / 套餐</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：基础 199 / 专业 499 / 企业 999" value={current.pricing} onChange={e => updateActive({ pricing: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">购买 / 预约 / 使用流程</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：填表 → 沟通 → 看房 → 签约" value={current.purchaseFlow} onChange={e => updateActive({ purchaseFlow: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">客户需要提供什么资料</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：联系方式、预算、看房时间" value={current.requiredCustomerInfo} onChange={e => updateActive({ requiredCustomerInfo: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">什么时候需要转人工</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：要看合同、要谈优惠、要付订金" value={current.handoffConditions} onChange={e => updateActive({ handoffConditions: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">其他补充资料（选填）</label>
-                  <textarea rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="任何 AI 应该知道的注意事项" value={current.extraNotes} onChange={e => updateActive({ extraNotes: e.target.value })} />
-                </div>
+              <h3 className="text-base font-semibold text-gray-900">产品资料</h3>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">产品名称 *</label>
+                <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如：阳光地产高级套餐" value={current.productName} onChange={e => updateActive({ productName: e.target.value })} />
+              </div>
+
+              {/* Drag-and-drop file upload (Round-9E) */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">上传产品介绍文件（PDF / DOC / DOCX / TXT / MD / 图片）</label>
+                <label
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation() }}
+                  onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
+                  className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all text-center"
+                >
+                  <span className="text-2xl">📄</span>
+                  <span className="text-sm text-gray-700 font-medium">{current.uploadedFile ? `${current.uploadedFile.filename}（${Math.round(current.uploadedFile.sizeBytes / 1024)} KB）` : '拖拉 PDF / Word / 图片 / 价目表到这里，或点击上传'}</span>
+                  <span className="text-[10px] text-gray-400">支持 .pdf / .doc / .docx / .txt / .md / .png / .jpg / .jpeg / .webp · ≤ 10 MB</span>
+                  <input type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,image/*" onChange={handleFileSelect} />
+                </label>
+                <p className="text-xs text-gray-400 mt-1.5">当前版本会记录文件信息；若需要更准确生成，请同时粘贴关键文字内容到下方。</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">粘贴产品资料（可选）</label>
+                <textarea rows={5} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="粘贴产品手册 / 服务说明 / 详细文字资料" value={current.pastedMaterialText} onChange={e => updateActive({ pastedMaterialText: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1.5">输入产品网页链接（选填）</label>
+                <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="https://your-website.com/products" value={current.referenceUrl} onChange={e => updateActive({ referenceUrl: e.target.value })} />
               </div>
             </div>
 
-            {/* Material input modes */}
-            <div className="bg-white rounded-3xl shadow-sm p-8 space-y-4">
-              <h3 className="text-base font-semibold text-gray-900">产品资料输入</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">粘贴产品资料</label>
-                  <textarea rows={5} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="粘贴产品手册 / 服务说明 / 详细文字资料" value={current.pastedMaterialText} onChange={e => updateActive({ pastedMaterialText: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">输入产品网页链接（选填）</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="https://your-website.com/products" value={current.referenceUrl} onChange={e => updateActive({ referenceUrl: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">上传产品介绍文件（PDF / DOC / DOCX / TXT / MD / 图片）</label>
-                  <label className="flex items-center justify-between gap-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
-                    <span className="text-sm text-gray-600">{current.uploadedFile ? `${current.uploadedFile.filename}（${Math.round(current.uploadedFile.sizeBytes / 1024)} KB）` : '选择文件…'}</span>
-                    <span className="px-3 py-1 bg-gray-100 text-xs text-gray-600 rounded-md">浏览</span>
-                    <input type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,image/*" onChange={handleFileSelect} />
-                  </label>
-                  <p className="text-xs text-gray-400 mt-1.5">PDF / DOCX / 图片当前版本会先记录文件名与大小，建议同时粘贴关键文字内容到上方以生成 FAQ。</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Primary action */}
+            {/* Round-9E: primary action moved up, immediately after material input */}
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl p-6 space-y-3">
               <div>
                 <p className="text-sm font-semibold text-blue-900">一键生成产品成交配置</p>
-                <p className="text-xs text-blue-700 mt-1">系统将根据产品资料生成 FAQ、销售话术、客户资格问题、标签、评分规则、跟进规则和转人工规则。</p>
+                <p className="text-xs text-blue-700 mt-1">上传或粘贴产品资料后，Omni 会自动生成 FAQ、销售话术、标签、评分、跟进和转人工规则。</p>
                 <p className="text-xs text-blue-700">仅生成草稿，您可以先检查再保存。不会发送真实 WhatsApp 消息。</p>
               </div>
               <button onClick={handleGenerateProductConfig} disabled={generating || !current.productName.trim()} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
@@ -689,6 +748,75 @@ export default function OnboardingPage() {
               </button>
               {productMsg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{productMsg}</p>}
             </div>
+
+            {/* Round-9E: optional structured detail fields — selection-first via chips / dropdown */}
+            <details className="bg-white rounded-3xl shadow-sm p-6">
+              <summary className="text-base font-semibold text-gray-900 cursor-pointer">补充结构化资料（可选 — 提升 AI 生成准确度）</summary>
+              <div className="mt-4 space-y-5">
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">产品分类 / 类型</label>
+                  <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400" value={current.productCategory} onChange={e => updateActive({ productCategory: e.target.value })}>
+                    <option value="">请选择…</option>
+                    {PRODUCT_CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">适合客户（可多选）</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUITABLE_CUSTOMER_CHIPS.map(c => (
+                      <button key={c} type="button" onClick={() => updateActive({ suitableCustomers: toggleChip(current.suitableCustomers, c) })} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${hasChip(current.suitableCustomers, c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'}`}>{c}</button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1.5">这会帮助 AI 判断应该推荐给谁、问什么资格问题、如何判断高意向客户。</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">主要卖点（可让 AI 自动生成，或选择 / 补充）</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SELLING_POINT_CHIPS.map(c => (
+                      <button key={c} type="button" onClick={() => updateActive({ sellingPoints: toggleChip(current.sellingPoints, c) })} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${hasChip(current.sellingPoints, c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'}`}>{c}</button>
+                    ))}
+                  </div>
+                  <textarea rows={2} className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="（选填）一两句话补充核心卖点 — 留空则由 AI 根据资料自动生成" value={current.sellingPoints} onChange={e => updateActive({ sellingPoints: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">价格 / 套餐</label>
+                    <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400" value={PRICING_MODE_OPTIONS.includes(current.pricing) ? current.pricing : ''} onChange={e => updateActive({ pricing: e.target.value })}>
+                      <option value="">请选择定价模式…</option>
+                      {PRICING_MODE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <input className="w-full mt-1.5 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-400" placeholder="（选填）具体价格说明，例如：基础 199 / 专业 499" onChange={e => updateActive({ pricing: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">购买 / 预约 / 使用流程</label>
+                    <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400" value={PURCHASE_FLOW_OPTIONS.includes(current.purchaseFlow) ? current.purchaseFlow : ''} onChange={e => updateActive({ purchaseFlow: e.target.value })}>
+                      <option value="">请选择流程…</option>
+                      {PURCHASE_FLOW_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">客户需要提供什么资料（可多选）</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {REQUIRED_INFO_CHIPS.map(c => (
+                      <button key={c} type="button" onClick={() => updateActive({ requiredCustomerInfo: toggleChip(current.requiredCustomerInfo, c) })} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${hasChip(current.requiredCustomerInfo, c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'}`}>{c}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">什么时候需要转人工（可多选）</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {HANDOFF_CHIPS.map(c => (
+                      <button key={c} type="button" onClick={() => updateActive({ handoffConditions: toggleChip(current.handoffConditions, c) })} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${hasChip(current.handoffConditions, c) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'}`}>{c}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1.5">其他补充资料（选填）</label>
+                  <textarea rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 resize-none" placeholder="任何 AI 应该知道的注意事项" value={current.extraNotes} onChange={e => updateActive({ extraNotes: e.target.value })} />
+                </div>
+              </div>
+            </details>
 
             {/* Review of generated config */}
             {current.salesConfig && (
