@@ -4900,6 +4900,78 @@ async function smoke() {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // Round-9F: Platform AI settings — cost-effective defaults + friendly stub
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log('\n283. Round-9F: GET /admin/ai-settings exposes provider/model catalogue')
+  const r9fGet = await (await get('/admin/ai-settings', accessToken)).json() as Record<string, unknown>
+  check('GET has providers[] catalogue',  Array.isArray(r9fGet.providers) && (r9fGet.providers as unknown[]).includes('deepseek'))
+  check('GET has models[] catalogue',     typeof r9fGet.models === 'object' && r9fGet.models !== null)
+  const r9fModels = r9fGet.models as Record<string, { default: string; supported: string[] }>
+  check('models.deepseek.default = deepseek-chat',         r9fModels.deepseek?.default === 'deepseek-chat')
+  check('models.openai.default = gpt-4o-mini',             r9fModels.openai?.default   === 'gpt-4o-mini')
+  check('models.gemini.default = gemini-2.5-flash-lite',   r9fModels.gemini?.default   === 'gemini-2.5-flash-lite')
+
+  console.log('\n284. Round-9F: POST without model defaults to provider cost-effective default')
+  // deepseek with no model → deepseek-chat
+  const r9fSaveDeepseek = await (await post('/admin/ai-settings', { provider: 'deepseek' }, accessToken)).json() as Record<string, unknown>
+  check('deepseek default = deepseek-chat',         (r9fSaveDeepseek.settings as Record<string, unknown>).defaultModel === 'deepseek-chat')
+  // openai with no model → gpt-4o-mini
+  const r9fSaveOpenai = await (await post('/admin/ai-settings', { provider: 'openai' }, accessToken)).json() as Record<string, unknown>
+  check('openai default = gpt-4o-mini',             (r9fSaveOpenai.settings as Record<string, unknown>).defaultModel === 'gpt-4o-mini')
+  // gemini with no model → gemini-2.5-flash-lite
+  const r9fSaveGemini = await (await post('/admin/ai-settings', { provider: 'gemini' }, accessToken)).json() as Record<string, unknown>
+  check('gemini default = gemini-2.5-flash-lite',   (r9fSaveGemini.settings as Record<string, unknown>).defaultModel === 'gemini-2.5-flash-lite')
+
+  console.log('\n285. Round-9F: mismatched model snaps to provider default')
+  // openai with deepseek-reasoner → snapped to gpt-4o-mini
+  const r9fMismatch = await (await post('/admin/ai-settings', { provider: 'openai', defaultModel: 'deepseek-reasoner' }, accessToken)).json() as Record<string, unknown>
+  check('openai + deepseek-reasoner snaps to gpt-4o-mini',
+    (r9fMismatch.settings as Record<string, unknown>).defaultModel === 'gpt-4o-mini')
+
+  console.log('\n286. Round-9F: expensive flagship models can still be selected manually')
+  const r9fFlagship = await (await post('/admin/ai-settings', { provider: 'gemini', defaultModel: 'gemini-2.5-pro' }, accessToken)).json() as Record<string, unknown>
+  check('gemini + gemini-2.5-pro accepted', (r9fFlagship.settings as Record<string, unknown>).defaultModel === 'gemini-2.5-pro')
+  // restore the cost-effective default for downstream tests
+  await post('/admin/ai-settings', { provider: 'deepseek', defaultModel: 'deepseek-chat' }, accessToken)
+
+  console.log('\n287. Round-9F: provider=other requires non-empty model when enabling')
+  const r9fOtherEnabled = await post('/admin/ai-settings', { provider: 'other', defaultModel: '', enabled: true }, accessToken)
+  check('other + empty model + enabled → 400', r9fOtherEnabled.status === 400)
+  const r9fOtherOk = await (await post('/admin/ai-settings', { provider: 'other', defaultModel: 'my-custom-model', enabled: false }, accessToken)).json() as Record<string, unknown>
+  check('other + custom model accepted',       (r9fOtherOk.settings as Record<string, unknown>).defaultModel === 'my-custom-model')
+  // Reset to deepseek-chat (cost-effective baseline)
+  await post('/admin/ai-settings', { provider: 'deepseek', defaultModel: 'deepseek-chat' }, accessToken)
+
+  console.log('\n288. Round-9F: test-connection-stub tolerates empty body (no raw Bad Request)')
+  // The Round-9E version returned 400 "Body cannot be empty" when called with
+  // no body — operator saw raw "Bad Request" in UI. R9F accepts empty body.
+  const r9fTestEmpty = await fetch(`${BASE}/admin/ai-settings/test-connection-stub`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    // intentionally no body
+  })
+  check('test-stub empty body → 200',           r9fTestEmpty.status === 200)
+  const r9fTestEmptyBody = await r9fTestEmpty.json() as Record<string, unknown>
+  check('test-stub returns messageZh',           typeof r9fTestEmptyBody.messageZh === 'string')
+  check('test-stub realAiProviderCalled=false', r9fTestEmptyBody.realAiProviderCalled === false)
+
+  console.log('\n289. Round-9F: test-connection-stub friendly messages')
+  // We currently have a saved key from Round-9E test 278 (apiKeyLast4=ABCD)
+  // and deepseek/deepseek-chat from the reset above — expect ok=true.
+  const r9fTestOk = await (await post('/admin/ai-settings/test-connection-stub', {}, accessToken)).json() as Record<string, unknown>
+  check('test-stub ok=true (key + provider saved)', r9fTestOk.ok === true)
+  check('test-stub messageZh mentions 测试通过',     typeof r9fTestOk.messageZh === 'string' && (r9fTestOk.messageZh as string).includes('测试通过'))
+
+  console.log('\n290. Round-9F: tenant-facing endpoints do NOT expose new model/provider catalogue')
+  for (const path of ['/billing/quota-summary', '/settings/overview', '/onboarding/progress']) {
+    const body = await (await get(path, accessToken)).text()
+    for (const pat of ['deepseek-reasoner', 'gemini-2.5-pro', 'gpt-4.1-mini', 'apiKey', 'apiKeyEncrypted', 'PROVIDER_MODELS']) {
+      check(`tenant endpoint ${path} no "${pat}"`, !body.includes(pat))
+    }
+  }
+
   console.log('\n275. Round-9D: progress response is clean (no secrets / env vars)')
   const r9dProgJson = JSON.stringify(r9dProg)
   for (const pat of ['passwordHash', 'credentialRef', 'metaAccessTokenRef', 'webhookVerifyTokenRef', 'JWT_SECRET', 'OMNI_ALLOW_WA_SESSION', 'OMNI_ENABLE_REAL_META_SEND']) {

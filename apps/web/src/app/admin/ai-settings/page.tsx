@@ -26,6 +26,32 @@ interface AiSettingsView {
   updatedByUserId:         string | null
 }
 
+// Round-9F: mirror of backend PROVIDER_MODELS so the UI can render
+// cost-effective defaults + a friendly label per model. Fallback table —
+// the live source of truth is `models` in the GET response.
+const PROVIDERS = [
+  { value: 'deepseek', label: 'DeepSeek（推荐 · 高性价比）' },
+  { value: 'openai',   label: 'OpenAI' },
+  { value: 'gemini',   label: 'Gemini' },
+  { value: 'other',    label: '其他（自定义）' },
+] as const
+
+const MODEL_LABELS: Record<string, string> = {
+  'deepseek-chat':         'deepseek-chat（推荐：高性价比 / 客服 / FAQ）',
+  'deepseek-reasoner':     'deepseek-reasoner（复杂推理 / 成本较高）',
+  'gpt-4o-mini':           'gpt-4o-mini（推荐：高性价比 / 客服）',
+  'gpt-4.1-mini':          'gpt-4.1-mini（新一代 mini / 可选）',
+  'gpt-4.1':               'gpt-4.1（高质量 / 成本较高）',
+  'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite（推荐：最低成本 / 高量）',
+  'gemini-2.5-flash':      'gemini-2.5-flash（平衡质量与速度）',
+  'gemini-2.5-pro':        'gemini-2.5-pro（高质量 / 成本较高）',
+}
+const PROVIDER_MODELS_FALLBACK: Record<string, { default: string; supported: string[] }> = {
+  deepseek: { default: 'deepseek-chat',         supported: ['deepseek-chat', 'deepseek-reasoner'] },
+  openai:   { default: 'gpt-4o-mini',           supported: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1'] },
+  gemini:   { default: 'gemini-2.5-flash-lite', supported: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'] },
+}
+
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [slug, setSlug] = useState(''); const [email, setEmail] = useState(''); const [pass, setPass] = useState('')
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
@@ -71,21 +97,47 @@ export default function AdminAiSettingsPage() {
   const [error,   setError]   = useState('')
   const [notice,  setNotice]  = useState('')
   // Form state — apiKey is a write-only field; never populated from the server.
-  const [provider,     setProvider]     = useState('')
-  const [defaultModel, setDefaultModel] = useState('')
+  // Round-9F: default to deepseek (cost-effective tier) on a fresh form.
+  const [provider,     setProvider]     = useState<string>('deepseek')
+  const [defaultModel, setDefaultModel] = useState('deepseek-chat')
+  const [customModel,  setCustomModel]  = useState('')
   const [apiKey,       setApiKey]       = useState('')
   const [enabled,      setEnabled]      = useState(false)
   const [saving,       setSaving]       = useState(false)
   const [testing,      setTesting]      = useState(false)
   const [testResult,   setTestResult]   = useState<string>('')
+  const [testOk,       setTestOk]       = useState<boolean | null>(null)
+  // Live catalogue from GET response; falls back to the local mirror.
+  const [models,       setModels]       = useState<Record<string, { default: string; supported: string[] }>>(PROVIDER_MODELS_FALLBACK)
+
+  // Round-9F: when provider changes, snap model to that provider's default if
+  // the current selection is not in the new provider's supported list.
+  function onProviderChange(next: string) {
+    setProvider(next)
+    if (next === 'other') {
+      setDefaultModel('')  // user must type a custom model
+      return
+    }
+    const cfg = models[next]
+    if (cfg && (!defaultModel || !cfg.supported.includes(defaultModel))) {
+      setDefaultModel(cfg.default)
+    }
+  }
 
   async function load() {
     setLoading(true); setError('')
     try {
-      const body = await adminFetch('/admin/ai-settings') as { settings: AiSettingsView }
+      const body = await adminFetch('/admin/ai-settings') as {
+        settings: AiSettingsView
+        models?: Record<string, { default: string; supported: string[] }>
+      }
       setView(body.settings)
-      setProvider(body.settings.provider ?? '')
-      setDefaultModel(body.settings.defaultModel ?? '')
+      if (body.models) setModels(body.models)
+      const p = body.settings.provider ?? 'deepseek'
+      setProvider(p)
+      const m = body.settings.defaultModel ?? (body.models?.[p]?.default ?? PROVIDER_MODELS_FALLBACK[p]?.default ?? '')
+      setDefaultModel(m)
+      if (p === 'other' && body.settings.defaultModel) setCustomModel(body.settings.defaultModel)
       setEnabled(body.settings.enabled)
     } catch (e) { setError(e instanceof Error ? e.message : '加载失败') }
     finally { setLoading(false) }
@@ -99,25 +151,32 @@ export default function AdminAiSettingsPage() {
   async function handleSave() {
     setSaving(true); setError(''); setNotice('')
     try {
+      const modelToSend = provider === 'other' ? customModel.trim() : defaultModel
       const payload: Record<string, unknown> = {
-        provider: provider || undefined,
-        defaultModel: defaultModel || undefined,
+        provider,
+        defaultModel: modelToSend || undefined,
         enabled,
       }
       if (apiKey.trim()) payload.apiKey = apiKey.trim()
       await adminFetch('/admin/ai-settings', { method: 'POST', body: JSON.stringify(payload) })
       setApiKey('')  // clear the form field — never echoed back
-      setNotice('设置已保存。原始 API Key 不会在任何响应或审计日志中回显。')
+      setNotice('设置已保存。API Key 只显示最后 4 位，不会回显原文。')
       setTimeout(() => setNotice(''), 4000)
       await load()
     } catch (e) { setError(e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
   async function handleTest() {
-    setTesting(true); setError(''); setTestResult('')
+    setTesting(true); setError(''); setTestResult(''); setTestOk(null)
     try {
-      const r = await adminFetch('/admin/ai-settings/test-connection-stub', { method: 'POST' }) as { ok: boolean; note: string }
-      setTestResult(`${r.ok ? '✅' : '⚠'} ${r.note}`)
+      // Round-9F: send an explicit `{}` body so Fastify's JSON body-parser does
+      // not reject a POST without body as 400 "Bad Request".
+      const r = await adminFetch('/admin/ai-settings/test-connection-stub', {
+        method: 'POST',
+        body:   JSON.stringify({}),
+      }) as { ok: boolean; messageZh?: string; note?: string }
+      setTestOk(!!r.ok)
+      setTestResult(r.messageZh ?? r.note ?? (r.ok ? '测试通过。' : '测试未通过。'))
     } catch (e) { setError(e instanceof Error ? e.message : '测试失败') }
     finally { setTesting(false) }
   }
@@ -128,108 +187,120 @@ export default function AdminAiSettingsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-base font-semibold text-gray-900">平台 AI 设置 · SaaS Admin</h1>
-            <p className="text-xs text-gray-400">仅 SaaS Admin / 平台运维可见 · 不向租户暴露</p>
+            <h1 className="text-xl font-bold text-gray-900">平台 AI 设置</h1>
+            <p className="text-xs text-gray-500 mt-0.5">平台统一管理 AI Provider 与 API Key，普通租户无需填写。</p>
           </div>
           <a href="/admin/tenants" className="text-xs text-blue-600 hover:text-blue-700">← 租户管理</a>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-6 space-y-5">
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-xs text-red-800 space-y-1">
-          <p><strong>⚠ 内部页面：</strong>本页仅展示平台 AI 集成的<strong>只读状态</strong>。真实 API Key、provider key、私钥<strong>绝不显示</strong>在任何前端响应中。</p>
-          <p><strong>租户隔离：</strong>普通租户使用平台托管 AI 服务，不能 / 不需要自带 API Key。</p>
-        </div>
-
+      <main className="max-w-3xl mx-auto px-6 py-6 space-y-5">
         {error  && <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl px-5 py-3 text-sm">{error}</div>}
         {notice && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl px-5 py-3 text-sm">{notice}</div>}
 
-        {/* Current state */}
+        {/* Round-9F Section 1: simple status card with friendly badges */}
         <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">当前状态</h2>
-          {loading && !view ? <p className="text-xs text-gray-400">加载中…</p> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <Field label="当前 Provider"   value={view?.provider ?? '—（未设置）'} />
-              <Field label="默认模型"        value={view?.defaultModel ?? '—（未设置）'} />
-              <Field label="API Key 状态"    value={`hasApiKey: ${view?.hasApiKey ? '是' : '否'}  ·  apiKeyLast4: ${view?.apiKeyLast4 ?? '—'}`} tone={view?.hasApiKey ? 'ok' : undefined} />
-              <Field label="启用 AI 服务"    value={view?.enabled ? '已启用' : '未启用'} tone={view?.enabled ? 'ok' : undefined} />
-              <Field label="允许租户自带 API Key" value="否（产品决策）" tone="danger" />
-              <Field label="真实 AI provider 调用" value="false（当前为确定性 stub 模式）" tone="ok" />
+          <h2 className="text-sm font-semibold text-gray-700">当前 AI 服务</h2>
+          {loading && !view ? (
+            <p className="text-xs text-gray-400">加载中…</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <StatusRow label="当前 Provider"    value={view?.provider ? (PROVIDERS.find(p => p.value === view.provider)?.label ?? view.provider) : '— 未设置'} />
+              <StatusRow label="默认模型"         value={view?.defaultModel ?? '— 未设置'} />
+              <StatusRow
+                label="API Key 状态"
+                value={view?.hasApiKey ? `已保存 ****${view.apiKeyLast4 ?? ''}` : '未保存'}
+                badge={view?.hasApiKey ? { label: '已保存', tone: 'green' } : { label: '未保存', tone: 'amber' }}
+              />
+              <StatusRow
+                label="AI 服务"
+                value={view?.enabled ? '已启用' : '未启用'}
+                badge={view?.enabled ? { label: '已启用', tone: 'green' } : { label: '未启用', tone: 'gray' }}
+              />
+              <StatusRow label="租户自带 Key" value="不允许" badge={{ label: '不允许', tone: 'gray' }} />
             </div>
           )}
-          <p className="text-[11px] text-gray-500">最近更新：{view?.updatedAt ? new Date(view.updatedAt).toLocaleString('zh-CN') : '—'}</p>
+          <p className="text-[11px] text-gray-500">
+            API Key 只由平台保存，保存后只显示最后 4 位，普通租户不可见。
+            {view?.updatedAt && <span className="ml-2 text-gray-400">最近更新：{new Date(view.updatedAt).toLocaleString('zh-CN')}</span>}
+          </p>
         </section>
 
-        {/* Edit form */}
+        {/* Round-9F Section 2: edit form */}
         <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
           <h2 className="text-sm font-semibold text-gray-700">编辑设置</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">Provider</label>
-              <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" value={provider} onChange={e => setProvider(e.target.value)}>
-                <option value="">请选择…</option>
-                <option value="openai">openai</option>
-                <option value="gemini">gemini</option>
-                <option value="deepseek">deepseek</option>
-                <option value="other">其他</option>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">AI Provider</label>
+              <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400" value={provider} onChange={e => onProviderChange(e.target.value)}>
+                {PROVIDERS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">默认模型</label>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="例如：gpt-4o-mini / gemini-1.5-flash" value={defaultModel} onChange={e => setDefaultModel(e.target.value)} />
+              {provider !== 'other' ? (
+                <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-400" value={defaultModel} onChange={e => setDefaultModel(e.target.value)}>
+                  {(models[provider]?.supported ?? PROVIDER_MODELS_FALLBACK[provider]?.supported ?? []).map(m => (
+                    <option key={m} value={m}>{MODEL_LABELS[m] ?? m}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" placeholder="输入自定义模型名称，例如：my-custom-model" value={customModel} onChange={e => setCustomModel(e.target.value)} />
+              )}
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-gray-600 block mb-1">API Key（写入一次；不会回显）</label>
-              <input type="password" autoComplete="new-password" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono" placeholder={view?.hasApiKey ? `已保存 API Key：****${view.apiKeyLast4 ?? ''}（输入新 Key 覆盖；留空保持不变）` : '输入 API Key（至少 8 字符）'} value={apiKey} onChange={e => setApiKey(e.target.value)} />
-              <p className="text-[10px] text-gray-400 mt-1">真实 API Key 不会在前端回显，也不会写入审计日志的明文。请确认环境为 SaaS Admin 平台运维浏览器。</p>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">API Key</label>
+              <input type="password" autoComplete="new-password" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" placeholder={view?.hasApiKey ? `已保存 API Key：****${view.apiKeyLast4 ?? ''}（输入新 Key 覆盖；留空保持不变）` : '输入 API Key（至少 8 字符）'} value={apiKey} onChange={e => setApiKey(e.target.value)} />
             </div>
             <div className="sm:col-span-2 flex items-center gap-2">
-              <input type="checkbox" id="r9e-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-              <label htmlFor="r9e-enabled" className="text-xs text-gray-700">启用平台 AI 服务（未启用时所有 AI 生成仍走 stub 模式）</label>
+              <input type="checkbox" id="r9f-enabled" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+              <label htmlFor="r9f-enabled" className="text-xs text-gray-700">启用平台 AI 服务（未启用时所有 AI 生成走安全 stub 模式）</label>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-xl disabled:opacity-50">{saving ? '保存中…' : '保存设置'}</button>
-            <button onClick={handleTest} disabled={testing} className="bg-slate-700 hover:bg-slate-800 text-white text-xs px-4 py-2 rounded-xl disabled:opacity-50">{testing ? '测试中…' : '测试连接（本地 stub）'}</button>
-            <button onClick={() => { void load() }} className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-4 py-2 rounded-xl">刷新</button>
+            <button onClick={handleSave} disabled={saving} title="保存平台 AI 设置" aria-label="保存设置" className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-50">{saving ? '保存中…' : '保存设置'}</button>
+            <button onClick={handleTest} disabled={testing} title="本地 stub 测试连接" aria-label="测试连接" className="bg-slate-700 hover:bg-slate-800 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-50">{testing ? '测试中…' : '测试连接'}</button>
+            <button onClick={() => { void load() }} title="刷新当前状态" aria-label="刷新" className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-xl">刷新</button>
           </div>
-          {testResult && <p className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{testResult}</p>}
+          {testResult && (
+            <p className={`text-xs rounded-lg px-3 py-2 ${testOk ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+              {testOk ? '✅ ' : '⚠ '}{testResult}
+            </p>
+          )}
         </section>
 
-        <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">成本 / 用量</h2>
-          <ul className="text-xs text-gray-700 space-y-1">
-            <li>• 用量记录写入 `UsageRecord` 表（按日聚合 llmTokens / llmCostUsd / messages）。</li>
-            <li>• 配额扣费通过 `TenantBillingState.monthlyUsage` + `purchasedCredits` 计算（Round-9A）。</li>
-            <li>• 成本估算见 `/admin/cost-calculator`（内部预算规划工具）。</li>
-          </ul>
-        </section>
-
-        <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">关联工具</h2>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <a href="/admin/cost-calculator" className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">成本计算器</a>
-            <a href="/audit?action=BILLING_AI_SMART_REPLY_TOGGLED" className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">AI Smart Reply 切换审计</a>
-            <a href="/admin/tenants" className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">租户管理</a>
+        {/* Round-9F Section 3: collapsible safety + advanced notes */}
+        <details className="bg-white rounded-2xl border border-gray-100 p-4 text-xs text-gray-600">
+          <summary className="font-medium text-gray-700 cursor-pointer">安全说明 / 高级说明</summary>
+          <div className="mt-3 space-y-1.5 leading-relaxed">
+            <p>• 普通租户不会看到或填写 API Key。</p>
+            <p>• 保存后只显示最后 4 位，原始 API Key 不会回显在任何前端响应或审计日志。</p>
+            <p>• 测试连接不会发送客户资料，也不会调用真实 AI provider — 当前为本地 stub 检查。</p>
+            <p>• 真实 provider 调用必须等 Vault 加密与 env flag <code>OMNI_ENABLE_ONBOARDING_AI=true</code> 完成后才启用。</p>
+            <p>• 用量记录写入 <code>UsageRecord</code>；租户配额扣费通过 <code>TenantBillingState.monthlyUsage</code> + <code>purchasedCredits</code> 计算。</p>
+            <p>• 成本估算工具见 <a href="/admin/cost-calculator" className="text-blue-600 hover:text-blue-700">成本计算器</a>。</p>
           </div>
-        </section>
-
-        <p className="text-[11px] text-gray-400">
-          后续 Round 计划：接入真实 OpenAI / Gemini / DeepSeek provider（env flag `OMNI_ENABLE_ONBOARDING_AI=true` 守门）、Vault-encrypted key rotation、按 tenant cost meter。当前页为占位 foundation。
-        </p>
+        </details>
       </main>
     </div>
   )
 }
 
-function Field({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'danger' }) {
-  const color = tone === 'ok' ? 'text-emerald-700' : tone === 'danger' ? 'text-red-700' : 'text-gray-800'
+function StatusRow({ label, value, badge }: { label: string; value: string; badge?: { label: string; tone: 'green' | 'amber' | 'gray' } }) {
+  const badgeStyle = badge && {
+    green: 'bg-emerald-100 text-emerald-700',
+    amber: 'bg-amber-100 text-amber-700',
+    gray:  'bg-gray-100 text-gray-600',
+  }[badge.tone]
   return (
-    <div className="bg-gray-50 rounded-xl px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-gray-400">{label}</p>
-      <p className={`text-sm font-mono mt-0.5 ${color}`}>{value}</p>
+    <div className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] uppercase tracking-wide text-gray-400">{label}</p>
+        <p className="text-sm text-gray-800 mt-0.5 truncate">{value}</p>
+      </div>
+      {badge && <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeStyle}`}>{badge.label}</span>}
     </div>
   )
 }
