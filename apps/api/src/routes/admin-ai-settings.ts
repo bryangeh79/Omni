@@ -61,6 +61,17 @@ function safeView(row: {
 
 export async function adminAiSettingsRoutes(app: FastifyInstance) {
 
+  // Round-9F: tolerate empty POST bodies (Content-Type: application/json with
+  // no payload). Fastify's default JSON parser otherwise throws 400 "Body
+  // cannot be empty" which surfaced to operators as a raw "Bad Request" on
+  // /admin/ai-settings/test-connection-stub. Scope is local to this plugin.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const s = (body as string) ?? ''
+    if (s.length === 0) return done(null, {})
+    try { done(null, JSON.parse(s)) }
+    catch (err) { done(err as Error) }
+  })
+
   // ── GET /admin/ai-settings ────────────────────────────────────────────
   // TODO(platform-rbac): replace requireRole with a true platform-admin role.
   app.get('/', { preHandler: [requireAuth, requireRole('OWNER', 'ADMIN')] }, async () => {
